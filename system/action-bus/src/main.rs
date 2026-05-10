@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
     let audit = AuditLog::new(audit_path);
     let registry = build_registry();
     let action_count = registry.action_names().len();
-    let bus = Arc::new(ActionBus::new(registry, audit));
+    let bus = Arc::new(ActionBus::new(registry, audit).await);
 
     let service = ActionBusService { bus };
 

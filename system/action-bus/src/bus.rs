@@ -14,10 +14,18 @@ pub struct ActionBus {
 }
 
 impl ActionBus {
-    pub fn new(registry: Registry, audit: AuditLog) -> Self {
+    pub async fn new(registry: Registry, audit: AuditLog) -> Self {
+        Self::with_permissions(registry, audit, PermissionChecker::new().await)
+    }
+
+    fn with_permissions(
+        registry: Registry,
+        audit: AuditLog,
+        permissions: PermissionChecker,
+    ) -> Self {
         Self {
             registry: Arc::new(RwLock::new(registry)),
-            permissions: PermissionChecker::new(),
+            permissions,
             audit,
         }
     }
@@ -100,9 +108,10 @@ mod tests {
                 }) as crate::registry::HandlerFuture
             }),
         );
-        ActionBus::new(
+        ActionBus::with_permissions(
             registry,
             AuditLog::new(PathBuf::from("/tmp/jarvis-test-audit.log")),
+            PermissionChecker::allow_all(),
         )
     }
 

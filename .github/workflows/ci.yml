@@ -71,6 +71,9 @@ jobs:
       - name: Test (action-bus)
         run: cargo test -p jarvis-action-bus
 
+      - name: Test (permission)
+        run: cargo test -p jarvis-permission
+
       - name: Test (lilith)
         run: cargo test -p jarvis-lilith
 
