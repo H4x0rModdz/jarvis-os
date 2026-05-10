@@ -43,7 +43,11 @@ macro_rules! register_handler {
             std::sync::Arc::new(|params: serde_json::Value| {
                 Box::pin($handler(params))
                     as std::pin::Pin<
-                        Box<dyn std::future::Future<Output = Result<serde_json::Value, $crate::error::BusError>> + Send>,
+                        Box<
+                            dyn std::future::Future<
+                                    Output = Result<serde_json::Value, $crate::error::BusError>,
+                                > + Send,
+                        >,
                     >
             }),
         )

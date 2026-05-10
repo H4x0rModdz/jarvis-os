@@ -5,14 +5,35 @@ use zbus::Connection;
 /// Commands the Action Bus sends to the compositor.
 #[derive(Debug, Clone)]
 pub enum WindowCommand {
-    Focus { window_id: u32 },
-    Minimize { window_id: u32 },
-    Maximize { window_id: u32 },
-    Close { window_id: u32, force: bool },
-    Move { window_id: u32, x: i32, y: i32 },
-    Resize { window_id: u32, width: u32, height: u32 },
-    SnapLeft { window_id: u32 },
-    SnapRight { window_id: u32 },
+    Focus {
+        window_id: u32,
+    },
+    Minimize {
+        window_id: u32,
+    },
+    Maximize {
+        window_id: u32,
+    },
+    Close {
+        window_id: u32,
+        force: bool,
+    },
+    Move {
+        window_id: u32,
+        x: i32,
+        y: i32,
+    },
+    Resize {
+        window_id: u32,
+        width: u32,
+        height: u32,
+    },
+    SnapLeft {
+        window_id: u32,
+    },
+    SnapRight {
+        window_id: u32,
+    },
 }
 
 /// Events the compositor emits to notify the rest of the system.
@@ -68,24 +89,24 @@ pub fn parse_window_command(action: &str, params: &serde_json::Value) -> Option<
     let window_id = params["window_id"].as_u64()? as u32;
 
     match action {
-        "window.focus"    => Some(WindowCommand::Focus { window_id }),
+        "window.focus" => Some(WindowCommand::Focus { window_id }),
         "window.minimize" => Some(WindowCommand::Minimize { window_id }),
         "window.maximize" => Some(WindowCommand::Maximize { window_id }),
-        "window.close"    => Some(WindowCommand::Close {
+        "window.close" => Some(WindowCommand::Close {
             window_id,
             force: params["force"].as_bool().unwrap_or(false),
         }),
-        "window.move"     => Some(WindowCommand::Move {
+        "window.move" => Some(WindowCommand::Move {
             window_id,
             x: params["x"].as_i64()? as i32,
             y: params["y"].as_i64()? as i32,
         }),
-        "window.resize"   => Some(WindowCommand::Resize {
+        "window.resize" => Some(WindowCommand::Resize {
             window_id,
-            width:  params["width"].as_u64()? as u32,
+            width: params["width"].as_u64()? as u32,
             height: params["height"].as_u64()? as u32,
         }),
-        "window.snap_left"  => Some(WindowCommand::SnapLeft { window_id }),
+        "window.snap_left" => Some(WindowCommand::SnapLeft { window_id }),
         "window.snap_right" => Some(WindowCommand::SnapRight { window_id }),
         _ => None,
     }

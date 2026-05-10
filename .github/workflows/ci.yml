@@ -86,7 +86,7 @@ jobs:
         run: |
           for schema in system/action-bus/schema/actions/*.schema.json; do
             echo "Validating $schema..."
-            ajv compile -s "$schema" --spec=draft2020
+            ajv compile -s "$schema" --spec=draft2020 -c ajv-formats
           done
-          ajv compile -s system/action-bus/schema/request.schema.json --spec=draft2020
-          ajv compile -s system/action-bus/schema/response.schema.json --spec=draft2020
+          ajv compile -s system/action-bus/schema/request.schema.json --spec=draft2020 -c ajv-formats
+          ajv compile -s system/action-bus/schema/response.schema.json --spec=draft2020 -c ajv-formats

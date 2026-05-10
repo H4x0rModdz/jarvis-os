@@ -26,13 +26,13 @@ impl PermissionChecker {
 
     fn required_scope(action: &str) -> &'static str {
         match action {
-            "app.open"           => "app.launch",
-            "app.close"          => "app.launch",
-            "app.install"        => "app.install",
-            "app.uninstall"      => "app.uninstall",
-            "file.move"          => "filesystem.write",
-            "file.copy"          => "filesystem.write",
-            "file.delete"        => "filesystem.delete",
+            "app.open" => "app.launch",
+            "app.close" => "app.launch",
+            "app.install" => "app.install",
+            "app.uninstall" => "app.uninstall",
+            "file.move" => "filesystem.write",
+            "file.copy" => "filesystem.write",
+            "file.delete" => "filesystem.delete",
             "window.focus"
             | "window.minimize"
             | "window.maximize"
@@ -41,13 +41,11 @@ impl PermissionChecker {
             | "window.resize"
             | "window.snap_left"
             | "window.snap_right" => "window.control",
-            "workspace.switch"
-            | "workspace.move_window"
-            | "workspace.create"  => "window.control",
-            "system.notify"       => "system.notify",
-            "system.set_setting"  => "settings.modify",
-            "system.get_setting"  => "settings.read",
-            _                     => "unknown",
+            "workspace.switch" | "workspace.move_window" | "workspace.create" => "window.control",
+            "system.notify" => "system.notify",
+            "system.set_setting" => "settings.modify",
+            "system.get_setting" => "settings.read",
+            _ => "unknown",
         }
     }
 }
