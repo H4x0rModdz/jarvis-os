@@ -28,7 +28,7 @@ smithay = { version = "0.7", default-features = false, features = [
     "backend_udev",        # udev device discovery
     "backend_session",     # session management
     "backend_session_libseat", # rootless via libseat
-    "backend_input",       # input handling
+    "backend_libinput",    # input handling
     "renderer_gl",         # OpenGL renderer (Phase 1)
     "use_system_lib",
 ] }
