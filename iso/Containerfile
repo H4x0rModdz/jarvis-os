@@ -31,8 +31,14 @@ RUN dnf -y install \
 WORKDIR /src
 COPY . .
 
-# Rust workspace — every daemon ships as a release binary.
-RUN CARGO_TARGET_DIR=/build/rust cargo build --release --workspace -p jarvis-action-bus -p jarvis-permission -p jarvis-lilith
+# Daemons only — we deliberately skip the compositor crate here. It's a
+# stub for now and pulls in smithay + libseat-sys + a long tail of Wayland
+# build deps that would balloon the ISO image. The ISO uses labwc as its
+# compositor; our own lands in a later release.
+RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
+        -p jarvis-action-bus \
+        -p jarvis-permission \
+        -p jarvis-lilith
 
 # Qt shell — separate cmake build out-of-tree.
 RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
