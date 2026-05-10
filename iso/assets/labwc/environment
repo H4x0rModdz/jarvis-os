@@ -1,0 +1,14 @@
+# Environment variables labwc exports before starting the session.
+#
+# WLR_RENDERER=pixman           Force wlroots' CPU renderer. Required inside
+#                               VMs without GPU passthrough (VirtualBox,
+#                               Hyper-V, QEMU without GL); harmless on bare
+#                               metal — Phase 2 swap to gles2 once we ship
+#                               our own compositor with proper GPU detection.
+# LIBGL_ALWAYS_SOFTWARE=1       Mesa fallback for any GL app run inside the
+#                               session.
+# WLR_NO_HARDWARE_CURSORS=1     VBox's SVGA driver mishandles HW cursors
+#                               under wlroots — software cursor is fine.
+WLR_RENDERER=pixman
+LIBGL_ALWAYS_SOFTWARE=1
+WLR_NO_HARDWARE_CURSORS=1

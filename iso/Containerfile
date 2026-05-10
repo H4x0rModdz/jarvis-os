@@ -102,8 +102,9 @@ RUN systemctl enable greetd.service \
 # labwc skeleton: every newly-created user inherits this autostart and
 # config from /etc/skel.
 RUN mkdir -p /etc/skel/.config/labwc
-COPY iso/assets/labwc/autostart /etc/skel/.config/labwc/autostart
-COPY iso/assets/labwc/rc.xml    /etc/skel/.config/labwc/rc.xml
+COPY iso/assets/labwc/autostart    /etc/skel/.config/labwc/autostart
+COPY iso/assets/labwc/rc.xml       /etc/skel/.config/labwc/rc.xml
+COPY iso/assets/labwc/environment  /etc/skel/.config/labwc/environment
 
 # Default filesystem for the installed system. Without this, bootc-image-
 # builder refuses to build an ISO and demands `--rootfs <fs>` on the
