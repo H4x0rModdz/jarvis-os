@@ -41,7 +41,8 @@ jobs:
             libxi-dev \
             libxcursor-dev \
             libdbus-1-dev \
-            libnotify-bin
+            libnotify-bin \
+            libsqlite3-dev
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable

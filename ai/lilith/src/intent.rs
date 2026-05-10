@@ -122,6 +122,34 @@ static RULES: Lazy<Vec<Rule>> = Lazy::new(|| {
                 params: json!({}),
             },
         },
+        // ── memory ─────────────────────────────────────────────────────
+        // "remember <key> = <value>"  or  "lembrar <key> = <value>"
+        Rule {
+            pattern: Regex::new(
+                r"^(?:remember|lembr(?:ar|e|a))[:\s]+(?P<key>[^=]+?)\s*=\s*(?P<value>.+)$",
+            )
+            .unwrap(),
+            build: |c| ToolCall {
+                action: "memory.remember".into(),
+                params: json!({ "key": c["key"].trim(), "value": c["value"].trim() }),
+            },
+        },
+        // "recall <key>"  or  "lembrete <key>"
+        Rule {
+            pattern: Regex::new(r"^(?:recall|lembrete)\s+(?P<key>.+)$").unwrap(),
+            build: |c| ToolCall {
+                action: "memory.recall".into(),
+                params: json!({ "key": c["key"].trim() }),
+            },
+        },
+        // "forget <key>"  or  "esquecer/esqueça <key>"
+        Rule {
+            pattern: Regex::new(r"^(?:forget|esqu(?:ecer|eça|eca))\s+(?P<key>.+)$").unwrap(),
+            build: |c| ToolCall {
+                action: "memory.forget".into(),
+                params: json!({ "key": c["key"].trim() }),
+            },
+        },
     ]
 });
 
@@ -196,5 +224,36 @@ mod tests {
     fn case_insensitive() {
         assert!(parse("OPEN VSCode").is_some());
         assert!(parse("Abrir Firefox").is_some());
+    }
+
+    #[test]
+    fn parses_memory_remember() {
+        let call = parse("remember favorite editor = vscode").unwrap();
+        assert_eq!(call.action, "memory.remember");
+        assert_eq!(call.params["key"], "favorite editor");
+        assert_eq!(call.params["value"], "vscode");
+
+        let call = parse("lembrar idioma = pt-br").unwrap();
+        assert_eq!(call.action, "memory.remember");
+        assert_eq!(call.params["key"], "idioma");
+        assert_eq!(call.params["value"], "pt-br");
+    }
+
+    #[test]
+    fn parses_memory_recall() {
+        let call = parse("recall favorite editor").unwrap();
+        assert_eq!(call.action, "memory.recall");
+        assert_eq!(call.params["key"], "favorite editor");
+    }
+
+    #[test]
+    fn parses_memory_forget() {
+        let call = parse("forget favorite editor").unwrap();
+        assert_eq!(call.action, "memory.forget");
+        assert_eq!(call.params["key"], "favorite editor");
+
+        let call = parse("esquecer idioma").unwrap();
+        assert_eq!(call.action, "memory.forget");
+        assert_eq!(call.params["key"], "idioma");
     }
 }

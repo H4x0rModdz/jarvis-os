@@ -228,6 +228,38 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["key"]
             }),
         },
+        // ── memory (Lilith-internal — bypasses Action Bus) ─────────────
+        Tool {
+            action: "memory.remember",
+            description: "Save a personal fact for future recall. Use for user preferences, \
+                          names, settings, anything they want me to remember.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "key": { "type": "string", "description": "Short label for the fact, e.g. 'favorite editor'" },
+                    "value": { "type": "string", "description": "The fact itself, e.g. 'vscode'" }
+                },
+                "required": ["key", "value"]
+            }),
+        },
+        Tool {
+            action: "memory.recall",
+            description: "Retrieve a previously-remembered fact by key.",
+            schema: json!({
+                "type": "object",
+                "properties": { "key": { "type": "string" } },
+                "required": ["key"]
+            }),
+        },
+        Tool {
+            action: "memory.forget",
+            description: "Delete a remembered fact.",
+            schema: json!({
+                "type": "object",
+                "properties": { "key": { "type": "string" } },
+                "required": ["key"]
+            }),
+        },
     ]
 }
 
