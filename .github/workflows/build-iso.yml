@@ -49,8 +49,12 @@ jobs:
           sudo apt-get install -y podman
 
       - name: Build OCI image
+        # Must run as root so the image lands in the same storage that
+        # bootc-image-builder (also root) reads from in the next step.
+        # Otherwise rootless podman puts it in ~/.local/share/containers and
+        # bootc-image-builder fails with "image not known".
         run: |
-          podman build \
+          sudo podman build \
             --file iso/Containerfile \
             --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
             --tag "jarvis-os:${{ steps.version.outputs.tag }}" \
