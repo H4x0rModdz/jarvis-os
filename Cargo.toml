@@ -3,4 +3,5 @@ resolver = "2"
 members = [
     "system/action-bus",
     "shell/compositor",
+    "ai/lilith",
 ]

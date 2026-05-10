@@ -71,6 +71,9 @@ jobs:
       - name: Test (action-bus)
         run: cargo test -p jarvis-action-bus
 
+      - name: Test (lilith)
+        run: cargo test -p jarvis-lilith
+
   schema-lint:
     name: Validate JSON Schemas
     runs-on: ubuntu-24.04
