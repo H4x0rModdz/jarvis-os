@@ -69,6 +69,7 @@ LABEL org.opencontainers.image.source="https://github.com/H4x0rModdz/jarvis-os"
 RUN dnf -y install \
         labwc foot \
         greetd \
+        xorg-x11-server-Xwayland \
         qt6-qtbase qt6-qtdeclarative qt6-qtwayland qt6-qtquickcontrols2 \
         layer-shell-qt \
         sqlite libnotify xdg-utils jq curl \
