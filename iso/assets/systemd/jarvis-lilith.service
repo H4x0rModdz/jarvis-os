@@ -1,0 +1,18 @@
+[Unit]
+Description=Jarvis Lilith (user)
+Documentation=https://github.com/H4x0rModdz/jarvis-os
+After=dbus.socket jarvis-action-bus.service
+Requires=jarvis-action-bus.service
+PartOf=jarvis-session.target
+
+[Service]
+Type=dbus
+BusName=com.jarvis.Lilith
+ExecStart=/usr/bin/jarvis-lilith
+Restart=on-failure
+RestartSec=2
+# Lilith will probe http://localhost:11434 — Ollama is installed but not
+# auto-started by us. The first-boot updater starts the system service.
+
+[Install]
+WantedBy=jarvis-session.target

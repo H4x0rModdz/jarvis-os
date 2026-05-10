@@ -23,11 +23,22 @@ Rectangle {
         radius: Theme.radius
     }
 
+    signal launcherRequested()
+
+    function focusInput() {
+        input.focusInput();
+    }
+
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: Theme.pad
         anchors.rightMargin: Theme.pad
         spacing: Theme.gap
+
+        BarMenuButton {
+            Layout.alignment: Qt.AlignVCenter
+            onClicked: root.launcherRequested()
+        }
 
         Clock {
             Layout.alignment: Qt.AlignVCenter

@@ -1,0 +1,16 @@
+[Unit]
+Description=Jarvis Action Bus (user)
+Documentation=https://github.com/H4x0rModdz/jarvis-os
+After=dbus.socket jarvis-permission.service
+Requires=jarvis-permission.service
+PartOf=jarvis-session.target
+
+[Service]
+Type=dbus
+BusName=com.jarvis.ActionBus
+ExecStart=/usr/bin/jarvis-action-bus
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=jarvis-session.target

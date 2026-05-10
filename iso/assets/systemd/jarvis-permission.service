@@ -1,0 +1,17 @@
+[Unit]
+Description=Jarvis Permission System (user)
+Documentation=https://github.com/H4x0rModdz/jarvis-os
+After=dbus.socket
+PartOf=jarvis-session.target
+
+[Service]
+Type=dbus
+BusName=com.jarvis.PermissionSystem
+ExecStart=/usr/bin/jarvis-permission
+Restart=on-failure
+RestartSec=2
+# The daemon writes its in-memory grants; nothing persistent (yet) so the
+# default sandbox is fine. Tighten this once Phase 2 SQLite lands.
+
+[Install]
+WantedBy=jarvis-session.target

@@ -15,6 +15,10 @@ Item {
     property string placeholder: qsTr("Diga algo para a Lilith...")
     signal accepted(string text)
 
+    function focusInput() {
+        input.forceActiveFocus();
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: Theme.radius - 4

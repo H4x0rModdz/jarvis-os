@@ -1,0 +1,95 @@
+name: Build ISO
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag for this build (e.g. 0.0.1-dev)"
+        required: true
+        default: "0.0.1-dev"
+
+permissions:
+  contents: write   # for release upload
+  packages: write   # for ghcr.io push (optional)
+
+jobs:
+  build-iso:
+    name: Build OCI image + ISO
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        # The Containerfile pulls a Fedora base + wayblue base + builds two
+        # Rust targets + a Qt project. Stock ubuntu-24.04 runners are tight.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Set version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install podman
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y podman
+
+      - name: Build OCI image
+        run: |
+          podman build \
+            --file iso/Containerfile \
+            --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
+            --tag "jarvis-os:${{ steps.version.outputs.tag }}" \
+            .
+
+      - name: Convert OCI to ISO
+        run: |
+          mkdir -p iso/output
+          sudo podman run --rm \
+            --privileged \
+            --pull=newer \
+            --security-opt label=type:unconfined_t \
+            -v "$PWD/iso/output:/output" \
+            -v "$PWD/iso/build.toml:/config.toml:ro" \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type iso \
+            --config /config.toml \
+            --local "jarvis-os:${{ steps.version.outputs.tag }}"
+
+      - name: Locate ISO
+        id: iso
+        run: |
+          ISO=$(find iso/output -name "*.iso" | head -1)
+          test -n "$ISO" || { echo "no iso produced"; exit 1; }
+          ls -lh "$ISO"
+          echo "path=$ISO" >> "$GITHUB_OUTPUT"
+
+      - name: Upload as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-os-${{ steps.version.outputs.tag }}.iso
+          path: ${{ steps.iso.outputs.path }}
+          if-no-files-found: error
+
+      - name: Attach to release (tag pushes only)
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.iso.outputs.path }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true

@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  Minimal labwc config for the Jarvis OS reference session.
+  Full reference: https://labwc.github.io/labwc-config.5.html
+-->
+<labwc_config>
+  <theme>
+    <name>Default</name>
+    <cornerRadius>0</cornerRadius>
+    <dropShadows>yes</dropShadows>
+  </theme>
+
+  <core>
+    <gap>0</gap>
+  </core>
+
+  <keyboard>
+    <!-- Toggle the Jarvis launcher with Super.
+         Phase 2 plumbing: we'll fire a DBus call into the shell here once
+         a com.jarvis.Shell.ToggleLauncher() method exists. For now, the
+         hamburger button in the bar is the entry point. -->
+
+    <keybind key="A-F4"><action name="Close"/></keybind>
+    <keybind key="W-Return"><action name="Execute"><command>foot</command></action></keybind>
+  </keyboard>
+
+  <mouse>
+    <!-- Click-to-focus matches every other modern desktop. -->
+    <context name="Root"><mousebind button="Left" action="Press"><action name="Focus"/></mousebind></context>
+  </mouse>
+</labwc_config>

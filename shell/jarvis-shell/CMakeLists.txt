@@ -35,6 +35,10 @@ qt_add_executable(jarvis-shell
     src/lilith_bridge.h
     src/permission_bridge.cpp
     src/permission_bridge.h
+    src/action_bus_bridge.cpp
+    src/action_bus_bridge.h
+    src/desktop_apps_model.cpp
+    src/desktop_apps_model.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
@@ -52,12 +56,15 @@ qt_add_qml_module(jarvis-shell
     QML_FILES
         qml/Main.qml
         qml/Bar.qml
+        qml/BarMenuButton.qml
         qml/Clock.qml
         qml/LilithInput.qml
         qml/StatusIndicator.qml
         qml/Theme.qml
         qml/ApprovalDialog.qml
         qml/ApprovalButton.qml
+        qml/Launcher.qml
+        qml/AppCell.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE

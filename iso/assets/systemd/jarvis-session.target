@@ -1,0 +1,9 @@
+[Unit]
+Description=Jarvis OS user session
+Documentation=https://github.com/H4x0rModdz/jarvis-os
+Requires=jarvis-permission.service jarvis-action-bus.service jarvis-lilith.service
+After=jarvis-permission.service jarvis-action-bus.service jarvis-lilith.service
+BindsTo=graphical-session.target
+
+[Install]
+WantedBy=graphical-session.target

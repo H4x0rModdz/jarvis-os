@@ -13,13 +13,16 @@ Window {
     color: "transparent"
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
 
-    // Center on primary screen on first paint.
+    // Center on primary screen on first paint AND ask the compositor to
+    // make us the active surface — otherwise on labwc/wlroots the user has
+    // to click the bar before its TextInput can accept keystrokes.
     Component.onCompleted: {
         const s = Qt.application.screens[0];
         if (s) {
             x = s.virtualX + Math.floor((s.width - width) / 2);
             y = s.virtualY + s.height - height - 24;
         }
+        requestActivate();
     }
 
     // ── Reply popup ───────────────────────────────────────────────────
@@ -90,6 +93,20 @@ Window {
         anchors.bottom: parent.bottom
         anchors.margins: 8
         height: Theme.barHeight
+        onLauncherRequested: launcher.visible ? launcher.close() : launcher.open()
+    }
+
+    Launcher {
+        id: launcher
+        // When the launcher hides, hand keystrokes back to the bar's input.
+        // requestActivate (called inside Launcher.close()) only reactivates
+        // the parent Window — it doesn't restore a specific focus target
+        // inside it. We do that explicitly here.
+        onVisibleChanged: {
+            if (!visible) {
+                bar.focusInput();
+            }
+        }
     }
 
     Connections {
