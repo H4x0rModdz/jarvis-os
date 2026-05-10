@@ -5,7 +5,7 @@ use serde_json::{json, Value};
 
 const DEFAULT_HOST: &str = "http://localhost:11434";
 const DEFAULT_MODEL: &str = "qwen3:4b";
-const REQUEST_TIMEOUT_SECS: u64 = 30;
+const REQUEST_TIMEOUT_SECS: u64 = 120;
 
 #[derive(Clone)]
 pub struct OllamaClient {
