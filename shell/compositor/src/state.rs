@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::action_bus::WindowCommand;
 use calloop::{channel::Sender, LoopSignal};
 use smithay::{
@@ -98,7 +100,9 @@ impl JarvisCompositor {
                 // TODO: find PID and send SIGKILL via Action Bus
                 tracing::warn!(window_id = id, "Force close not yet implemented");
             } else {
-                window.toplevel().map(|t| t.send_close());
+                if let Some(t) = window.toplevel() {
+                    t.send_close();
+                }
             }
         }
     }

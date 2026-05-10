@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use calloop::channel::Sender;
 use serde::Serialize;
 use zbus::Connection;

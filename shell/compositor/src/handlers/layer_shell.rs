@@ -1,9 +1,8 @@
 use crate::state::JarvisCompositor;
 use smithay::{
     delegate_layer_shell,
-    desktop::{layer_map_for_output, LayerSurface},
-    output::Output,
-    wayland::shell::wlr_layer::{Layer, WlrLayerShellHandler, WlrLayerShellState},
+    desktop::layer_map_for_output,
+    wayland::shell::wlr_layer::{Layer, LayerSurface, WlrLayerShellHandler, WlrLayerShellState},
 };
 
 /// Handles the wlr-layer-shell protocol.
@@ -23,7 +22,6 @@ impl WlrLayerShellHandler for JarvisCompositor {
         _layer: Layer,
         namespace: String,
     ) {
-        // Attach the layer surface to the first available output
         let output = output
             .as_ref()
             .and_then(|o| self.space.outputs().find(|out| out.owns(o)))
@@ -32,22 +30,16 @@ impl WlrLayerShellHandler for JarvisCompositor {
 
         let Some(output) = output else {
             tracing::warn!(namespace, "Layer surface mapped with no available output");
-            surface.send_close();
             return;
         };
 
         tracing::info!(namespace, layer = ?_layer, "New layer surface from jarvis-shell");
 
         let mut map = layer_map_for_output(&output);
-        map.map_layer(&surface).ok();
+        let _ = map.map_layer(&smithay::desktop::LayerSurface::new(surface, namespace));
     }
 
-    fn layer_destroyed(&mut self, surface: LayerSurface) {
-        // Find and remove from all outputs
-        for output in self.space.outputs().cloned().collect::<Vec<_>>() {
-            let mut map = layer_map_for_output(&output);
-            map.unmap_layer(&surface);
-        }
+    fn layer_destroyed(&mut self, _surface: LayerSurface) {
         tracing::info!("Layer surface destroyed");
     }
 }

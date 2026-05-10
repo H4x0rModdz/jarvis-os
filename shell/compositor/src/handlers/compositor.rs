@@ -6,6 +6,7 @@ use smithay::{
     wayland::{
         buffer::BufferHandler,
         compositor::{CompositorClientState, CompositorHandler, CompositorState},
+        output::OutputHandler,
         shm::{ShmHandler, ShmState},
     },
 };
@@ -41,6 +42,8 @@ impl ShmHandler for JarvisCompositor {
         &self.shm_state
     }
 }
+
+impl OutputHandler for JarvisCompositor {}
 
 delegate_compositor!(JarvisCompositor);
 delegate_shm!(JarvisCompositor);

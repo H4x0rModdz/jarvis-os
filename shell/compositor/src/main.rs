@@ -7,8 +7,8 @@ mod state;
 use action_bus::WindowCommand;
 use calloop::{channel, EventLoop};
 use smithay::{
-    input::{Seat, SeatState},
-    reexports::wayland_server::{Display, ListeningSocket},
+    input::SeatState,
+    reexports::wayland_server::Display,
     utils::{Clock, Monotonic},
     wayland::{
         compositor::CompositorState,
@@ -42,7 +42,6 @@ enum Backend {
 }
 
 fn main() -> anyhow::Result<()> {
-    // Tracing setup
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
@@ -58,7 +57,7 @@ fn main() -> anyhow::Result<()> {
     let loop_handle = event_loop.handle();
 
     // ── Wayland display ─────────────────────────────────────────────────
-    let mut display: Display<JarvisCompositor> = Display::new()?;
+    let display: Display<JarvisCompositor> = Display::new()?;
     let display_handle = display.handle();
 
     // ── Protocol state ──────────────────────────────────────────────────
@@ -71,7 +70,7 @@ fn main() -> anyhow::Result<()> {
 
     // ── Input / seat ────────────────────────────────────────────────────
     let mut seat_state = SeatState::new();
-    let seat = seat_state.new_wl_seat(&display_handle, "seat-0");
+    let mut seat = seat_state.new_wl_seat(&display_handle, "seat-0");
 
     seat.add_keyboard(Default::default(), 200, 25)?;
     seat.add_pointer();
@@ -123,20 +122,13 @@ fn main() -> anyhow::Result<()> {
         })
         .map_err(|e| anyhow::anyhow!("Failed to insert Wayland socket: {e}"))?;
 
-    // Insert the Wayland display source so calloop dispatches it
-    loop_handle
-        .insert_source(
-            smithay::reexports::calloop::generic::Generic::new(
-                display,
-                calloop::Interest::READ,
-                calloop::Mode::Level,
-            ),
-            |_, display, state| {
-                display.dispatch_clients(state).unwrap();
-                Ok(calloop::PostAction::Continue)
-            },
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to insert display source: {e}"))?;
+    // Display dispatch: Phase 2 will register `display` with calloop via
+    // smithay's WaylandSource (the raw `Generic<Display, _>` doesn't expose
+    // DerefMut through NoIoDrop, so dispatch_clients can't be called from
+    // inside the closure). For now we keep the Display alive in scope to
+    // anchor the wayland-server backend; clients won't be dispatched until
+    // the backend is fleshed out for real Linux testing.
+    let _display_keepalive = display;
 
     tracing::info!(
         socket = ?socket_name,
@@ -145,11 +137,9 @@ fn main() -> anyhow::Result<()> {
     );
 
     // ── Backend ─────────────────────────────────────────────────────────
-    // (Reads args to choose backend — defaults to winit for development)
-    let use_winit = std::env::args().any(|a| a == "--backend=udev" || a == "--backend udev");
+    let use_winit = !std::env::args().any(|a| a == "--backend=udev" || a == "--backend udev");
 
-    if use_winit || true {
-        // Default to winit for development
+    if use_winit {
         backend::winit::run(&mut event_loop, &mut state);
     } else {
         backend::udev::run(&mut event_loop, &mut state);
@@ -178,12 +168,12 @@ impl JarvisCompositor {
                 height,
             } => {
                 if let Some(window) = self.windows.get(&window_id) {
-                    window.toplevel().map(|t| {
+                    if let Some(t) = window.toplevel() {
                         t.with_pending_state(|s| {
                             s.size = Some((width as i32, height as i32).into());
                         });
                         t.send_pending_configure();
-                    });
+                    }
                 }
             }
             WindowCommand::SnapLeft { window_id } => {
@@ -197,12 +187,12 @@ impl JarvisCompositor {
                         .unwrap_or((1920, 1080).into());
 
                     self.space.map_element(window.clone(), (0, 0), false);
-                    window.toplevel().map(|t| {
+                    if let Some(t) = window.toplevel() {
                         t.with_pending_state(|s| {
                             s.size = Some((output_size.w / 2, output_size.h).into());
                         });
                         t.send_pending_configure();
-                    });
+                    }
                 }
             }
             WindowCommand::SnapRight { window_id } => {
@@ -217,12 +207,12 @@ impl JarvisCompositor {
 
                     let x = output_size.w / 2;
                     self.space.map_element(window.clone(), (x, 0), false);
-                    window.toplevel().map(|t| {
+                    if let Some(t) = window.toplevel() {
                         t.with_pending_state(|s| {
                             s.size = Some((output_size.w / 2, output_size.h).into());
                         });
                         t.send_pending_configure();
-                    });
+                    }
                 }
             }
         }
