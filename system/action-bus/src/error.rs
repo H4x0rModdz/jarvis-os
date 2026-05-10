@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 pub enum BusError {
     #[error("Permission denied for scope: {scope}")]
     PermissionDenied { scope: String },

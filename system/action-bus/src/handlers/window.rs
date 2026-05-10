@@ -5,7 +5,6 @@ use serde_json::Value;
 ///
 /// The compositor will register its own handlers via the Registry, overriding these.
 /// These stubs return UNAVAILABLE so callers know the compositor isn't ready yet.
-
 pub async fn focus(_params: Value) -> Result<Value, BusError> {
     compositor_unavailable("window.focus")
 }

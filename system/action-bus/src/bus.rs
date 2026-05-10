@@ -78,7 +78,6 @@ impl ActionBus {
 mod tests {
     use super::*;
     use crate::action::Caller;
-    use crate::registry::HandlerFn;
     use serde_json::json;
     use std::path::PathBuf;
     use uuid::Uuid;
