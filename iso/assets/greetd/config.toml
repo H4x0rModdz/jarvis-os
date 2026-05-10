@@ -1,0 +1,13 @@
+# greetd configuration: autologin the dev `jarvis` user and exec labwc
+# directly. No graphical greeter — keeps the ISO slim and the first-boot
+# experience predictable. Production builds will swap in a Qt greeter
+# matching the Jarvis design language.
+#
+# https://man.sr.ht/~kennylevinsen/greetd/
+
+[terminal]
+vt = 1
+
+[default_session]
+command = "labwc"
+user = "jarvis"
