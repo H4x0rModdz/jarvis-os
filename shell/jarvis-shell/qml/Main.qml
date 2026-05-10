@@ -101,4 +101,8 @@ Window {
             reply.show(qsTr("Erro: ") + message, "");
         }
     }
+
+    // The approval dialog is a sibling Window — opens on top of the desktop
+    // when PermissionBridge has a pending request, closes on user decision.
+    ApprovalDialog {}
 }

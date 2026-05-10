@@ -33,6 +33,8 @@ qt_add_executable(jarvis-shell
     src/main.cpp
     src/lilith_bridge.cpp
     src/lilith_bridge.h
+    src/permission_bridge.cpp
+    src/permission_bridge.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
@@ -54,6 +56,8 @@ qt_add_qml_module(jarvis-shell
         qml/LilithInput.qml
         qml/StatusIndicator.qml
         qml/Theme.qml
+        qml/ApprovalDialog.qml
+        qml/ApprovalButton.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE
