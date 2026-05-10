@@ -21,7 +21,7 @@ RUN dnf -y install \
         cmake ninja-build clang gcc-c++ make \
         qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwayland-devel \
         qt6-qtbase-private-devel qt6-qtdeclarative-private-devel \
-        qt6-layer-shell-qt-devel \
+        layer-shell-qt-devel \
         sqlite-devel \
         dbus-devel pkgconfig \
         wayland-devel libxkbcommon-devel \
@@ -61,7 +61,7 @@ LABEL org.opencontainers.image.source="https://github.com/H4x0rModdz/jarvis-os"
 # what enables our wlr-layer-shell anchoring.
 RUN rpm-ostree install \
         qt6-qtbase qt6-qtdeclarative qt6-qtwayland qt6-qtquickcontrols2 \
-        qt6-layer-shell-qt \
+        layer-shell-qt \
         sqlite \
         libnotify \
         xdg-utils \
