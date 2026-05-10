@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/actions/system",
+  "title": "System Actions",
+  "description": "Action schemas for the system.* namespace",
+  "oneOf": [
+    {
+      "title": "system.notify",
+      "description": "Show a desktop notification",
+      "type": "object",
+      "required": ["title", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "maxLength": 100 },
+        "body": { "type": "string", "maxLength": 500 },
+        "urgency": {
+          "type": "string",
+          "enum": ["low", "normal", "critical"],
+          "default": "normal"
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icon name from the icon theme, or absolute path"
+        }
+      }
+    },
+    {
+      "title": "system.set_setting",
+      "description": "Modify a Jarvis OS system setting",
+      "type": "object",
+      "required": ["key", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Dot-separated setting key, e.g. 'appearance.blur_enabled'"
+        },
+        "value": {
+          "description": "New value. Type depends on the setting."
+        }
+      }
+    },
+    {
+      "title": "system.get_setting",
+      "description": "Read a Jarvis OS system setting",
+      "type": "object",
+      "required": ["key"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string" }
+      }
+    }
+  ]
+}

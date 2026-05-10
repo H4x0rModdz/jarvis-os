@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/actions/window",
+  "title": "Window Actions",
+  "description": "Action schemas for the window.* namespace. Implemented by the compositor.",
+  "oneOf": [
+    {
+      "title": "window.focus",
+      "type": "object",
+      "required": ["window_id"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" }
+      }
+    },
+    {
+      "title": "window.minimize",
+      "type": "object",
+      "required": ["window_id"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" }
+      }
+    },
+    {
+      "title": "window.maximize",
+      "type": "object",
+      "required": ["window_id"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" }
+      }
+    },
+    {
+      "title": "window.close",
+      "type": "object",
+      "required": ["window_id"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" },
+        "force": { "type": "boolean", "default": false }
+      }
+    },
+    {
+      "title": "window.move",
+      "type": "object",
+      "required": ["window_id", "x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" }
+      }
+    },
+    {
+      "title": "window.resize",
+      "type": "object",
+      "required": ["window_id", "width", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    {
+      "title": "window.snap_left",
+      "type": "object",
+      "required": ["window_id"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" }
+      }
+    },
+    {
+      "title": "window.snap_right",
+      "type": "object",
+      "required": ["window_id"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" }
+      }
+    }
+  ]
+}

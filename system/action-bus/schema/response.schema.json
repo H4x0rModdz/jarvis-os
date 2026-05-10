@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/response",
+  "title": "ActionResponse",
+  "type": "object",
+  "required": ["action", "status", "duration_ms"],
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Echoes the dispatched action name"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["success", "error", "pending", "cancelled"]
+    },
+    "result": {
+      "type": "object",
+      "description": "Present when status is 'success'. Shape varies per action."
+    },
+    "error": {
+      "$ref": "#/$defs/ResponseError"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock time from dispatch to response in milliseconds"
+    }
+  },
+  "$defs": {
+    "ResponseError": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "PERMISSION_DENIED",
+            "NOT_FOUND",
+            "INVALID_PARAMS",
+            "USER_CANCELLED",
+            "ALREADY_EXISTS",
+            "UNAVAILABLE",
+            "TIMEOUT",
+            "INTERNAL_ERROR"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "description": "Human-readable description of the error"
+        }
+      }
+    }
+  }
+}

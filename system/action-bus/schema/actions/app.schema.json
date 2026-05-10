@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/actions/app",
+  "title": "App Actions",
+  "description": "Action schemas for the app.* namespace",
+  "oneOf": [
+    {
+      "title": "app.open",
+      "description": "Launch an application",
+      "type": "object",
+      "required": ["app"],
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Application name, .desktop file ID, or executable path",
+          "examples": ["vscode", "firefox", "com.spotify.Client"]
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional arguments to pass to the application"
+        }
+      }
+    },
+    {
+      "title": "app.close",
+      "description": "Close a running application gracefully",
+      "type": "object",
+      "required": ["app"],
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string",
+          "description": "Application name or process name"
+        },
+        "force": {
+          "type": "boolean",
+          "default": false,
+          "description": "If true, sends SIGKILL instead of SIGTERM"
+        }
+      }
+    },
+    {
+      "title": "app.install",
+      "description": "Install an application. Requires user confirmation.",
+      "type": "object",
+      "required": ["source", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Flatpak ID, AppImage URL, or .exe path"
+        },
+        "type": {
+          "type": "string",
+          "enum": ["flatpak", "appimage", "wine"],
+          "description": "Installation method"
+        }
+      }
+    },
+    {
+      "title": "app.uninstall",
+      "description": "Uninstall an application. Requires user confirmation.",
+      "type": "object",
+      "required": ["app"],
+      "additionalProperties": false,
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "remove_data": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  ]
+}

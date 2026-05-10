@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/actions/file",
+  "title": "File Actions",
+  "description": "Action schemas for the file.* namespace",
+  "oneOf": [
+    {
+      "title": "file.move",
+      "description": "Move a file or directory",
+      "type": "object",
+      "required": ["source", "destination"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string", "description": "Absolute source path" },
+        "destination": { "type": "string", "description": "Absolute destination path" }
+      }
+    },
+    {
+      "title": "file.copy",
+      "description": "Copy a file",
+      "type": "object",
+      "required": ["source", "destination"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "type": "string" },
+        "destination": { "type": "string" }
+      }
+    },
+    {
+      "title": "file.delete",
+      "description": "Delete a file or directory. Requires user confirmation for permanent deletion.",
+      "type": "object",
+      "required": ["path"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Absolute path to delete" },
+        "permanent": {
+          "type": "boolean",
+          "default": false,
+          "description": "If false, moves to trash. If true, deletes permanently — requires confirmation."
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            libwayland-egl-backend-dev \
+            wayland-protocols \
+            libseat-dev \
+            libgbm-dev \
+            libdrm-dev \
+            libinput-dev \
+            libudev-dev \
+            libxkbcommon-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libgles2-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libdbus-1-dev \
+            libnotify-bin
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Build (all workspace members)
+        run: cargo build --workspace
+
+      - name: Test (action-bus)
+        run: cargo test -p jarvis-action-bus
+
+  schema-lint:
+    name: Validate JSON Schemas
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install ajv-cli
+        run: npm install -g ajv-cli ajv-formats
+
+      - name: Validate action schemas
+        run: |
+          for schema in system/action-bus/schema/actions/*.schema.json; do
+            echo "Validating $schema..."
+            ajv compile -s "$schema" --spec=draft2020
+          done
+          ajv compile -s system/action-bus/schema/request.schema.json --spec=draft2020
+          ajv compile -s system/action-bus/schema/response.schema.json --spec=draft2020

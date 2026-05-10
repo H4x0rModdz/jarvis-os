@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/actions/workspace",
+  "title": "Workspace Actions",
+  "description": "Action schemas for the workspace.* namespace",
+  "oneOf": [
+    {
+      "title": "workspace.switch",
+      "description": "Switch to a virtual workspace",
+      "type": "object",
+      "required": ["workspace_id"],
+      "additionalProperties": false,
+      "properties": {
+        "workspace_id": { "type": "string" }
+      }
+    },
+    {
+      "title": "workspace.move_window",
+      "description": "Move a window to a different workspace",
+      "type": "object",
+      "required": ["window_id", "workspace_id"],
+      "additionalProperties": false,
+      "properties": {
+        "window_id": { "type": "string" },
+        "workspace_id": { "type": "string" }
+      }
+    },
+    {
+      "title": "workspace.create",
+      "description": "Create a new virtual workspace",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" }
+      }
+    }
+  ]
+}

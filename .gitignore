@@ -1,0 +1,38 @@
+# Rust
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build artifacts
+*.o
+*.so
+*.a
+*.d
+
+# Qt/CMake (shell/)
+shell/*/build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Env
+.env
+.env.local
+
+# Claude Code / tooling (not part of the project)
+.agents/
+.claude/
+skills/
+skills-lock.json

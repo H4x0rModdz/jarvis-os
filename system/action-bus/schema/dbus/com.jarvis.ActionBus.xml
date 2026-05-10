@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="/com/jarvis/ActionBus">
+
+  <interface name="com.jarvis.ActionBus">
+
+    <!--
+      Dispatch an action synchronously.
+
+      action_json: JSON string conforming to request.schema.json
+      Returns:     JSON string conforming to response.schema.json
+
+      This method always returns (never errors at the DBus level).
+      All errors are encoded in the response JSON with status="error".
+    -->
+    <method name="Dispatch">
+      <arg name="action_json" type="s" direction="in"/>
+      <arg name="result_json" type="s" direction="out"/>
+    </method>
+
+    <!--
+      List all registered action names.
+      Used for introspection and by Lilith to know what actions are available.
+    -->
+    <method name="ListActions">
+      <arg name="actions" type="as" direction="out"/>
+    </method>
+
+    <!--
+      Emitted when an async action completes.
+      (For future use — synchronous dispatch is sufficient for MVP)
+    -->
+    <signal name="ActionCompleted">
+      <arg name="job_id" type="s"/>
+      <arg name="result_json" type="s"/>
+    </signal>
+
+    <!--
+      Emitted when a permission approval is needed from the UI.
+      The UI listens for this signal and shows the approval dialog.
+    -->
+    <signal name="PermissionRequired">
+      <arg name="job_id" type="s"/>
+      <arg name="scope" type="s"/>
+      <arg name="context_json" type="s"/>
+    </signal>
+
+  </interface>
+
+  <interface name="org.freedesktop.DBus.Introspectable">
+    <method name="Introspect">
+      <arg name="xml_data" type="s" direction="out"/>
+    </method>
+  </interface>
+
+</node>

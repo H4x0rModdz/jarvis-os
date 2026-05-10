@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/request",
+  "title": "ActionRequest",
+  "description": "A request dispatched through the Jarvis Action Bus",
+  "type": "object",
+  "required": ["action", "caller", "params", "session_id"],
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_.]*$",
+      "description": "Action identifier in 'namespace.verb' format",
+      "examples": ["app.open", "file.move", "window.minimize"]
+    },
+    "caller": {
+      "$ref": "#/$defs/Caller"
+    },
+    "params": {
+      "type": "object",
+      "description": "Action-specific parameters. See actions/*.schema.json for each action's param schema."
+    },
+    "session_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Session identifier for grouping related actions"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Optional. If provided, duplicate requests with the same key return the cached result."
+    }
+  },
+  "$defs": {
+    "Caller": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "lilith" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "user" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "const": "automation" },
+            "id": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["type", "id"],
+          "properties": {
+            "type": { "const": "app" },
+            "id": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

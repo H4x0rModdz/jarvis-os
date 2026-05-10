@@ -1,0 +1,42 @@
+[package]
+name = "jarvis-compositor"
+version = "0.1.0"
+edition = "2021"
+description = "Jarvis OS Wayland compositor — built on Smithay"
+
+[[bin]]
+name = "jarvis-compositor"
+path = "src/main.rs"
+
+[dependencies]
+anyhow     = "1"
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror  = "1"
+tracing    = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+zbus       = { version = "4", features = ["tokio"] }
+tokio      = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+
+# Smithay — Wayland compositor library
+smithay = { version = "0.7", default-features = false, features = [
+    "desktop",
+    "wayland_frontend",
+    "backend_winit",       # development backend (runs inside existing session)
+    "backend_drm",         # production DRM/KMS output
+    "backend_gbm",         # GBM buffer management
+    "backend_udev",        # udev device discovery
+    "backend_session",     # session management
+    "backend_session_libseat", # rootless via libseat
+    "backend_input",       # input handling
+    "renderer_gl",         # OpenGL renderer (Phase 1)
+    "use_system_lib",
+] }
+
+# Smithay's event loop
+calloop = { version = "0.14", features = ["executor"] }
+
+# Wayland server protocol
+wayland-server    = "0.31"
+wayland-protocols = { version = "0.32", features = ["server"] }
+wayland-protocols-wlr = { version = "0.3", features = ["server"] }

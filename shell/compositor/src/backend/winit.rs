@@ -1,0 +1,126 @@
+/// Winit backend — runs the compositor inside an existing desktop session.
+///
+/// Used for development and testing. You can run jarvis-compositor inside
+/// your current X11 or Wayland session and see it in a window.
+///
+/// Switch to the udev backend for real hardware boot.
+use crate::{render, state::JarvisCompositor};
+use smithay::{
+    backend::{
+        renderer::damage::OutputDamageTracker,
+        winit::{self, WinitEvent, WinitGraphicsBackend},
+    },
+    output::{Mode, Output, PhysicalProperties, Subpixel},
+    reexports::calloop::EventLoop,
+    utils::{Rectangle, Transform},
+};
+
+pub fn run(event_loop: &mut EventLoop<JarvisCompositor>, state: &mut JarvisCompositor) {
+    tracing::info!("Starting winit backend (development mode)");
+
+    let (mut backend, mut winit_loop) =
+        match winit::init::<smithay::backend::renderer::gles::GlesRenderer>() {
+            Ok(b) => b,
+            Err(e) => {
+                tracing::error!("Failed to initialize winit backend: {e}");
+                return;
+            }
+        };
+
+    // Create a virtual output representing the winit window
+    let output = Output::new(
+        "winit-output".into(),
+        PhysicalProperties {
+            size: (0, 0).into(),
+            subpixel: Subpixel::Unknown,
+            make: "Jarvis".into(),
+            model: "Winit Dev Backend".into(),
+        },
+    );
+
+    let mode = Mode {
+        size: backend.window_size(),
+        refresh: 60_000,
+    };
+
+    output.change_current_state(Some(mode), Some(Transform::Normal), None, Some((0, 0).into()));
+    output.set_preferred(mode);
+    state.space.map_output(&output, (0, 0));
+
+    // Add output to the global output manager so Wayland clients can see it
+    let _global = output.create_global::<JarvisCompositor>(&state.display_handle);
+
+    let mut damage_tracker = OutputDamageTracker::from_output(&output);
+
+    tracing::info!(
+        size = ?mode.size,
+        "Winit output ready — compositor window open"
+    );
+
+    // ── Main render loop ────────────────────────────────────────────────
+    loop {
+        // Dispatch winit events (resize, input, close, redraw)
+        let result = winit_loop.dispatch_new_events(|event| match event {
+            WinitEvent::Resized { size, .. } => {
+                let new_mode = Mode { size, refresh: 60_000 };
+                output.change_current_state(Some(new_mode), None, None, None);
+                damage_tracker = OutputDamageTracker::from_output(&output);
+                tracing::debug!(size = ?size, "Output resized");
+            }
+
+            WinitEvent::Input(input_event) => {
+                // Route input through Smithay's input framework
+                // The seat handler will dispatch keyboard/pointer events to focused windows
+                // TODO: implement input processing via state.seat
+                let _ = input_event;
+            }
+
+            WinitEvent::CloseRequested => {
+                tracing::info!("Winit window closed — stopping compositor");
+                state.loop_signal.stop();
+            }
+
+            WinitEvent::Redraw => {
+                // Frame requested — render
+                if let Err(e) = backend.bind() {
+                    tracing::error!("Failed to bind renderer: {e}");
+                    return;
+                }
+
+                let renderer = backend.renderer();
+
+                match render::render_output(renderer, &output, &state.space, &mut damage_tracker) {
+                    Ok(had_damage) => {
+                        if had_damage {
+                            if let Err(e) = backend.submit(None) {
+                                tracing::error!("Failed to submit frame: {e}");
+                            }
+                        }
+                    }
+                    Err(e) => tracing::error!("Render error: {e}"),
+                }
+
+                // Send frame callbacks to clients so they know to present
+                let time = state.clock.now();
+                state.space.send_frames(&output, time, None, |_, _| Some(output.clone()));
+            }
+
+            WinitEvent::Focus(_) => {}
+        });
+
+        if result.is_err() {
+            break;
+        }
+
+        // Dispatch calloop event loop (handles Wayland client events, Action Bus channel, etc.)
+        event_loop
+            .dispatch(Some(std::time::Duration::from_millis(1)), state)
+            .unwrap();
+
+        // Flush pending Wayland events to clients
+        state
+            .display_handle
+            .flush_clients()
+            .unwrap_or_else(|e| tracing::warn!("Flush error: {e}"));
+    }
+}
