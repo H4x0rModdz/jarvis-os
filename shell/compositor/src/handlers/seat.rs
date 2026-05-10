@@ -11,7 +11,6 @@ use smithay::{
     },
     reexports::wayland_server::protocol::wl_surface::WlSurface,
     utils::{IsAlive, Serial},
-    wayland::seat::WaylandFocus,
 };
 
 impl SeatHandler for JarvisCompositor {
@@ -25,11 +24,10 @@ impl SeatHandler for JarvisCompositor {
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&Self::KeyboardFocus>) {
         let dh = &self.display_handle;
-        let client = focused
+        let _client = focused
             .and_then(|w| w.toplevel())
             .and_then(|t| dh.get_client(t.wl_surface().id()).ok());
 
-        // Update keyboard focus
         seat.get_keyboard()
             .unwrap()
             .set_focus(self, focused.cloned(), Serial::now());

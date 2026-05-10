@@ -1,5 +1,5 @@
 use calloop::channel::Sender;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use zbus::Connection;
 
 /// Commands the Action Bus sends to the compositor.
@@ -59,8 +59,8 @@ pub fn spawn_action_bus_listener(cmd_tx: Sender<WindowCommand>) {
     });
 }
 
-async fn listen_loop(cmd_tx: Sender<WindowCommand>) {
-    let conn = match Connection::session().await {
+async fn listen_loop(_cmd_tx: Sender<WindowCommand>) {
+    let _conn = match Connection::session().await {
         Ok(c) => c,
         Err(e) => {
             tracing::warn!("Action Bus DBus connection failed: {e} — window actions disabled");

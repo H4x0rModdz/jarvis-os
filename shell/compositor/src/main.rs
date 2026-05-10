@@ -102,7 +102,7 @@ fn main() -> anyhow::Result<()> {
         seat_state,
         seat,
         pointer_location: (0.0, 0.0).into(),
-        cursor_status: smithay::input::pointer::CursorImageStatus::Default,
+        cursor_status: smithay::input::pointer::CursorImageStatus::default_named(),
         space: smithay::desktop::Space::default(),
         windows: HashMap::new(),
         window_ids: HashMap::new(),

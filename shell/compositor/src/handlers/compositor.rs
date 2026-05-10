@@ -44,3 +44,4 @@ impl ShmHandler for JarvisCompositor {
 
 delegate_compositor!(JarvisCompositor);
 delegate_shm!(JarvisCompositor);
+smithay::delegate_output!(JarvisCompositor);

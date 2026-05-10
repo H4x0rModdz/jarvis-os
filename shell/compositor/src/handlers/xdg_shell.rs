@@ -45,7 +45,7 @@ impl XdgShellHandler for JarvisCompositor {
 
     fn move_request(&mut self, surface: ToplevelSurface, _seat: WlSeat, _serial: Serial) {
         let window = self.window_for_surface(surface.wl_surface());
-        if let Some(window) = window {
+        if let Some(_window) = window {
             // TODO: begin interactive move — track pointer delta and reposition
             tracing::debug!("Interactive move requested");
         }
@@ -53,7 +53,7 @@ impl XdgShellHandler for JarvisCompositor {
 
     fn resize_request(
         &mut self,
-        surface: ToplevelSurface,
+        _surface: ToplevelSurface,
         _seat: WlSeat,
         _serial: Serial,
         _edges: smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel::ResizeEdge,

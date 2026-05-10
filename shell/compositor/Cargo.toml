@@ -17,6 +17,7 @@ tracing    = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zbus       = { version = "4", features = ["tokio"] }
 tokio      = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+clap       = { version = "4", features = ["derive"] }
 
 # Smithay — Wayland compositor library
 smithay = { version = "0.7", default-features = false, features = [

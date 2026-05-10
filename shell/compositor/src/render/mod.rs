@@ -12,7 +12,7 @@ use smithay::{
         gles::GlesRenderer,
         ImportAll, ImportMem, Renderer,
     },
-    desktop::{layer_map_for_output, space::SpaceElement, Space, Window},
+    desktop::{layer_map_for_output, Space, Window},
     output::Output,
     utils::{Physical, Rectangle, Scale, Transform},
 };
