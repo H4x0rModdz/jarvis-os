@@ -12,11 +12,7 @@ use smithay::{
         gles::GlesRenderer,
         ImportAll, ImportMem, Renderer,
     },
-    desktop::{
-        layer_map_for_output,
-        space::SpaceElement,
-        Space, Window,
-    },
+    desktop::{layer_map_for_output, space::SpaceElement, Space, Window},
     output::Output,
     utils::{Physical, Rectangle, Scale, Transform},
 };
@@ -58,19 +54,18 @@ where
     for window in space.elements() {
         if let Some(surface) = window.wl_surface() {
             let location = space.element_location(window).unwrap_or_default();
-            let geo = smithay::utils::Rectangle::from_loc_and_size(
-                location,
-                window.geometry().size,
-            );
+            let geo =
+                smithay::utils::Rectangle::from_loc_and_size(location, window.geometry().size);
 
-            let render_elements = smithay::backend::renderer::element::surface::render_elements_from_surface_tree(
-                renderer,
-                &surface,
-                (geo.loc.x, geo.loc.y),
-                scale,
-                1.0,
-                smithay::backend::renderer::element::Kind::Unspecified,
-            );
+            let render_elements =
+                smithay::backend::renderer::element::surface::render_elements_from_surface_tree(
+                    renderer,
+                    &surface,
+                    (geo.loc.x, geo.loc.y),
+                    scale,
+                    1.0,
+                    smithay::backend::renderer::element::Kind::Unspecified,
+                );
 
             elements.extend(render_elements.into_iter().map(JarvisRenderElement::Window));
         }
@@ -80,25 +75,25 @@ where
     let layer_map = layer_map_for_output(output);
     for layer_surface in layer_map.layers() {
         if let Some(surface) = layer_surface.wl_surface() {
-            let geo = layer_map
-                .layer_geometry(layer_surface)
-                .unwrap_or_default();
+            let geo = layer_map.layer_geometry(layer_surface).unwrap_or_default();
 
-            let render_elements = smithay::backend::renderer::element::surface::render_elements_from_surface_tree(
-                renderer,
-                &surface,
-                (geo.loc.x, geo.loc.y),
-                scale,
-                1.0,
-                smithay::backend::renderer::element::Kind::Unspecified,
-            );
+            let render_elements =
+                smithay::backend::renderer::element::surface::render_elements_from_surface_tree(
+                    renderer,
+                    &surface,
+                    (geo.loc.x, geo.loc.y),
+                    scale,
+                    1.0,
+                    smithay::backend::renderer::element::Kind::Unspecified,
+                );
 
             elements.extend(render_elements.into_iter().map(JarvisRenderElement::Window));
         }
     }
 
     // Submit frame via damage tracker
-    let (has_damage, _) = damage_tracker.render_output(renderer, 0, &elements, [0.05, 0.05, 0.08, 1.0])?;
+    let (has_damage, _) =
+        damage_tracker.render_output(renderer, 0, &elements, [0.05, 0.05, 0.08, 1.0])?;
 
     Ok(has_damage.is_some())
 }

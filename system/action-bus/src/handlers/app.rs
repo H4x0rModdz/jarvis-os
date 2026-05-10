@@ -25,7 +25,9 @@ pub async fn close(params: Value) -> Result<Value, BusError> {
         .args([&format!("-{signal}"), app])
         .output()
         .await
-        .map_err(|e| BusError::ExecutionFailed { message: e.to_string() })?;
+        .map_err(|e| BusError::ExecutionFailed {
+            message: e.to_string(),
+        })?;
 
     if output.status.success() {
         Ok(json!({ "closed": true, "signal": signal }))

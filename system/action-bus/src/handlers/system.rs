@@ -8,15 +8,12 @@ pub async fn notify(params: Value) -> Result<Value, BusError> {
     let icon = params["icon"].as_str().unwrap_or("dialog-information");
 
     let output = tokio::process::Command::new("notify-send")
-        .args([
-            "--urgency", urgency,
-            "--icon", icon,
-            title,
-            body,
-        ])
+        .args(["--urgency", urgency, "--icon", icon, title, body])
         .output()
         .await
-        .map_err(|e| BusError::ExecutionFailed { message: e.to_string() })?;
+        .map_err(|e| BusError::ExecutionFailed {
+            message: e.to_string(),
+        })?;
 
     if output.status.success() {
         Ok(json!({ "sent": true }))

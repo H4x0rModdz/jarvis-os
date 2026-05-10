@@ -25,9 +25,9 @@ impl AuditLog {
 
     pub async fn write(&self, request: &ActionRequest, response: &ActionResponse) {
         let status = match response.status {
-            crate::action::ResponseStatus::Success   => "success",
-            crate::action::ResponseStatus::Error     => "error",
-            crate::action::ResponseStatus::Pending   => "pending",
+            crate::action::ResponseStatus::Success => "success",
+            crate::action::ResponseStatus::Error => "error",
+            crate::action::ResponseStatus::Pending => "pending",
             crate::action::ResponseStatus::Cancelled => "cancelled",
         };
 

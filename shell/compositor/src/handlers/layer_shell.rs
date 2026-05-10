@@ -3,9 +3,7 @@ use smithay::{
     delegate_layer_shell,
     desktop::{layer_map_for_output, LayerSurface},
     output::Output,
-    wayland::shell::wlr_layer::{
-        Layer, WlrLayerShellHandler, WlrLayerShellState,
-    },
+    wayland::shell::wlr_layer::{Layer, WlrLayerShellHandler, WlrLayerShellState},
 };
 
 /// Handles the wlr-layer-shell protocol.

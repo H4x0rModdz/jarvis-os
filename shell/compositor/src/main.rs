@@ -66,7 +66,8 @@ fn main() -> anyhow::Result<()> {
     let xdg_shell_state = XdgShellState::new::<JarvisCompositor>(&display_handle);
     let layer_shell_state = WlrLayerShellState::new::<JarvisCompositor>(&display_handle);
     let shm_state = ShmState::new::<JarvisCompositor>(&display_handle, vec![]);
-    let output_manager_state = OutputManagerState::new_with_xdg_output::<JarvisCompositor>(&display_handle);
+    let output_manager_state =
+        OutputManagerState::new_with_xdg_output::<JarvisCompositor>(&display_handle);
 
     // ── Input / seat ────────────────────────────────────────────────────
     let mut seat_state = SeatState::new();
@@ -160,10 +161,10 @@ fn main() -> anyhow::Result<()> {
 impl JarvisCompositor {
     fn handle_window_command(&mut self, cmd: WindowCommand) {
         match cmd {
-            WindowCommand::Focus { window_id }     => self.focus_window(window_id),
-            WindowCommand::Minimize { window_id }  => self.minimize_window(window_id),
+            WindowCommand::Focus { window_id } => self.focus_window(window_id),
+            WindowCommand::Minimize { window_id } => self.minimize_window(window_id),
             WindowCommand::Close { window_id, force } => self.close_window(window_id, force),
-            WindowCommand::Maximize { window_id }  => {
+            WindowCommand::Maximize { window_id } => {
                 tracing::info!(window_id, "Maximize — TODO");
             }
             WindowCommand::Move { window_id, x, y } => {
@@ -171,7 +172,11 @@ impl JarvisCompositor {
                     self.space.map_element(window, (x, y), false);
                 }
             }
-            WindowCommand::Resize { window_id, width, height } => {
+            WindowCommand::Resize {
+                window_id,
+                width,
+                height,
+            } => {
                 if let Some(window) = self.windows.get(&window_id) {
                     window.toplevel().map(|t| {
                         t.with_pending_state(|s| {

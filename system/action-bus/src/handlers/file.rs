@@ -9,7 +9,9 @@ pub async fn move_file(params: Value) -> Result<Value, BusError> {
 
     fs::rename(&source, &destination)
         .await
-        .map_err(|e| BusError::ExecutionFailed { message: e.to_string() })?;
+        .map_err(|e| BusError::ExecutionFailed {
+            message: e.to_string(),
+        })?;
 
     Ok(json!({
         "moved": true,
@@ -24,7 +26,9 @@ pub async fn copy_file(params: Value) -> Result<Value, BusError> {
 
     let bytes = fs::copy(&source, &destination)
         .await
-        .map_err(|e| BusError::ExecutionFailed { message: e.to_string() })?;
+        .map_err(|e| BusError::ExecutionFailed {
+            message: e.to_string(),
+        })?;
 
     Ok(json!({
         "copied": true,
@@ -43,7 +47,9 @@ pub async fn delete(params: Value) -> Result<Value, BusError> {
         } else {
             fs::remove_file(&path).await
         }
-        .map_err(|e| BusError::ExecutionFailed { message: e.to_string() })?;
+        .map_err(|e| BusError::ExecutionFailed {
+            message: e.to_string(),
+        })?;
 
         Ok(json!({ "deleted": true, "permanent": true }))
     } else {
@@ -52,7 +58,9 @@ pub async fn delete(params: Value) -> Result<Value, BusError> {
             .args(["trash", path.to_str().unwrap_or("")])
             .output()
             .await
-            .map_err(|e| BusError::ExecutionFailed { message: e.to_string() })?;
+            .map_err(|e| BusError::ExecutionFailed {
+                message: e.to_string(),
+            })?;
 
         if output.status.success() {
             Ok(json!({ "deleted": true, "permanent": false }))

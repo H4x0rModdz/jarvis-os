@@ -43,7 +43,12 @@ pub fn run(event_loop: &mut EventLoop<JarvisCompositor>, state: &mut JarvisCompo
         refresh: 60_000,
     };
 
-    output.change_current_state(Some(mode), Some(Transform::Normal), None, Some((0, 0).into()));
+    output.change_current_state(
+        Some(mode),
+        Some(Transform::Normal),
+        None,
+        Some((0, 0).into()),
+    );
     output.set_preferred(mode);
     state.space.map_output(&output, (0, 0));
 
@@ -62,7 +67,10 @@ pub fn run(event_loop: &mut EventLoop<JarvisCompositor>, state: &mut JarvisCompo
         // Dispatch winit events (resize, input, close, redraw)
         let result = winit_loop.dispatch_new_events(|event| match event {
             WinitEvent::Resized { size, .. } => {
-                let new_mode = Mode { size, refresh: 60_000 };
+                let new_mode = Mode {
+                    size,
+                    refresh: 60_000,
+                };
                 output.change_current_state(Some(new_mode), None, None, None);
                 damage_tracker = OutputDamageTracker::from_output(&output);
                 tracing::debug!(size = ?size, "Output resized");
@@ -102,7 +110,9 @@ pub fn run(event_loop: &mut EventLoop<JarvisCompositor>, state: &mut JarvisCompo
 
                 // Send frame callbacks to clients so they know to present
                 let time = state.clock.now();
-                state.space.send_frames(&output, time, None, |_, _| Some(output.clone()));
+                state
+                    .space
+                    .send_frames(&output, time, None, |_, _| Some(output.clone()));
             }
 
             WinitEvent::Focus(_) => {}

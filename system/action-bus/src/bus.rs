@@ -54,19 +54,18 @@ impl ActionBus {
         self.registry.read().await.action_names()
     }
 
-    async fn dispatch_inner(
-        &self,
-        request: &ActionRequest,
-    ) -> Result<serde_json::Value, BusError> {
+    async fn dispatch_inner(&self, request: &ActionRequest) -> Result<serde_json::Value, BusError> {
         // 1. Permission check
         self.permissions.check(request).await?;
 
         // 2. Look up handler — clone Arc before releasing the read lock
         let handler = {
             let registry = self.registry.read().await;
-            registry.get(&request.action).ok_or_else(|| BusError::NotFound {
-                action: request.action.clone(),
-            })?
+            registry
+                .get(&request.action)
+                .ok_or_else(|| BusError::NotFound {
+                    action: request.action.clone(),
+                })?
             // read lock released here
         };
 
@@ -89,19 +88,23 @@ mod tests {
         registry.register(
             "test.echo",
             Arc::new(|params| {
-                Box::pin(async move { Ok(params) })
-                    as crate::registry::HandlerFuture
+                Box::pin(async move { Ok(params) }) as crate::registry::HandlerFuture
             }),
         );
         registry.register(
             "test.fail",
             Arc::new(|_| {
                 Box::pin(async move {
-                    Err(BusError::ExecutionFailed { message: "expected failure".into() })
+                    Err(BusError::ExecutionFailed {
+                        message: "expected failure".into(),
+                    })
                 }) as crate::registry::HandlerFuture
             }),
         );
-        ActionBus::new(registry, AuditLog::new(PathBuf::from("/tmp/jarvis-test-audit.log")))
+        ActionBus::new(
+            registry,
+            AuditLog::new(PathBuf::from("/tmp/jarvis-test-audit.log")),
+        )
     }
 
     fn make_request(action: &str, params: serde_json::Value) -> ActionRequest {

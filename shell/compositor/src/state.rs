@@ -11,10 +11,7 @@ use smithay::{
     wayland::{
         compositor::{CompositorClientState, CompositorState},
         output::OutputManagerState,
-        shell::{
-            wlr_layer::WlrLayerShellState,
-            xdg::XdgShellState,
-        },
+        shell::{wlr_layer::WlrLayerShellState, xdg::XdgShellState},
         shm::ShmState,
     },
 };

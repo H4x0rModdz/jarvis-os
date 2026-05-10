@@ -33,14 +33,10 @@ impl PermissionChecker {
             "file.move" => "filesystem.write",
             "file.copy" => "filesystem.write",
             "file.delete" => "filesystem.delete",
-            "window.focus"
-            | "window.minimize"
-            | "window.maximize"
-            | "window.close"
-            | "window.move"
-            | "window.resize"
-            | "window.snap_left"
-            | "window.snap_right" => "window.control",
+            "window.focus" | "window.minimize" | "window.maximize" | "window.close"
+            | "window.move" | "window.resize" | "window.snap_left" | "window.snap_right" => {
+                "window.control"
+            }
             "workspace.switch" | "workspace.move_window" | "workspace.create" => "window.control",
             "system.notify" => "system.notify",
             "system.set_setting" => "settings.modify",

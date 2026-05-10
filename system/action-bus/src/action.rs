@@ -22,10 +22,10 @@ pub enum Caller {
 impl std::fmt::Display for Caller {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Caller::Lilith          => write!(f, "lilith"),
-            Caller::User            => write!(f, "user"),
+            Caller::Lilith => write!(f, "lilith"),
+            Caller::User => write!(f, "user"),
             Caller::Automation { id } => write!(f, "automation:{id}"),
-            Caller::App { id }      => write!(f, "app:{id}"),
+            Caller::App { id } => write!(f, "app:{id}"),
         }
     }
 }

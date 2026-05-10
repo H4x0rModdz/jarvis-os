@@ -98,29 +98,29 @@ fn build_registry() -> Registry {
         };
     }
 
-    reg!("app.open",      handlers::app::open);
-    reg!("app.close",     handlers::app::close);
-    reg!("app.install",   handlers::app::install);
+    reg!("app.open", handlers::app::open);
+    reg!("app.close", handlers::app::close);
+    reg!("app.install", handlers::app::install);
     reg!("app.uninstall", handlers::app::uninstall);
 
-    reg!("file.move",   handlers::file::move_file);
-    reg!("file.copy",   handlers::file::copy_file);
+    reg!("file.move", handlers::file::move_file);
+    reg!("file.copy", handlers::file::copy_file);
     reg!("file.delete", handlers::file::delete);
 
-    reg!("window.focus",      handlers::window::focus);
-    reg!("window.minimize",   handlers::window::minimize);
-    reg!("window.maximize",   handlers::window::maximize);
-    reg!("window.close",      handlers::window::close);
-    reg!("window.move",       handlers::window::move_window);
-    reg!("window.resize",     handlers::window::resize);
-    reg!("window.snap_left",  handlers::window::snap_left);
+    reg!("window.focus", handlers::window::focus);
+    reg!("window.minimize", handlers::window::minimize);
+    reg!("window.maximize", handlers::window::maximize);
+    reg!("window.close", handlers::window::close);
+    reg!("window.move", handlers::window::move_window);
+    reg!("window.resize", handlers::window::resize);
+    reg!("window.snap_left", handlers::window::snap_left);
     reg!("window.snap_right", handlers::window::snap_right);
 
-    reg!("workspace.switch",      handlers::workspace::switch);
+    reg!("workspace.switch", handlers::workspace::switch);
     reg!("workspace.move_window", handlers::workspace::move_window);
-    reg!("workspace.create",      handlers::workspace::create);
+    reg!("workspace.create", handlers::workspace::create);
 
-    reg!("system.notify",      handlers::system::notify);
+    reg!("system.notify", handlers::system::notify);
     reg!("system.set_setting", handlers::system::set_setting);
     reg!("system.get_setting", handlers::system::get_setting);
 
