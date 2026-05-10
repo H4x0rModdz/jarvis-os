@@ -1,9 +1,13 @@
 import QtQuick
-import QtQuick.Controls
 import Jarvis.Shell
 
 /// The conversational input — what the user types into.
 /// Emits `accepted(text)` on Enter; the parent dispatches via LilithBridge.
+///
+/// Uses raw TextInput (not Quick Controls' TextField) so the placeholder
+/// behaves like a CLI hint — visible while empty AND unfocused, gone the
+/// moment the user clicks in. Material-style floating labels look out of
+/// place on a single-line system prompt.
 Item {
     id: root
     implicitHeight: 40
@@ -23,22 +27,17 @@ Item {
         }
     }
 
-    TextField {
+    TextInput {
         id: input
         anchors.fill: parent
         anchors.leftMargin: 12
         anchors.rightMargin: 12
         verticalAlignment: TextInput.AlignVCenter
-
-        // Suppress the Material underline — the rounded glass surface IS the chrome.
-        background: Item {}
-
-        placeholderText: root.placeholder
-        placeholderTextColor: Theme.textDim
         color: Theme.text
         selectionColor: Theme.accent
         selectedTextColor: Theme.text
         font.pixelSize: 16
+        clip: true
 
         enabled: !LilithBridge.busy
         opacity: enabled ? 1.0 : 0.55
@@ -53,5 +52,17 @@ Item {
             root.accepted(t);
             text = "";
         }
+    }
+
+    // Hint that disappears the instant the field is focused.
+    Text {
+        anchors.fill: input
+        verticalAlignment: Text.AlignVCenter
+        text: root.placeholder
+        color: Theme.textDim
+        font.pixelSize: 16
+        visible: input.text.length === 0 && !input.activeFocus
+        // Don't intercept clicks — the field underneath has to get focus.
+        // (Items default to mouse-transparent unless a MouseArea is added.)
     }
 }

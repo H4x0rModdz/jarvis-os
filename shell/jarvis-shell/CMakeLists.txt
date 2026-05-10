@@ -16,6 +16,17 @@ set(CMAKE_AUTOUIC OFF)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Quick Qml DBus QuickControls2)
 
+# LayerShellQt is built out-of-tree against KDE's repo (see
+# .jarvis-os/memory) and installed alongside Qt. The find_package call below
+# resolves when CMAKE_PREFIX_PATH points at that Qt prefix; without it the
+# shell still builds and runs as a regular toplevel (Phase 1a fallback).
+find_package(LayerShellQt QUIET)
+if(LayerShellQt_FOUND)
+    message(STATUS "LayerShellQt found — building Phase 1b layer-shell variant")
+else()
+    message(STATUS "LayerShellQt NOT found — building Phase 1a toplevel variant")
+endif()
+
 qt_standard_project_setup(REQUIRES 6.4)
 
 qt_add_executable(jarvis-shell
@@ -52,6 +63,11 @@ target_link_libraries(jarvis-shell PRIVATE
     Qt6::DBus
     Qt6::QuickControls2
 )
+
+if(LayerShellQt_FOUND)
+    target_compile_definitions(jarvis-shell PRIVATE JARVIS_HAVE_LAYER_SHELL)
+    target_link_libraries(jarvis-shell PRIVATE LayerShellQt::Interface)
+endif()
 
 # Useful in the Qt Creator + tooling story; harmless at command-line build.
 set_target_properties(jarvis-shell PROPERTIES
