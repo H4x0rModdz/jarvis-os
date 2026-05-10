@@ -68,8 +68,9 @@ jobs:
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
             --type iso \
+            --rootfs btrfs \
             --config /config.toml \
-            --local "jarvis-os:${{ steps.version.outputs.tag }}"
+            "localhost/jarvis-os:${{ steps.version.outputs.tag }}"
 
       - name: Locate ISO
         id: iso

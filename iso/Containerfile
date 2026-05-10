@@ -105,6 +105,14 @@ RUN mkdir -p /etc/skel/.config/labwc
 COPY iso/assets/labwc/autostart /etc/skel/.config/labwc/autostart
 COPY iso/assets/labwc/rc.xml    /etc/skel/.config/labwc/rc.xml
 
+# Default filesystem for the installed system. Without this, bootc-image-
+# builder refuses to build an ISO and demands `--rootfs <fs>` on the
+# command line. Btrfs matches what Silverblue/Kinoite use and gives us
+# subvolumes/snapshots for free.
+RUN mkdir -p /usr/lib/bootc/install \
+    && printf '[install]\n[install.filesystem.root]\ntype = "btrfs"\n' \
+        > /usr/lib/bootc/install/00-default.toml
+
 # bootc lint catches the usual boot-config mistakes (kernel cmdline,
 # /etc vs /usr placement, sysctl drop-ins).
 RUN bootc container lint

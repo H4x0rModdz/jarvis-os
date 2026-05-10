@@ -39,8 +39,9 @@ podman run --rm -it \
     -v /var/lib/containers/storage:/var/lib/containers/storage \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type iso \
+    --rootfs btrfs \
     --config /config.toml \
-    --local "$IMAGE_TAG"
+    "localhost/$IMAGE_TAG"
 
 echo "─── Done ───"
 echo "ISO:"
