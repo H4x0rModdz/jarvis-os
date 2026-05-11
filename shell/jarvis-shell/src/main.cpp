@@ -29,10 +29,13 @@ int main(int argc, char** argv)
     app.setApplicationName(QStringLiteral("jarvis-shell"));
 
     QQmlApplicationEngine engine;
-    // Qt 6.4 places module resources at qrc:/<URI as path>/qml/<File>.
-    // Qt 6.5+ moved them to qrc:/qt/qml/<URI as path>/ and gained
-    // engine.loadFromModule — when we bump the minimum we'll switch.
-    engine.load(QUrl(QStringLiteral("qrc:/Jarvis/Shell/qml/Main.qml")));
+    // Qt 6.5+ idiom: resolve the entry point through the QML module so the
+    // engine reads the generated qmldir (including `singleton Theme`) and
+    // registers types with their correct semantics. Loading via a raw
+    // qrc:/… URL in Qt 6.10 silently drops the singleton flag on
+    // pragma-Singleton QML files — every Theme.* reference then errors with
+    // "was a singleton at compile time, but is not a singleton anymore."
+    engine.loadFromModule("Jarvis.Shell", "Main");
     if (engine.rootObjects().isEmpty()) {
         return 1;
     }

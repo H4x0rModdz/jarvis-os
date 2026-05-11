@@ -14,7 +14,7 @@ set(CMAKE_AUTORCC ON)
 # Enable QML compile-time tooling and warnings.
 set(CMAKE_AUTOUIC OFF)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Quick Qml DBus QuickControls2)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Quick Qml DBus QuickControls2)
 
 # LayerShellQt is built out-of-tree against KDE's repo (see
 # .jarvis-os/memory) and installed alongside Qt. The find_package call below
@@ -27,7 +27,7 @@ else()
     message(STATUS "LayerShellQt NOT found — building Phase 1a toplevel variant")
 endif()
 
-qt_standard_project_setup(REQUIRES 6.4)
+qt_standard_project_setup(REQUIRES 6.5)
 
 qt_add_executable(jarvis-shell
     src/main.cpp

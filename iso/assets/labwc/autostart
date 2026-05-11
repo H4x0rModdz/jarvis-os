@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# Spawned by labwc when the user session starts. The shell connects to the
-# user systemd instance for `com.jarvis.Lilith` etc — those are started by
-# `jarvis-session.target` which is wired into `graphical-session.target`.
+# Spawned by labwc when the user session starts.
+#
+# Two responsibilities:
+#   1. Pull in `jarvis-session.target` explicitly. The target's `WantedBy=`
+#      points at `graphical-session.target`, which most desktop sessions
+#      emit automatically — labwc does not, so without this line the
+#      daemons (permission/action-bus/lilith) stay inactive.
+#   2. Launch the shell once the daemons have published their bus names.
+
+systemctl --user start jarvis-session.target
 
 # Give the daemons a moment to publish their bus names before the shell
 # starts pinging them.
