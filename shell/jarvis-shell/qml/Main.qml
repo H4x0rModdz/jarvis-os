@@ -122,4 +122,8 @@ Window {
     // The approval dialog is a sibling Window — opens on top of the desktop
     // when PermissionBridge has a pending request, closes on user decision.
     ApprovalDialog {}
+
+    // First-boot updater splash. Bound to UpdaterBridge.active — invisible
+    // until the daemon emits its first Progress, dismisses on Completed.
+    UpdaterSplash {}
 }

@@ -1,0 +1,21 @@
+[Unit]
+Description=Jarvis Updater (user)
+Documentation=https://github.com/H4x0rModdz/jarvis-os
+# Updater talks to Ollama over HTTP, so it needs the system Ollama service
+# to at least be trying to come up. We don't `Requires=` it because the
+# updater is designed to degrade gracefully when Ollama is unreachable —
+# it just emits Completed(false) and the shell shows a retryable error.
+After=dbus.socket jarvis-action-bus.service
+PartOf=jarvis-session.target
+
+[Service]
+Type=dbus
+BusName=com.jarvis.Updater
+ExecStart=/usr/bin/jarvis-updater
+# The Ollama pull can take many minutes; we don't want systemd to kill it.
+# The updater self-throttles bus traffic and exits naturally when done.
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=jarvis-session.target

@@ -39,6 +39,8 @@ qt_add_executable(jarvis-shell
     src/action_bus_bridge.h
     src/desktop_apps_model.cpp
     src/desktop_apps_model.h
+    src/updater_bridge.cpp
+    src/updater_bridge.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
@@ -65,6 +67,7 @@ qt_add_qml_module(jarvis-shell
         qml/ApprovalButton.qml
         qml/Launcher.qml
         qml/AppCell.qml
+        qml/UpdaterSplash.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE

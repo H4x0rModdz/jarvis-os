@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "system/action-bus",
     "system/permission",
+    "system/updater",
     "shell/compositor",
     "ai/lilith",
 ]

@@ -1,0 +1,22 @@
+[package]
+name = "jarvis-updater"
+version = "0.1.0"
+edition = "2021"
+description = "First-boot updater — pulls Lilith model and (Phase 2) drives bootc upgrades"
+
+[[bin]]
+name = "jarvis-updater"
+path = "src/main.rs"
+
+[dependencies]
+anyhow             = "1"
+serde              = { version = "1", features = ["derive"] }
+serde_json         = "1"
+thiserror          = "1"
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-stream       = "0.1"
+reqwest            = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+zbus               = { version = "4", features = ["tokio"] }
+futures-util       = "0.3"
