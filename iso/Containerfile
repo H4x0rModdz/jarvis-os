@@ -77,7 +77,18 @@ RUN dnf -y install \
         mesa-dri-drivers \
     && dnf clean all
 
-RUN curl -fsSL https://ollama.com/install.sh | sh
+# Ollama. The upstream installer creates a system user with home
+# `/usr/share/ollama`, which is read-only under bootc — the daemon then
+# crash-loops trying to write `~/.ollama/id_ed25519`. We bolt on a drop-in
+# that redirects HOME to /var/lib/ollama and asks systemd to provision that
+# directory with the right ownership (StateDirectory= creates
+# /var/lib/<name> chown ollama:ollama before ExecStart). We also enable the
+# unit — the installer skips `systemctl enable` on bootc images.
+RUN curl -fsSL https://ollama.com/install.sh | sh \
+    && mkdir -p /etc/systemd/system/ollama.service.d \
+    && printf '[Service]\nEnvironment=HOME=/var/lib/ollama\nStateDirectory=ollama\n' \
+        > /etc/systemd/system/ollama.service.d/bootc-home.conf \
+    && systemctl enable ollama.service
 
 # Compiled binaries from the builder stage.
 COPY --from=builder /out/bin/jarvis-action-bus  /usr/bin/jarvis-action-bus

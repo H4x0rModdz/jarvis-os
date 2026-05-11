@@ -2,13 +2,42 @@
 # Spawned by labwc when the user session starts.
 #
 # Two responsibilities:
-#   1. Pull in `jarvis-session.target` explicitly. The target's `WantedBy=`
-#      points at `graphical-session.target`, which most desktop sessions
-#      emit automatically — labwc does not, so without this line the
-#      daemons (permission/action-bus/lilith) stay inactive.
-#   2. Launch the shell once the daemons have published their bus names.
+#   1. Pull in `jarvis-session.target` once the user systemd manager is
+#      ready. The target's `WantedBy=` points at `graphical-session.target`,
+#      which most desktop sessions emit on their own — labwc does not, so
+#      without an explicit start the daemons stay inactive.
+#   2. Launch the shell after the daemons publish their bus names.
+#
+# Why the wait loop: on greetd autologin the labwc autostart can fire
+# before `user@<uid>.service` has finished bringing up the user systemd
+# manager, and `systemctl --user start` then silently no-ops. We retry
+# until the manager reports a usable state (running OR degraded — degraded
+# happens when an unrelated user unit is failed, which we don't care
+# about). A short log under /tmp helps when something goes wrong.
+
+LOG=/tmp/labwc-autostart.log
+exec >> "$LOG" 2>&1
+echo "=== $(date --iso=seconds) autostart starting (pid $$) ==="
+echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-unset}"
+echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unset}"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    state=$(systemctl --user is-system-running 2>/dev/null || echo "unknown")
+    echo "attempt ${attempt}: user systemd state=${state}"
+    case "${state}" in
+        running|degraded)
+            break
+            ;;
+    esac
+    sleep 1
+done
 
 systemctl --user start jarvis-session.target
+echo "jarvis-session.target start: exit=$?"
+
+systemctl --user list-units --type=service --no-pager | grep jarvis || true
 
 # Give the daemons a moment to publish their bus names before the shell
 # starts pinging them.
