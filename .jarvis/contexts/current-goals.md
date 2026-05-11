@@ -4,49 +4,69 @@
 
 ## Current Phase
 
-**Phase 1 — Foundation & Architecture**
+**Phase 2 — User-Facing System**
 
-Establishing the architectural base before writing production code.
+Phase 1 closed the foundation. Phase 2 turns it into something a person
+can actually log into and use: real first-boot UX, real voice surface,
+real AI agency over the desktop.
 
 ## Decisions Locked
 
-- **Base OS:** Fedora Atomic, OCI image model (ADR 0005)
-- **UI:** Qt6/QML + Wayland (ADR 0002, 0003)
+- **Base OS:** Fedora Atomic, OCI image model (ADR 0001, 0005)
+- **UI:** Qt6/QML + Wayland (ADR 0002, 0003, 0006)
 - **Core IPC:** Jarvis Action Bus via DBus (ADR 0004)
-- **Implementation order:** Action Bus → Compositor → Lilith
+- **Compositor (now):** labwc as a placeholder until our Smithay
+  compositor is ready. Decision documented in ADR 0006.
+- **First-boot UX:** dedicated updater daemon + splash, not silent
+  in-Lilith bootstrap (ADR 0007).
 
-## Active Goals
+## Phase 1 Outcomes (closed)
 
-1. ~~Define and document the full system architecture~~ ✓
-2. ~~Establish the `.jarvis/` context system~~ ✓
-3. ~~Choose technology stack and base OS~~ ✓ (ADRs 0001-0005)
-4. Design Action Bus schema and IPC contracts (next)
-5. Set up monorepo structure with Containerfile base
-6. Write module contracts for Action Bus, Permission System, Compositor
+- ✅ Action Bus daemon (21 actions, JSON-schema dispatch, permission
+  consult, audit log, unit tests).
+- ✅ Permission System daemon (in-memory grants + approval DBus signal,
+  30 s timeout, full unit + e2e coverage).
+- ✅ Lilith daemon (Ollama integration, tool calling, intent routing,
+  SQLite memory).
+- ✅ Qt shell with layer-shell bottom bar, launcher, approval dialog,
+  Theme singleton design tokens.
+- ✅ Bootable Fedora bootc ISO buildable both locally and in CI.
+- ✅ Updater daemon + splash (Phase 1 scope: Ollama model).
+- ⏸ Smithay compositor — deferred to Phase 3, labwc serves until then.
 
-## Implementation Queue (B → A → C)
+## Phase 2 Active Goals (ordered)
 
-**B — Action Bus ✓ DONE**
-- Full JSON Schema (request, response, 5 action namespaces)
-- DBus interface XML
-- Rust daemon with full dispatch pipeline
-- Permission stub + audit log
-- 3 unit tests
+1. **Validate the full first-boot demo on a clean VM.** ISO boots → bar
+   renders → updater splash appears → model downloads → splash fades →
+   user types a question into the bar → Lilith answers.
+2. **Voice pipeline.** Whisper-small STT and Piper TTS, both local.
+   Push-to-talk first, always-listening hotword later. Without voice,
+   the always-present bar is overkill — voice is what justifies its
+   shape.
+3. **Action Bus namespace expansion.** Today's 21 actions are mostly
+   plumbing. Add the user-visible primitives Lilith needs to actually
+   *do* things: `browser.open`, `clipboard.set`, `screenshot.capture`,
+   `audio.volume`, `window.focus`, `window.tile`, `app.launch`.
+4. **Launcher focus restoration.** Deferred bug from Phase 1 — when the
+   launcher closes, focus needs to return to the bar's text input.
+   Small fix, big UX win.
+5. **Updater Phase 2.** Bootc OS upgrade check + `updater.*` actions on
+   the Action Bus so Lilith answers "are there updates?" naturally.
 
-**A — Compositor (in progress)**
-- wlroots-based compositor skeleton
-- Basic window rendering
-- Wayland shell protocols (xdg-shell, layer-shell)
-- Connect to Action Bus for window actions
+## Phase 3 Backlog (not yet active)
 
-**C — Lilith (after compositor)**
-- Ollama integration (qwen3:4b default model)
-- Intent → Action Bus routing
-- Basic tool calling (open app, move file, etc.)
+- Smithay-based Jarvis Compositor (replaces labwc).
+- Wine/Proton integration via bottles or a custom wrapper.
+- Jarvis SDK — third-party apps register actions with the Action Bus.
+- Custom greeter replacing greetd autologin.
+- Glassmorphism polish pass (blur shaders, surface depth) once the
+  compositor is ours.
 
-## Success Criteria for Phase 1
+## Success Criteria for Phase 2
 
-- Containerfile that builds a bootable Fedora Atomic image
-- Action Bus dispatching actions end-to-end with permission checks
-- Module contracts written for all Phase 1 modules
-- CI pipeline: build image + run Action Bus tests
+- The first-boot demo above runs end-to-end on a clean VirtualBox VM
+  with no terminal interaction.
+- A user can hold the bar's mic key, speak, and have the command
+  dispatched through the Action Bus.
+- Lilith can complete an end-to-end task that spans 3+ actions across
+  different namespaces (e.g. "tira um screenshot e abre no editor").
