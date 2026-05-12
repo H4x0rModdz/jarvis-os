@@ -8,7 +8,14 @@ Requires=jarvis-permission.service jarvis-settings.service jarvis-notifications.
 # `Requires=`.
 Wants=jarvis-updater.service jarvis-voice.service
 After=jarvis-permission.service jarvis-settings.service jarvis-notifications.service jarvis-action-bus.service jarvis-lilith.service
-BindsTo=graphical-session.target
+
+# `BindsTo=graphical-session.target` used to live here on the assumption
+# that whichever DE the user picked would emit graphical-session.target
+# (GNOME / KDE do). labwc does not, and trying to BindsTo a target that
+# never exists makes systemd refuse the start with a misleading
+# "Access denied" reply. Our session is driven explicitly by the labwc
+# autostart, which runs `systemctl --user start jarvis-session.target`
+# at the right moment — no implicit binding required.
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target
