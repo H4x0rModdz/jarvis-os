@@ -124,5 +124,16 @@ fn build_registry() -> Registry {
     reg!("system.set_setting", handlers::system::set_setting);
     reg!("system.get_setting", handlers::system::get_setting);
 
+    reg!("browser.open", handlers::browser::open);
+
+    reg!("clipboard.set", handlers::clipboard::set);
+    reg!("clipboard.get", handlers::clipboard::get);
+
+    reg!("screenshot.capture", handlers::screenshot::capture);
+
+    reg!("audio.set_volume", handlers::audio::set_volume);
+    reg!("audio.adjust_volume", handlers::audio::adjust_volume);
+    reg!("audio.toggle_mute", handlers::audio::toggle_mute);
+
     r
 }

@@ -20,7 +20,11 @@ through the bus. It is the contract layer between callers and system capabilitie
 - `window.*` — window management (focus, minimize, maximize, close)
 - `workspace.*` — virtual desktop management
 - `system.*` — system operations (notify, set_setting)
-- `voice.*` — voice pipeline control
+- `browser.*` — open URLs (http/https/mailto only) via xdg-open
+- `clipboard.*` — read/write text via wl-clipboard with xclip fallback
+- `screenshot.*` — capture full screen or region via grim/scrot
+- `audio.*` — output volume + mute via pactl
+- `voice.*` — voice pipeline control (planned)
 
 ## Depends On
 

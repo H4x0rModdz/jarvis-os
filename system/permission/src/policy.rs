@@ -37,6 +37,14 @@ const SAFE_SCOPES: &[&str] = &[
     "system.notify",
     "settings.read",
     "filesystem.read",
+    // Audio output changes are reversible by the user (volume knob,
+    // headphone unplug). Same family as `system.notify` — useful, not
+    // sensitive.
+    "audio.control",
+    // Writing to the clipboard cannot leak information back to the caller;
+    // the user can always paste over our value. Reading the clipboard is a
+    // different story (see `clipboard.read` below).
+    "clipboard.write",
 ];
 
 const DANGEROUS_SCOPES: &[&str] = &[
@@ -49,6 +57,11 @@ const DANGEROUS_SCOPES: &[&str] = &[
     "network.request.external",
     "microphone.listen",
     "camera.access",
+    // Reading the clipboard or the screen can hand the AI passwords,
+    // private messages, banking info — same privacy class as listening
+    // through the mic.
+    "clipboard.read",
+    "screen.read",
 ];
 
 #[cfg(test)]
@@ -61,6 +74,8 @@ mod tests {
         assert_eq!(classify("system.notify"), PolicyVerdict::AutoAllow);
         assert_eq!(classify("window.control"), PolicyVerdict::AutoAllow);
         assert_eq!(classify("settings.read"), PolicyVerdict::AutoAllow);
+        assert_eq!(classify("audio.control"), PolicyVerdict::AutoAllow);
+        assert_eq!(classify("clipboard.write"), PolicyVerdict::AutoAllow);
     }
 
     #[test]
@@ -72,6 +87,8 @@ mod tests {
             classify("network.request.external"),
             PolicyVerdict::RequireGrant
         );
+        assert_eq!(classify("clipboard.read"), PolicyVerdict::RequireGrant);
+        assert_eq!(classify("screen.read"), PolicyVerdict::RequireGrant);
     }
 
     #[test]

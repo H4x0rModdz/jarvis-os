@@ -77,6 +77,8 @@ RUN dnf -y install \
         sqlite libnotify xdg-utils jq curl \
         seatd polkit NetworkManager \
         mesa-dri-drivers \
+        wl-clipboard grim slurp \
+        pulseaudio-utils \
     && dnf clean all
 
 # Ollama. The upstream installer creates a system user with home
