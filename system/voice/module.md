@@ -2,9 +2,9 @@
 
 ## Status
 
-**Phase V1 — surface only.** The daemon is on the bus and the shell
-shows a mic button bound to it, but STT/TTS return `Unavailable`.
-V2 lands whisper.cpp; V3 lands piper. See [ADR 0009](../../.jarvis/decisions/0009-voice-pipeline.md).
+**Phase V3 — STT + TTS shipped.** Push-to-talk via whisper.cpp;
+auto-speak Lilith replies via piper. The full voice loop is live in
+the ISO. See [ADR 0009](../../.jarvis/decisions/0009-voice-pipeline.md).
 
 ## Purpose
 
@@ -84,9 +84,9 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 
 | Phase | Microphone | STT | TTS |
 |---|---|---|---|
-| V1 (this) | — | `Unavailable` | `Unavailable` |
+| V1 | — | `Unavailable` | `Unavailable` |
 | V2 | cpal | whisper.cpp subprocess | `Unavailable` |
-| V3 | cpal | whisper.cpp subprocess | piper subprocess + paplay |
+| V3 (current) | cpal | whisper.cpp subprocess | piper subprocess + paplay |
 
 ## Failure Modes
 

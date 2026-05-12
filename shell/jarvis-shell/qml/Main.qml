@@ -240,6 +240,20 @@ Window {
         }
     }
 
+    // Auto-speak Lilith replies through the voice daemon. Whatever
+    // Lilith says in the reply popup also comes out the speakers. When
+    // the voice daemon isn't reachable (or piper/paplay are missing)
+    // the call no-ops on the bridge side — Lilith chat keeps working
+    // text-only.
+    Connections {
+        target: LilithBridge
+        function onReplyReceived(replyText, action, resultJson) {
+            if (VoiceBridge.reachable && replyText.trim().length > 0) {
+                VoiceBridge.speak(replyText);
+            }
+        }
+    }
+
     // The approval dialog is a sibling Window — opens on top of the desktop
     // when PermissionBridge has a pending request, closes on user decision.
     ApprovalDialog {}

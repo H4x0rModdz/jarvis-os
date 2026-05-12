@@ -1,16 +1,19 @@
-//! Jarvis Voice — V2 (real STT, push-to-talk).
+//! Jarvis Voice — V3 (STT + TTS).
 //!
 //! StartListening opens the default microphone (cpal, hosted in a
 //! capture actor thread so the `!Send` stream doesn't infect the DBus
 //! service). StopListening stops the stream, writes the captured
 //! samples to a temporary WAV, runs whisper.cpp's `whisper-cli` against
-//! it, and emits `TranscriptionFinal` with the recognised text. TTS
-//! still returns Unavailable — that's V3.
+//! it, and emits `TranscriptionFinal` with the recognised text.
+//!
+//! Speak synthesizes `text` via piper, writes a WAV, plays it through
+//! `paplay`, and reports `spoken: true` when playback completes.
 //!
 //! See ADR 0009 for the scope split and `module.md` for the contract.
 
 mod capture;
 mod stt;
+mod tts;
 
 use capture::CaptureHandle;
 use serde_json::json;
@@ -155,9 +158,17 @@ impl VoiceService {
 
     /// Speak `text` through the default audio sink.
     ///
-    /// V3 wires piper here. V1/V2 cycle through the `speaking` state
-    /// briefly so the shell exercises its visual paths today.
-    async fn speak(&self, _text: &str, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
+    /// Synthesizes via piper, plays via paplay. Returns immediately with
+    /// `{ spoken: true }` once the speaking state is engaged; the actual
+    /// playback runs in a background task that transitions back to idle
+    /// when paplay exits. If piper or the player aren't available, the
+    /// task emits a TranscriptionFailed signal (reused as a "voice
+    /// pipeline error" channel) so the shell surfaces it.
+    async fn speak(&self, text: &str, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
+        if text.trim().is_empty() {
+            return json!({ "spoken": false, "reason": "empty text" }).to_string();
+        }
+
         let mut state = self.state.lock().await;
         if *state != State::Idle {
             return json!({
@@ -172,10 +183,18 @@ impl VoiceService {
             tracing::warn!("StateChanged emit failed: {e}");
         }
 
+        let text_owned = text.to_string();
         let ctx_owned = ctx.to_owned();
         let state_handle = self.state.clone();
         tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            if let Err(e) = tts::speak(&text_owned).await {
+                tracing::warn!(error = %e, "TTS speak failed");
+                if let Err(e2) =
+                    VoiceService::transcription_failed(&ctx_owned, &e.to_string()).await
+                {
+                    tracing::warn!("TranscriptionFailed emit failed: {e2}");
+                }
+            }
             let mut s = state_handle.lock().await;
             *s = State::Idle;
             if let Err(e) = Self::state_changed(&ctx_owned, s.as_str()).await {
@@ -183,11 +202,7 @@ impl VoiceService {
             }
         });
 
-        json!({
-            "spoken": false,
-            "reason": "TTS not yet implemented (V3)"
-        })
-        .to_string()
+        json!({ "spoken": true }).to_string()
     }
 
     async fn get_state(&self) -> String {
