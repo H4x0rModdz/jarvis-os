@@ -75,10 +75,7 @@ fn resolve_target_path(params: &Value) -> Result<PathBuf, BusError> {
         .join(format!("Jarvis-{stamp}.png")))
 }
 
-async fn capture_command(
-    mode: &str,
-    path: &str,
-) -> Result<(&'static str, Vec<String>), BusError> {
+async fn capture_command(mode: &str, path: &str) -> Result<(&'static str, Vec<String>), BusError> {
     let wayland = std::env::var("WAYLAND_DISPLAY").is_ok();
 
     match (wayland, mode) {
@@ -98,10 +95,7 @@ async fn capture_command(
             // extra dependency just for command composition.
             Ok((
                 "sh",
-                vec![
-                    "-c".into(),
-                    format!("grim -g \"$(slurp)\" \"{path}\""),
-                ],
+                vec!["-c".into(), format!("grim -g \"$(slurp)\" \"{path}\"")],
             ))
         }
         (true, _) => {
@@ -126,10 +120,7 @@ mod tests {
     fn default_path_lives_under_pictures_screenshots() {
         let p = resolve_target_path(&json!({})).expect("home dir present in tests");
         let s = p.to_string_lossy();
-        assert!(
-            s.contains("Pictures") && s.contains("Screenshots"),
-            "{s}"
-        );
+        assert!(s.contains("Pictures") && s.contains("Screenshots"), "{s}");
         assert!(s.ends_with(".png"), "{s}");
     }
 

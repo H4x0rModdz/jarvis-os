@@ -97,9 +97,7 @@ impl UpdaterService {
                 Err(e) => (false, e.to_string()),
             };
 
-            if let Err(e) =
-                UpdaterService::completed(&ctx_owned, success, &message).await
-            {
+            if let Err(e) = UpdaterService::completed(&ctx_owned, success, &message).await {
                 tracing::warn!("Failed to emit Completed signal: {e}");
             }
         });
@@ -119,11 +117,7 @@ impl UpdaterService {
 
     /// Fires once per Apply() invocation.
     #[zbus(signal)]
-    async fn completed(
-        ctx: &SignalContext<'_>,
-        success: bool,
-        message: &str,
-    ) -> zbus::Result<()>;
+    async fn completed(ctx: &SignalContext<'_>, success: bool, message: &str) -> zbus::Result<()>;
 }
 
 impl UpdaterService {

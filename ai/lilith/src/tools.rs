@@ -285,7 +285,8 @@ pub fn all_tools() -> Vec<Tool> {
         },
         Tool {
             action: "audio.adjust_volume",
-            description: "Adjust the system output volume by a signed delta percent (e.g. +5, -10).",
+            description:
+                "Adjust the system output volume by a signed delta percent (e.g. +5, -10).",
             schema: json!({
                 "type": "object",
                 "properties": {

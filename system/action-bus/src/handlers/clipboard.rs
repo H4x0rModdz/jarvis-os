@@ -83,13 +83,14 @@ pub async fn get(_params: Value) -> Result<Value, BusError> {
         });
     };
 
-    let output = Command::new(cmd)
-        .args(&args)
-        .output()
-        .await
-        .map_err(|e| BusError::ExecutionFailed {
-            message: format!("{cmd}: {e}"),
-        })?;
+    let output =
+        Command::new(cmd)
+            .args(&args)
+            .output()
+            .await
+            .map_err(|e| BusError::ExecutionFailed {
+                message: format!("{cmd}: {e}"),
+            })?;
 
     // `wl-paste` exits 1 when the clipboard is empty. Treat that as the
     // empty-string result the caller almost certainly wants — Lilith would

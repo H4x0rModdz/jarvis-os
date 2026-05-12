@@ -40,9 +40,7 @@ pub async fn open(params: Value) -> Result<Value, BusError> {
 /// in unexpected ways.
 fn is_safe_url(url: &str) -> bool {
     let lower = url.to_ascii_lowercase();
-    lower.starts_with("http://")
-        || lower.starts_with("https://")
-        || lower.starts_with("mailto:")
+    lower.starts_with("http://") || lower.starts_with("https://") || lower.starts_with("mailto:")
 }
 
 #[cfg(test)]

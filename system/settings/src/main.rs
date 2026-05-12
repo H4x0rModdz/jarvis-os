@@ -71,11 +71,7 @@ impl SettingsService {
     }
 
     /// Delete `key`. Returns `{ deleted }`.
-    async fn delete(
-        &self,
-        key: &str,
-        #[zbus(signal_context)] ctx: SignalContext<'_>,
-    ) -> String {
+    async fn delete(&self, key: &str, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
         match self.store.delete(key) {
             Ok(was_present) => {
                 if was_present {
@@ -115,11 +111,7 @@ impl SettingsService {
     /// empty `value_json` so subscribers know the difference between
     /// "changed to null" and "removed".
     #[zbus(signal)]
-    async fn changed(
-        ctx: &SignalContext<'_>,
-        key: &str,
-        value_json: &str,
-    ) -> zbus::Result<()>;
+    async fn changed(ctx: &SignalContext<'_>, key: &str, value_json: &str) -> zbus::Result<()>;
 }
 
 #[tokio::main]

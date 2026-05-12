@@ -100,7 +100,10 @@ pub async fn set_setting(params: Value) -> Result<Value, BusError> {
     if parsed["ok"].as_bool() == Some(true) {
         Ok(json!({ "set": true, "key": key }))
     } else {
-        let msg = parsed["error"].as_str().unwrap_or("unknown error").to_string();
+        let msg = parsed["error"]
+            .as_str()
+            .unwrap_or("unknown error")
+            .to_string();
         Err(BusError::ExecutionFailed { message: msg })
     }
 }

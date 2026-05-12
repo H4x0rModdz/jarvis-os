@@ -15,12 +15,11 @@ const DEFAULT_SINK: &str = "@DEFAULT_SINK@";
 /// "louder!" command still has somewhere to go after the user already hit
 /// the cap.
 pub async fn set_volume(params: Value) -> Result<Value, BusError> {
-    let raw =
-        params["percent"]
-            .as_i64()
-            .ok_or_else(|| BusError::InvalidParams {
-                message: "missing required integer param 'percent'".into(),
-            })?;
+    let raw = params["percent"]
+        .as_i64()
+        .ok_or_else(|| BusError::InvalidParams {
+            message: "missing required integer param 'percent'".into(),
+        })?;
     let pct = raw.clamp(0, 150);
     let arg = format!("{pct}%");
 
@@ -33,12 +32,11 @@ pub async fn set_volume(params: Value) -> Result<Value, BusError> {
 /// The underlying pactl handles overflow / underflow gracefully — we just
 /// pass through the signed-percent shorthand.
 pub async fn adjust_volume(params: Value) -> Result<Value, BusError> {
-    let delta =
-        params["delta"]
-            .as_i64()
-            .ok_or_else(|| BusError::InvalidParams {
-                message: "missing required integer param 'delta'".into(),
-            })?;
+    let delta = params["delta"]
+        .as_i64()
+        .ok_or_else(|| BusError::InvalidParams {
+            message: "missing required integer param 'delta'".into(),
+        })?;
     let arg = if delta >= 0 {
         format!("+{delta}%")
     } else {
@@ -71,13 +69,14 @@ async fn run_pactl(args: &[&str]) -> Result<(), BusError> {
             service: "pactl (pulseaudio-utils)".into(),
         });
     }
-    let output = Command::new(PACTL)
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| BusError::ExecutionFailed {
-            message: format!("pactl: {e}"),
-        })?;
+    let output =
+        Command::new(PACTL)
+            .args(args)
+            .output()
+            .await
+            .map_err(|e| BusError::ExecutionFailed {
+                message: format!("pactl: {e}"),
+            })?;
     if !output.status.success() {
         return Err(BusError::ExecutionFailed {
             message: format!(
