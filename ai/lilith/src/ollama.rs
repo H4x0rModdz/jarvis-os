@@ -15,9 +15,21 @@ pub struct OllamaClient {
 }
 
 impl OllamaClient {
-    pub fn from_env() -> Self {
+    /// Build a client. Resolves `model` through three layers, in order:
+    ///   1. `lilith.model` from the Settings daemon (user-tunable via
+    ///      the SettingsPanel — primary source of truth at runtime).
+    ///   2. `LILITH_MODEL` env var (dev override, also used by the
+    ///      service unit's drop-in workaround for low-RAM VMs).
+    ///   3. The compiled-in default (`qwen3:4b`).
+    ///
+    /// Settings unreachable → silently falls through to env / default;
+    /// Lilith always boots even when Settings is down.
+    pub async fn from_env() -> Self {
         let host = std::env::var("OLLAMA_HOST").unwrap_or_else(|_| DEFAULT_HOST.into());
-        let model = std::env::var("LILITH_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.into());
+        let model = crate::settings::read_string("lilith.model")
+            .await
+            .or_else(|| std::env::var("LILITH_MODEL").ok())
+            .unwrap_or_else(|| DEFAULT_MODEL.into());
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
             .build()

@@ -5,6 +5,7 @@ mod intent;
 mod memory;
 mod ollama;
 mod persistent;
+mod settings;
 mod tools;
 
 use audit::AuditLog;
@@ -312,7 +313,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Fact store: {}", facts_path.display());
 
     let bus = Arc::new(BusClient::connect().await?);
-    let ollama = OllamaClient::from_env();
+    let ollama = OllamaClient::from_env().await;
     tracing::info!("Ollama configured (model = {})", ollama.model());
 
     let memory = Arc::new(SessionMemory::new(32));

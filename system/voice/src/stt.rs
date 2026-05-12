@@ -21,10 +21,22 @@ const DEFAULT_LANG: &str = "auto";
 /// Run whisper-cli against `wav_path` and return the recognised text,
 /// trimmed. Errors propagate the underlying message — Lilith / the shell
 /// surface them verbatim to the user.
+///
+/// Resolution order for the source language:
+///   1. `voice.language` from the Settings daemon (user toggle in
+///      SettingsPanel).
+///   2. `JARVIS_VOICE_LANG` env var (dev override).
+///   3. `"auto"` — whisper guesses.
+///
+/// We re-read the setting on every call so a change in the panel takes
+/// effect immediately, no daemon restart.
 pub async fn transcribe(wav_path: &Path) -> Result<String> {
     let binary = env_path("JARVIS_VOICE_BINARY", DEFAULT_BINARY);
     let model = env_path("JARVIS_VOICE_MODEL", DEFAULT_MODEL);
-    let lang = std::env::var("JARVIS_VOICE_LANG").unwrap_or_else(|_| DEFAULT_LANG.into());
+    let lang = read_setting("voice.language")
+        .await
+        .or_else(|| std::env::var("JARVIS_VOICE_LANG").ok())
+        .unwrap_or_else(|| DEFAULT_LANG.into());
 
     if !binary.exists() {
         return Err(anyhow!(
@@ -81,6 +93,28 @@ fn env_path(var: &str, default: &str) -> PathBuf {
     std::env::var_os(var)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(default))
+}
+
+/// Read a string from `com.jarvis.Settings`. Returns `None` when the
+/// daemon is offline or the key isn't set — the caller chains through
+/// env/default the same way they would with `std::env::var`.
+async fn read_setting(key: &str) -> Option<String> {
+    use zbus::{Connection, Proxy};
+    let conn = Connection::session().await.ok()?;
+    let proxy = Proxy::new(
+        &conn,
+        "com.jarvis.Settings",
+        "/com/jarvis/Settings",
+        "com.jarvis.Settings",
+    )
+    .await
+    .ok()?;
+    let response: String = proxy.call("Get", &(key,)).await.ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&response).ok()?;
+    if !parsed.get("found")?.as_bool()? {
+        return None;
+    }
+    parsed.get("value")?.as_str().map(|s| s.to_string())
 }
 
 #[cfg(test)]
