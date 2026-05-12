@@ -306,6 +306,21 @@ pub fn all_tools() -> Vec<Tool> {
                 }
             }),
         },
+        // ── updater ─────────────────────────────────────────────────────
+        Tool {
+            action: "updater.check",
+            description: "Check whether the Lilith model is installed and whether a Jarvis OS \
+                          upgrade is staged. Returns model_present, os_update_available, \
+                          os_version.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "updater.apply_os",
+            description: "Apply the pending bootc OS upgrade. The user must explicitly confirm \
+                          this — Lilith should ask before calling it. A reboot is required to \
+                          finish; this action only stages.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
         // ── memory (Lilith-internal — bypasses Action Bus) ─────────────
         Tool {
             action: "memory.remember",

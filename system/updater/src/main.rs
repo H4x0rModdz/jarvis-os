@@ -1,11 +1,18 @@
-//! Jarvis Updater — first-boot setup daemon.
+//! Jarvis Updater — first-boot setup daemon (Phase 2).
 //!
-//! Owns the bytes-on-the-wire fetch of assets that the ISO deliberately
-//! does not bake in (Phase 1: the Lilith Ollama model). Surfaces progress
-//! over DBus so `jarvis-shell` can render a splash without polling.
+//! Two parallel responsibilities now:
+//!
+//! - **Phase 1 (model pull)** — auto-applied on session start when the
+//!   Lilith Ollama model is missing. The user sees a splash with a
+//!   progress bar and Lilith starts answering as soon as it finishes.
+//! - **Phase 2 (OS upgrade)** — `bootc upgrade --check` is consulted at
+//!   startup. If a new image is staged, the daemon surfaces a flag and
+//!   waits for the user to confirm. Reboot is never automatic.
 //!
 //! See `system/updater/module.md` for the contract and ADR 0007 for the
 //! rationale.
+
+mod bootc;
 
 use anyhow::Context;
 use futures_util::StreamExt;
@@ -44,9 +51,12 @@ impl Config {
 struct CheckResult {
     model_present: bool,
     model: String,
-    /// Phase 2 — always null for now. Reserved so callers can rely on the
-    /// key existing.
+    /// Phase 2 — true / false based on `bootc upgrade --check`, or null
+    /// if bootc isn't reachable (dev/WSL builds, mostly).
     os_update_available: Option<bool>,
+    /// Best-effort short identifier of the staged image — bootc's own
+    /// stdout summary. Null when no update or when bootc is offline.
+    os_version: Option<String>,
 }
 
 #[derive(Clone)]
@@ -65,10 +75,18 @@ impl UpdaterService {
     /// Inspect what is and isn't installed. No side effects.
     async fn check(&self) -> String {
         let model_present = self.is_model_present().await.unwrap_or(false);
+        let (os_update_available, os_version) = match bootc::check_update().await {
+            Ok(info) => (Some(info.available), info.version),
+            Err(e) => {
+                tracing::debug!(error = %e, "bootc check skipped");
+                (None, None)
+            }
+        };
         let result = CheckResult {
             model_present,
             model: self.config.model.clone(),
-            os_update_available: None,
+            os_update_available,
+            os_version,
         };
         serde_json::to_string(&result).unwrap_or_else(|_| "{}".into())
     }
@@ -105,8 +123,52 @@ impl UpdaterService {
         json!({ "started": true }).to_string()
     }
 
+    /// Stage and apply a pending bootc OS upgrade. Returns immediately
+    /// with `{ started, reason? }`. Progress is reported indeterminately
+    /// (bootc doesn't expose a percent counter); Completed fires on
+    /// finish with `requires_reboot=true` in the message envelope.
+    ///
+    /// We deliberately do NOT trigger a reboot from here — that's the
+    /// shell's call, behind a confirmation dialog. The user always
+    /// chooses *when* to apply the new boot deployment.
+    async fn apply_os_upgrade(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
+        {
+            let mut busy = self.running.lock().await;
+            if *busy {
+                return json!({ "started": false, "reason": "busy" }).to_string();
+            }
+            *busy = true;
+        }
+
+        let svc = self.clone();
+        let ctx_owned = ctx.to_owned();
+
+        tokio::spawn(async move {
+            // Indeterminate progress — bootc doesn't report percent.
+            if let Err(e) = Self::progress(&ctx_owned, "os.upgrade", -1, "Pulling new image…").await
+            {
+                tracing::warn!("Progress emit failed: {e}");
+            }
+
+            let outcome = bootc::apply_upgrade().await;
+            *svc.running.lock().await = false;
+
+            let (success, message) = match outcome {
+                Ok(()) => (true, "OS upgrade staged — reboot to apply".to_string()),
+                Err(e) => (false, e.to_string()),
+            };
+
+            if let Err(e) = Self::completed(&ctx_owned, success, &message).await {
+                tracing::warn!("Failed to emit Completed signal: {e}");
+            }
+        });
+
+        json!({ "started": true }).to_string()
+    }
+
     /// Streamed per-chunk progress.
-    /// `stage` ∈ { "model.pull" }. `percent` is [0, 100] or -1 (indeterminate).
+    /// `stage` ∈ { "model.pull", "os.upgrade" }. `percent` is [0, 100]
+    /// or -1 (indeterminate — bootc, "verifying" sub-steps).
     #[zbus(signal)]
     async fn progress(
         ctx: &SignalContext<'_>,
@@ -115,9 +177,15 @@ impl UpdaterService {
         message: &str,
     ) -> zbus::Result<()>;
 
-    /// Fires once per Apply() invocation.
+    /// Fires once per Apply()/ApplyOSUpgrade() invocation.
     #[zbus(signal)]
     async fn completed(ctx: &SignalContext<'_>, success: bool, message: &str) -> zbus::Result<()>;
+
+    /// Fires at daemon startup if `bootc upgrade --check` found a staged
+    /// image. The shell binds to this to surface a non-blocking "Update
+    /// available — install?" chip on the bar / splash.
+    #[zbus(signal)]
+    async fn os_update_available(ctx: &SignalContext<'_>, version: &str) -> zbus::Result<()>;
 }
 
 impl UpdaterService {
@@ -332,6 +400,33 @@ async fn main() -> anyhow::Result<()> {
         }
         Err(e) => {
             tracing::warn!(error = %e, "Could not query Ollama; staying idle");
+        }
+    }
+
+    // Probe bootc for a staged OS upgrade. Independent of the model
+    // pull — the splash can show both states at once. We never apply
+    // automatically here; the user clicks Install on the splash, which
+    // routes back into `ApplyOsUpgrade`.
+    match bootc::check_update().await {
+        Ok(info) if info.available => {
+            let object_server = conn.object_server();
+            let iface_ref = object_server
+                .interface::<_, UpdaterService>("/com/jarvis/Updater")
+                .await?;
+            let ctx = iface_ref.signal_context().clone();
+            let version = info
+                .version
+                .unwrap_or_else(|| "(no version reported)".into());
+            tracing::info!(%version, "bootc OS update available");
+            if let Err(e) = UpdaterService::os_update_available(&ctx, &version).await {
+                tracing::warn!("Failed to emit OSUpdateAvailable signal: {e}");
+            }
+        }
+        Ok(_) => {
+            tracing::info!("bootc reports no OS update available");
+        }
+        Err(e) => {
+            tracing::debug!(error = %e, "bootc probe skipped");
         }
     }
 

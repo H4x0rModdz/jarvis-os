@@ -135,5 +135,8 @@ fn build_registry() -> Registry {
     reg!("audio.adjust_volume", handlers::audio::adjust_volume);
     reg!("audio.toggle_mute", handlers::audio::toggle_mute);
 
+    reg!("updater.check", handlers::updater::check);
+    reg!("updater.apply_os", handlers::updater::apply_os);
+
     r
 }

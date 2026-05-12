@@ -69,13 +69,13 @@ DBus  com.jarvis.Updater  at  /com/jarvis/Updater
 
 ## Phase 1 vs Phase 2
 
-| Item | Phase 1 (this) | Phase 2 |
-|---|---|---|
-| Asset coverage | Ollama model only | + bootc OS upgrade check |
-| Trigger | session start | + periodic check (24h timer) |
-| AI hookup | none | `updater.*` actions on the Action Bus |
-| Cancellation | none | `Cancel()` DBus method |
-| History | tracing logs only | structured update log under `~/.jarvis/logs/updater.log` |
+| Item | Phase 1 | Phase 2 (current) | Phase 3 |
+|---|---|---|---|
+| Asset coverage | Ollama model only | + bootc OS upgrade check + apply | + voice models pulled on demand |
+| Trigger | session start | + bootc probe on startup | + periodic check (24h timer) |
+| AI hookup | none | `updater.check`, `updater.apply_os` on the Action Bus | — |
+| Cancellation | none | none | `Cancel()` DBus method |
+| History | tracing logs only | tracing logs only | structured update log under `~/.jarvis/logs/updater.log` |
 
 ## Failure Modes
 

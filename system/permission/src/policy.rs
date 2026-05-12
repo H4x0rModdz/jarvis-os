@@ -45,6 +45,9 @@ const SAFE_SCOPES: &[&str] = &[
     // the user can always paste over our value. Reading the clipboard is a
     // different story (see `clipboard.read` below).
     "clipboard.write",
+    // Reading state from the Updater is harmless — it returns whether
+    // anything is pending, not the contents of the system.
+    "updater.read",
 ];
 
 const DANGEROUS_SCOPES: &[&str] = &[
@@ -62,6 +65,9 @@ const DANGEROUS_SCOPES: &[&str] = &[
     // through the mic.
     "clipboard.read",
     "screen.read",
+    // Applying an OS upgrade is destructive in the same way deleting
+    // files is — non-revertible without effort, requires reboot.
+    "updater.apply",
 ];
 
 #[cfg(test)]
@@ -76,6 +82,7 @@ mod tests {
         assert_eq!(classify("settings.read"), PolicyVerdict::AutoAllow);
         assert_eq!(classify("audio.control"), PolicyVerdict::AutoAllow);
         assert_eq!(classify("clipboard.write"), PolicyVerdict::AutoAllow);
+        assert_eq!(classify("updater.read"), PolicyVerdict::AutoAllow);
     }
 
     #[test]
@@ -89,6 +96,7 @@ mod tests {
         );
         assert_eq!(classify("clipboard.read"), PolicyVerdict::RequireGrant);
         assert_eq!(classify("screen.read"), PolicyVerdict::RequireGrant);
+        assert_eq!(classify("updater.apply"), PolicyVerdict::RequireGrant);
     }
 
     #[test]

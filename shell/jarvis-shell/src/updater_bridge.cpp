@@ -34,42 +34,77 @@ UpdaterBridge::UpdaterBridge(QObject* parent) : QObject(parent)
         QStringLiteral("Completed"),
         this,
         SLOT(onCompleted(bool, QString)));
+    const bool osUpdateOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("OSUpdateAvailable"),
+        this,
+        SLOT(onOSUpdateAvailable(QString)));
 
-    if (!progressOk || !completedOk) {
+    if (!progressOk || !completedOk || !osUpdateOk) {
         qCWarning(lcUpd) << "Failed to subscribe to updater signals"
                          << "progress=" << progressOk
-                         << "completed=" << completedOk;
+                         << "completed=" << completedOk
+                         << "osUpdate=" << osUpdateOk;
     }
+}
+
+void UpdaterBridge::applyOSUpgrade()
+{
+    if (!m_iface) return;
+    qCInfo(lcUpd) << "ApplyOSUpgrade requested by UI";
+    m_iface->asyncCall(QStringLiteral("ApplyOSUpgrade"));
 }
 
 void UpdaterBridge::onProgress(const QString& stage, int percent, const QString& message)
 {
     qCInfo(lcUpd) << "Progress:" << stage << percent << message;
-    setState(/*active=*/true, stage, percent, message, /*failed=*/false);
+    setState(/*active=*/true, stage, percent, message,
+             /*failed=*/false, /*requiresReboot=*/m_requiresReboot);
 }
 
 void UpdaterBridge::onCompleted(bool success, const QString& message)
 {
     qCInfo(lcUpd) << "Completed:" << success << message;
+    // Heuristic: a successful os.upgrade emits a message containing
+    // "reboot" — surface that as a separate property so the splash
+    // can show an Install / Restart Now button.
+    const bool reboot = success && m_stage == QStringLiteral("os.upgrade")
+                        && message.contains(QStringLiteral("reboot"));
     if (success) {
-        // Mark inactive — the splash fades out and the regular bar takes over.
-        setState(/*active=*/false, QString(), 100, message, /*failed=*/false);
+        // If the user just installed the OS upgrade, clear the
+        // advisory flag — the upgrade is no longer "pending".
+        if (m_stage == QStringLiteral("os.upgrade")) {
+            m_osUpdateAvailable = false;
+            m_osVersion.clear();
+            emit osUpdateChanged();
+        }
+        setState(/*active=*/false, QString(), 100, message,
+                 /*failed=*/false, /*requiresReboot=*/reboot);
     } else {
-        // Stay visible so the user sees the error. UI shows a retry path.
-        setState(/*active=*/true, m_stage, m_percent, message, /*failed=*/true);
+        setState(/*active=*/true, m_stage, m_percent, message,
+                 /*failed=*/true, /*requiresReboot=*/false);
     }
 }
 
+void UpdaterBridge::onOSUpdateAvailable(const QString& version)
+{
+    qCInfo(lcUpd) << "OSUpdateAvailable:" << version;
+    m_osUpdateAvailable = true;
+    m_osVersion = version;
+    emit osUpdateChanged();
+}
+
 void UpdaterBridge::setState(bool active, const QString& stage, int percent,
-                             const QString& message, bool failed)
+                             const QString& message, bool failed, bool requiresReboot)
 {
     const bool changed = (active != m_active) || (stage != m_stage)
                         || (percent != m_percent) || (message != m_message)
-                        || (failed != m_failed);
+                        || (failed != m_failed) || (requiresReboot != m_requiresReboot);
     m_active = active;
     m_stage = stage;
     m_percent = percent;
     m_message = message;
     m_failed = failed;
+    m_requiresReboot = requiresReboot;
     if (changed) emit stateChanged();
 }

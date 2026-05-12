@@ -5,6 +5,7 @@ pub mod clipboard;
 pub mod file;
 pub mod screenshot;
 pub mod system;
+pub mod updater;
 pub mod window;
 pub mod workspace;
 
