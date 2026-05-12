@@ -159,6 +159,7 @@ RUN dnf -y install \
         seatd polkit NetworkManager \
         mesa-dri-drivers \
         wl-clipboard grim slurp \
+        swayidle \
         pulseaudio-utils \
         alsa-lib \
         wine \

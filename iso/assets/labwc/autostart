@@ -42,3 +42,12 @@ systemctl --user list-units --type=service --no-pager | grep jarvis || true
 # Give the daemons a moment to publish their bus names before the shell
 # starts pinging them.
 ( sleep 1 && jarvis-shell ) &
+
+# Idle auto-lock. swayidle speaks ext-idle-notify-v1 to labwc and
+# calls `jarvis-lock-ctl lock` after 5 min of no input. The lock
+# daemon is idempotent (Lock() while locked is a no-op) so it's safe
+# if the user already pressed Super+L manually.
+#
+# V1 hardcodes the timeout; V2 will read it from com.jarvis.Settings
+# and respawn swayidle when the setting changes.
+( swayidle -w timeout 300 'jarvis-lock-ctl lock' ) &
