@@ -4,6 +4,7 @@ pub mod browser;
 pub mod clipboard;
 pub mod file;
 pub mod screenshot;
+pub mod sdk;
 pub mod system;
 pub mod updater;
 pub mod window;

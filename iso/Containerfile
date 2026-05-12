@@ -90,7 +90,8 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-lilith \
         -p jarvis-updater \
         -p jarvis-voice \
-        -p jarvis-voice-ctl
+        -p jarvis-voice-ctl \
+        -p sdk-hello
 
 # Qt shell — separate cmake build out-of-tree.
 RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
@@ -107,7 +108,8 @@ RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-updater       /out/bin/ \
     && cp /build/rust/release/jarvis-voice         /out/bin/ \
     && cp /build/rust/release/jarvis-voice-ctl     /out/bin/ \
-    && cp /build/shell/jarvis-shell              /out/bin/ \
+    && cp /build/rust/release/sdk-hello            /out/bin/ \
+    && cp /build/shell/jarvis-shell                /out/bin/ \
     && strip /out/bin/*
 
 # ──────────────────────────── Stage 2: final  ────────────────────────────
@@ -175,7 +177,19 @@ COPY --from=builder /out/bin/jarvis-lilith        /usr/bin/jarvis-lilith
 COPY --from=builder /out/bin/jarvis-updater       /usr/bin/jarvis-updater
 COPY --from=builder /out/bin/jarvis-voice         /usr/bin/jarvis-voice
 COPY --from=builder /out/bin/jarvis-voice-ctl     /usr/bin/jarvis-voice-ctl
+COPY --from=builder /out/bin/sdk-hello            /usr/bin/sdk-hello
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
+
+# Example SDK app: ship its manifest under /usr/share/jarvis/apps/
+# so the Action Bus picks it up at startup. DBus auto-activation is
+# wired through `/usr/share/dbus-1/services/com.jarvis.app.sdk_hello.service`
+# below so the first call to sdk_hello.echo / sdk_hello.add summons
+# the binary even when it isn't already running.
+COPY examples/sdk-hello/manifest.toml \
+     /usr/share/jarvis/apps/sdk_hello/manifest.toml
+RUN mkdir -p /usr/share/dbus-1/services \
+    && printf '[D-BUS Service]\nName=com.jarvis.app.sdk_hello\nExec=/usr/bin/sdk-hello\n' \
+        > /usr/share/dbus-1/services/com.jarvis.app.sdk_hello.service
 
 # systemd user units for the daemons. `jarvis-session.target` depends on
 # the four core services and binds to `graphical-session.target` so they

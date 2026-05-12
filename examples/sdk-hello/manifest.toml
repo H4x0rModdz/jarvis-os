@@ -1,0 +1,32 @@
+# Jarvis SDK manifest for the canonical example app.
+#
+# Placed at /usr/share/jarvis/apps/sdk_hello/manifest.toml when shipped
+# in the ISO. The Action Bus picks it up at startup and exposes both
+# actions to Lilith / any other bus client.
+
+[app]
+id          = "sdk_hello"
+name        = "Hello SDK"
+version     = "0.1.0"
+description = "Smallest possible Jarvis SDK app — echo + add over DBus."
+exec        = "/usr/bin/sdk-hello"
+
+[[actions]]
+name        = "sdk_hello.echo"
+description = "Repeat the supplied message back. Trivial demo of the SDK contract."
+[actions.schema]
+type     = "object"
+required = ["message"]
+[actions.schema.properties.message]
+type = "string"
+
+[[actions]]
+name        = "sdk_hello.add"
+description = "Add two numbers. Demonstrates how an SDK app handles structured params."
+[actions.schema]
+type     = "object"
+required = ["a", "b"]
+[actions.schema.properties.a]
+type = "number"
+[actions.schema.properties.b]
+type = "number"

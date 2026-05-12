@@ -9,5 +9,7 @@ members = [
     "system/notifications",
     "shell/compositor",
     "ai/lilith",
+    "sdk/jarvis-sdk-types",
     "tools/voice-ctl",
+    "examples/sdk-hello",
 ]

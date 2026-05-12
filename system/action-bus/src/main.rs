@@ -138,5 +138,15 @@ fn build_registry() -> Registry {
     reg!("updater.check", handlers::updater::check);
     reg!("updater.apply_os", handlers::updater::apply_os);
 
+    // SDK apps: pick up every manifest under /usr/share/jarvis/apps/
+    // and ~/.local/share/jarvis/apps/ and register their declared
+    // actions as proxy handlers. Built-in handlers always win on
+    // conflict because they're registered first.
+    let scan_paths = jarvis_sdk_types::default_scan_paths();
+    let added = handlers::sdk::register_all(&mut r, scan_paths);
+    if added > 0 {
+        tracing::info!(actions = added, "Registered SDK app actions");
+    }
+
     r
 }

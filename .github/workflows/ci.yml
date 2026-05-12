@@ -90,6 +90,12 @@ jobs:
       - name: Test (notifications)
         run: cargo test -p jarvis-notifications
 
+      - name: Test (sdk-types)
+        run: cargo test -p jarvis-sdk-types
+
+      - name: Test (sdk-hello example)
+        run: cargo test -p sdk-hello
+
   schema-lint:
     name: Validate JSON Schemas
     runs-on: ubuntu-24.04
