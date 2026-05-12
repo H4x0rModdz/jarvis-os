@@ -1,16 +1,27 @@
-//! Jarvis Voice — V1 surface.
+//! Jarvis Voice — V2 (real STT, push-to-talk).
 //!
-//! Exposes `com.jarvis.Voice` over the session bus and runs the state
-//! machine the shell renders against. STT and TTS implementations land
-//! in V2 and V3 respectively; this build returns `Unavailable` for both
-//! so callers see the right error envelope instead of silent no-ops.
+//! StartListening opens the default microphone (cpal, hosted in a
+//! capture actor thread so the `!Send` stream doesn't infect the DBus
+//! service). StopListening stops the stream, writes the captured
+//! samples to a temporary WAV, runs whisper.cpp's `whisper-cli` against
+//! it, and emits `TranscriptionFinal` with the recognised text. TTS
+//! still returns Unavailable — that's V3.
 //!
 //! See ADR 0009 for the scope split and `module.md` for the contract.
 
+mod capture;
+mod stt;
+
+use capture::CaptureHandle;
 use serde_json::json;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
 use zbus::{connection, interface, SignalContext};
+
+/// 16 kHz mono — matches the resampler target in `capture.rs` and what
+/// whisper-cli expects.
+const WAV_SAMPLE_RATE: u32 = 16_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
@@ -33,6 +44,7 @@ impl State {
 
 struct VoiceService {
     state: Arc<AsyncMutex<State>>,
+    capture: CaptureHandle,
 }
 
 #[interface(name = "com.jarvis.Voice")]
@@ -48,6 +60,16 @@ impl VoiceService {
             })
             .to_string();
         }
+
+        if let Err(e) = self.capture.start().await {
+            tracing::warn!(error = %e, "CaptureHandle::start failed");
+            return json!({
+                "started": false,
+                "reason": format!("audio capture failed: {e}")
+            })
+            .to_string();
+        }
+
         *state = State::Listening;
         let new_state = *state;
         drop(state);
@@ -56,12 +78,8 @@ impl VoiceService {
             tracing::warn!("StateChanged emit failed: {e}");
         }
 
-        // V1 stops short of real capture — V2 hooks cpal here. The
-        // state still moves so the shell renders the listening UI;
-        // a real StopListening call will route through processing
-        // and then emit TranscriptionFailed("not implemented").
-        tracing::info!("StartListening (surface-only)");
-        json!({ "started": true, "phase": "v1-surface-only" }).to_string()
+        tracing::info!("StartListening");
+        json!({ "started": true }).to_string()
     }
 
     /// Stop the in-flight recording and run STT.
@@ -82,20 +100,37 @@ impl VoiceService {
             tracing::warn!("StateChanged emit failed: {e}");
         }
 
-        // V1: there's no captured audio to process. Emit a failure so
-        // the shell can surface "STT not yet implemented" instead of
-        // hanging.
+        let capture = self.capture.clone();
         let ctx_owned = ctx.to_owned();
         let state_handle = self.state.clone();
+
         tokio::spawn(async move {
-            if let Err(e) =
-                Self::transcription_failed(&ctx_owned, "STT not yet implemented (V2)").await
-            {
-                tracing::warn!("TranscriptionFailed emit failed: {e}");
+            let outcome = run_stt(capture).await;
+            match outcome {
+                Ok(text) if !text.is_empty() => {
+                    if let Err(e) = VoiceService::transcription_final(&ctx_owned, &text).await {
+                        tracing::warn!("TranscriptionFinal emit failed: {e}");
+                    }
+                }
+                Ok(_) => {
+                    if let Err(e) =
+                        VoiceService::transcription_failed(&ctx_owned, "no speech detected").await
+                    {
+                        tracing::warn!("TranscriptionFailed emit failed: {e}");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "STT failed");
+                    if let Err(e2) =
+                        VoiceService::transcription_failed(&ctx_owned, &e.to_string()).await
+                    {
+                        tracing::warn!("TranscriptionFailed emit failed: {e2}");
+                    }
+                }
             }
             let mut s = state_handle.lock().await;
             *s = State::Idle;
-            if let Err(e) = Self::state_changed(&ctx_owned, s.as_str()).await {
+            if let Err(e) = VoiceService::state_changed(&ctx_owned, s.as_str()).await {
                 tracing::warn!("StateChanged emit failed: {e}");
             }
         });
@@ -105,6 +140,7 @@ impl VoiceService {
 
     /// Abort whatever is in flight.
     async fn cancel(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
+        self.capture.cancel().await;
         let mut state = self.state.lock().await;
         let was = *state;
         *state = State::Idle;
@@ -119,10 +155,8 @@ impl VoiceService {
 
     /// Speak `text` through the default audio sink.
     ///
-    /// V3 wires piper here. V1 still cycles through the `speaking` state
-    /// (briefly) and emits the matching signals — that lets the shell
-    /// exercise its idle/speaking visual paths today, so V3 ships behind
-    /// a known-good surface instead of changing the bridge contract.
+    /// V3 wires piper here. V1/V2 cycle through the `speaking` state
+    /// briefly so the shell exercises its visual paths today.
     async fn speak(&self, _text: &str, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
         let mut state = self.state.lock().await;
         if *state != State::Idle {
@@ -138,9 +172,6 @@ impl VoiceService {
             tracing::warn!("StateChanged emit failed: {e}");
         }
 
-        // Schedule the return-to-idle so the shell's "speaking" UI flashes
-        // briefly instead of never appearing. V3 replaces this with the
-        // piper subprocess + paplay.
         let ctx_owned = ctx.to_owned();
         let state_handle = self.state.clone();
         tokio::spawn(async move {
@@ -159,8 +190,6 @@ impl VoiceService {
         .to_string()
     }
 
-    /// Snapshot the current state. Mostly for debugging — subscribers
-    /// should bind to the `StateChanged` signal instead of polling.
     async fn get_state(&self) -> String {
         let state = self.state.lock().await;
         json!({ "state": state.as_str() }).to_string()
@@ -176,6 +205,51 @@ impl VoiceService {
     async fn transcription_failed(ctx: &SignalContext<'_>, reason: &str) -> zbus::Result<()>;
 }
 
+/// Bottom half of the STT pipeline: finish the capture, write the WAV,
+/// invoke whisper.
+async fn run_stt(capture: CaptureHandle) -> anyhow::Result<String> {
+    let samples = capture.stop().await?;
+    if samples.is_empty() {
+        return Ok(String::new());
+    }
+
+    let wav_path = wav_temp_path();
+    let wav_path_owned = wav_path.clone();
+    let samples_for_write = samples;
+    tokio::task::spawn_blocking(move || write_wav(&wav_path_owned, &samples_for_write)).await??;
+
+    let text = stt::transcribe(&wav_path).await?;
+
+    // Best-effort cleanup.
+    let _ = tokio::fs::remove_file(&wav_path).await;
+
+    Ok(text)
+}
+
+fn wav_temp_path() -> PathBuf {
+    let pid = std::process::id();
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    std::env::temp_dir().join(format!("jarvis-voice-{pid}-{ts}.wav"))
+}
+
+fn write_wav(path: &std::path::Path, samples: &[i16]) -> anyhow::Result<()> {
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: WAV_SAMPLE_RATE,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut writer = hound::WavWriter::create(path, spec)?;
+    for s in samples {
+        writer.write_sample(*s)?;
+    }
+    writer.finalize()?;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -185,10 +259,11 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    tracing::info!("Starting Jarvis Voice (V1 surface)");
+    tracing::info!("Starting Jarvis Voice (V2: STT via whisper.cpp)");
 
     let service = VoiceService {
         state: Arc::new(AsyncMutex::new(State::Idle)),
+        capture: capture::spawn(),
     };
 
     let _conn = connection::Builder::session()?
@@ -216,8 +291,11 @@ mod tests {
         assert_eq!(State::Speaking.as_str(), "speaking");
     }
 
-    // The DBus-method state-machine tests would need a full bus + signal
-    // harness; those land alongside V2 when the methods do something
-    // observable beyond emitting signals. For now state_str_round_trips
-    // is a sanity guard against rename drift.
+    #[test]
+    fn wav_temp_path_unique_per_call() {
+        let a = wav_temp_path();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let b = wav_temp_path();
+        assert_ne!(a, b);
+    }
 }

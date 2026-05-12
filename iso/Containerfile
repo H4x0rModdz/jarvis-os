@@ -25,8 +25,27 @@ RUN dnf -y install \
         sqlite-devel \
         dbus-devel pkgconfig \
         wayland-devel libxkbcommon-devel \
-        git \
+        alsa-lib-devel \
+        git curl \
     && dnf clean all
+
+# whisper.cpp — built from source in the builder stage so we only ship the
+# stripped binary + the ggml model file in the final image. We pin a
+# specific tag so a surprise upstream API change doesn't break our build
+# silently.
+ARG WHISPER_VERSION=v1.7.4
+RUN git clone --depth 1 --branch ${WHISPER_VERSION} \
+        https://github.com/ggml-org/whisper.cpp.git /src/whisper.cpp \
+    && cmake -S /src/whisper.cpp -B /build/whisper -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_EXAMPLES=ON \
+    && cmake --build /build/whisper -j --target whisper-cli \
+    && mkdir -p /out/whisper /out/whisper-models \
+    && cp /build/whisper/bin/whisper-cli /out/whisper/whisper-cli \
+    # ~142 MB multilingual model — base.bin balances Portuguese + English
+    # quality against ISO size. Heavier models (small/medium) will be
+    # pulled by the Phase 2 updater once that lands.
+    && bash /src/whisper.cpp/models/download-ggml-model.sh base \
+    && cp /src/whisper.cpp/models/ggml-base.bin /out/whisper-models/ggml-base.bin
 
 WORKDIR /src
 COPY . .
@@ -83,7 +102,15 @@ RUN dnf -y install \
         mesa-dri-drivers \
         wl-clipboard grim slurp \
         pulseaudio-utils \
+        alsa-lib \
     && dnf clean all
+
+# whisper.cpp binary + the multilingual base model shipped in the
+# builder stage. The model lives under /usr/share so it's part of the
+# immutable layer; the daemon's `stt::DEFAULT_MODEL` constant points
+# here. Replacement / upgrade flows are an updater Phase 2 concern.
+COPY --from=builder /out/whisper/whisper-cli           /usr/bin/whisper-cli
+COPY --from=builder /out/whisper-models/ggml-base.bin  /usr/share/whisper-models/ggml-base.bin
 
 # Ollama. The upstream installer creates a system user with home
 # `/usr/share/ollama`, which is read-only under bootc — the daemon then

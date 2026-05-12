@@ -216,6 +216,30 @@ Window {
         }
     }
 
+    // When the voice daemon delivers a transcript, hand it to Lilith as
+    // if the user had typed it. Same audit path, same permission gating,
+    // same reply popup — voice is just another input modality.
+    Connections {
+        target: VoiceBridge
+        function onLastTranscriptChanged() {
+            const t = VoiceBridge.lastTranscript;
+            if (t.length > 0 && !LilithBridge.busy) {
+                LilithBridge.send(t);
+            }
+        }
+        function onLastErrorChanged() {
+            const e = VoiceBridge.lastError;
+            if (e.length > 0) {
+                // Reuse the same reply popup the LilithBridge errors flow into.
+                reply.errorText = qsTr("Voz: ") + e;
+                reply.resolvedText = "";
+                reply.resolvedAction = "";
+                reply.replyState = "error";
+                hideTimer.restart();
+            }
+        }
+    }
+
     // The approval dialog is a sibling Window — opens on top of the desktop
     // when PermissionBridge has a pending request, closes on user decision.
     ApprovalDialog {}

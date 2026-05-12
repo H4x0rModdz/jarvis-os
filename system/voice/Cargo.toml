@@ -15,5 +15,12 @@ serde_json         = "1"
 thiserror          = "1"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs"] }
 zbus               = { version = "4", features = ["tokio"] }
+
+# V2 — STT via whisper.cpp subprocess.
+# cpal handles the microphone capture (ALSA backend on Linux). hound
+# writes the captured samples to a temporary WAV file in the shape
+# whisper-cli expects: 16-bit signed PCM, 16 kHz, mono.
+cpal               = "0.15"
+hound              = "3"
