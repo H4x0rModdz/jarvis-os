@@ -92,7 +92,8 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-voice \
         -p jarvis-voice-ctl \
         -p jarvis-app \
-        -p sdk-hello
+        -p sdk-hello \
+        -p jarvis-compat
 
 # Qt shell — separate cmake build out-of-tree.
 RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
@@ -118,6 +119,7 @@ RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-voice-ctl     /out/bin/ \
     && cp /build/rust/release/jarvis-app           /out/bin/ \
     && cp /build/rust/release/sdk-hello            /out/bin/ \
+    && cp /build/rust/release/jarvis-compat        /out/bin/ \
     && cp /build/shell/jarvis-shell                /out/bin/ \
     && cp /build/greeter/jarvis-greeter            /out/bin/ \
     && strip /out/bin/*
@@ -147,6 +149,7 @@ RUN dnf -y install \
         wl-clipboard grim slurp \
         pulseaudio-utils \
         alsa-lib \
+        wine \
     && dnf clean all
 
 # `greeter` system user — owns nothing on disk, has no shell login,
@@ -194,6 +197,7 @@ COPY --from=builder /out/bin/jarvis-voice         /usr/bin/jarvis-voice
 COPY --from=builder /out/bin/jarvis-voice-ctl     /usr/bin/jarvis-voice-ctl
 COPY --from=builder /out/bin/jarvis-app           /usr/bin/jarvis-app
 COPY --from=builder /out/bin/sdk-hello            /usr/bin/sdk-hello
+COPY --from=builder /out/bin/jarvis-compat        /usr/bin/jarvis-compat
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
 COPY --from=builder /out/bin/jarvis-greeter       /usr/bin/jarvis-greeter
 
@@ -219,6 +223,7 @@ COPY iso/assets/systemd/jarvis-action-bus.service    /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-lilith.service        /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-updater.service       /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-voice.service         /etc/systemd/user/
+COPY iso/assets/systemd/jarvis-compat.service        /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-session.target        /etc/systemd/user/
 RUN systemctl --global enable jarvis-session.target
 

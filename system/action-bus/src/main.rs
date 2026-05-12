@@ -138,6 +138,8 @@ fn build_registry() -> Registry {
     reg!("updater.check", handlers::updater::check);
     reg!("updater.apply_os", handlers::updater::apply_os);
 
+    reg!("compat.run_exe", handlers::compat::run_exe);
+
     // SDK apps: pick up every manifest under /usr/share/jarvis/apps/
     // and ~/.local/share/jarvis/apps/ and register their declared
     // actions as proxy handlers. Built-in handlers always win on

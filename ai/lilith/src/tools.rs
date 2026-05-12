@@ -306,6 +306,24 @@ pub fn all_tools() -> Vec<Tool> {
                 }
             }),
         },
+        // ── compat (Windows app runner) ─────────────────────────────────
+        Tool {
+            action: "compat.run_exe",
+            description: "Run a Windows .exe under Wine. The user must confirm — this action \
+                          executes arbitrary Windows code with access to the user's Wine prefix.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Absolute path to the .exe file" },
+                    "args": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional argv tail passed verbatim"
+                    }
+                },
+                "required": ["path"]
+            }),
+        },
         // ── updater ─────────────────────────────────────────────────────
         Tool {
             action: "updater.check",

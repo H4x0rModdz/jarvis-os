@@ -99,6 +99,9 @@ jobs:
       - name: Test (jarvis-app CLI)
         run: cargo test -p jarvis-app
 
+      - name: Test (compat)
+        run: cargo test -p jarvis-compat
+
   schema-lint:
     name: Validate JSON Schemas
     runs-on: ubuntu-24.04

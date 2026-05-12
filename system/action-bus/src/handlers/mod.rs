@@ -2,6 +2,7 @@ pub mod app;
 pub mod audio;
 pub mod browser;
 pub mod clipboard;
+pub mod compat;
 pub mod file;
 pub mod screenshot;
 pub mod sdk;

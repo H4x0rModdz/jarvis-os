@@ -7,6 +7,7 @@ members = [
     "system/settings",
     "system/voice",
     "system/notifications",
+    "system/compat",
     "shell/compositor",
     "ai/lilith",
     "sdk/jarvis-sdk-types",

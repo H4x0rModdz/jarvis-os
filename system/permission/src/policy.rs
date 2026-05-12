@@ -68,6 +68,10 @@ const DANGEROUS_SCOPES: &[&str] = &[
     // Applying an OS upgrade is destructive in the same way deleting
     // files is — non-revertible without effort, requires reboot.
     "updater.apply",
+    // Running an arbitrary Windows binary under Wine — the program
+    // can write the user's wine prefix, talk to the network, install
+    // services. Same trust class as `terminal.execute`.
+    "compat.run",
 ];
 
 #[cfg(test)]
@@ -97,6 +101,7 @@ mod tests {
         assert_eq!(classify("clipboard.read"), PolicyVerdict::RequireGrant);
         assert_eq!(classify("screen.read"), PolicyVerdict::RequireGrant);
         assert_eq!(classify("updater.apply"), PolicyVerdict::RequireGrant);
+        assert_eq!(classify("compat.run"), PolicyVerdict::RequireGrant);
     }
 
     #[test]

@@ -60,6 +60,7 @@ no-op.
 | `screenshot.*` | `capture`                                            | ✅ working (grim/scrot, region mode via slurp) |
 | `audio.*`      | `set_volume`, `adjust_volume`, `toggle_mute`         | ✅ working (pactl → PipeWire/PulseAudio) |
 | `updater.*`    | `check`, `apply_os`                                  | ✅ working (DBus client of `com.jarvis.Updater`) |
+| `compat.*`     | `run_exe`                                            | ✅ working (DBus client of `com.jarvis.Compat`, runs Wine) |
 | `voice.*`      | —                                                    | ⏸ direct daemon DBus today; bus actions land alongside hotword work |
 
 ## Permission Flow
