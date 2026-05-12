@@ -12,7 +12,18 @@ Item {
     id: root
     implicitHeight: 40
 
-    property string placeholder: qsTr("Diga algo para a Lilith...")
+    // Placeholder reflects what Lilith is doing right now. The user always
+    // knows whether they can type and, if not, why not — instead of staring
+    // at a disabled-looking input with no explanation.
+    property string placeholder: {
+        if (LilithBridge.busy && PermissionBridge.hasPending) {
+            return qsTr("Aguardando sua aprovação...");
+        }
+        if (LilithBridge.busy) {
+            return qsTr("Lilith pensando...");
+        }
+        return qsTr("Diga algo para a Lilith...");
+    }
     signal accepted(string text)
 
     function focusInput() {
