@@ -1,0 +1,22 @@
+[package]
+name = "jarvis-settings"
+version = "0.1.0"
+edition = "2021"
+description = "Settings daemon — single source of truth for OS runtime preferences"
+
+[[bin]]
+name = "jarvis-settings"
+path = "src/main.rs"
+
+[dependencies]
+anyhow             = "1"
+serde              = { version = "1", features = ["derive"] }
+serde_json         = "1"
+thiserror          = "1"
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+zbus               = { version = "4", features = ["tokio"] }
+rusqlite           = { version = "0.32", features = ["bundled"] }
+dirs               = "5"
+chrono             = { version = "0.4", features = ["serde"] }

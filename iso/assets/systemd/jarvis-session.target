@@ -1,11 +1,11 @@
 [Unit]
 Description=Jarvis OS user session
 Documentation=https://github.com/H4x0rModdz/jarvis-os
-Requires=jarvis-permission.service jarvis-action-bus.service jarvis-lilith.service
+Requires=jarvis-permission.service jarvis-settings.service jarvis-action-bus.service jarvis-lilith.service
 # Updater is advisory — if it fails to come up the rest of the session still
 # works (the shell just shows Lilith offline). `Wants=` instead of `Requires=`.
 Wants=jarvis-updater.service
-After=jarvis-permission.service jarvis-action-bus.service jarvis-lilith.service
+After=jarvis-permission.service jarvis-settings.service jarvis-action-bus.service jarvis-lilith.service
 BindsTo=graphical-session.target
 
 [Install]

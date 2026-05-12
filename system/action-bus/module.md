@@ -54,7 +54,7 @@ no-op.
 | `window.*`     | `focus`, `minimize`, `maximize`, `close`, `move`, `resize`, `snap_left`, `snap_right` | ⏸ stub — the Jarvis compositor (Phase 3) will register real handlers |
 | `workspace.*`  | `switch`, `move_window`, `create`                    | ⏸ stub — same as above |
 | `system.*`     | `notify`                                             | ✅ working (notify-send) |
-| `system.*`     | `set_setting`, `get_setting`                         | ⏸ stub — settings daemon not built |
+| `system.*`     | `set_setting`, `get_setting`                         | ✅ working (DBus client of `com.jarvis.Settings`) |
 | `browser.*`    | `open`                                               | ✅ working (xdg-open, http/https/mailto only) |
 | `clipboard.*`  | `set`, `get`                                         | ✅ working (wl-clipboard with xclip fallback) |
 | `screenshot.*` | `capture`                                            | ✅ working (grim/scrot, region mode via slurp) |
@@ -95,7 +95,5 @@ the system doesn't brick itself when the daemon hiccups. See
   per-handler override).
 - `app.install` / `app.uninstall` are stubbed pending the compatibility
   layer (Wine/Proton + Flatpak bridge).
-- `system.set_setting` / `system.get_setting` are stubbed pending the
-  settings daemon.
 - Async dispatch (fire-and-forget with `ActionCompleted` signal) is
   designed in the schema but not implemented.

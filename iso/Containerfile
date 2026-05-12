@@ -38,6 +38,7 @@ COPY . .
 RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-action-bus \
         -p jarvis-permission \
+        -p jarvis-settings \
         -p jarvis-lilith \
         -p jarvis-updater
 
@@ -50,6 +51,7 @@ RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
 RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-action-bus  /out/bin/ \
     && cp /build/rust/release/jarvis-permission  /out/bin/ \
+    && cp /build/rust/release/jarvis-settings    /out/bin/ \
     && cp /build/rust/release/jarvis-lilith      /out/bin/ \
     && cp /build/rust/release/jarvis-updater     /out/bin/ \
     && cp /build/shell/jarvis-shell              /out/bin/ \
@@ -97,6 +99,7 @@ RUN curl -fsSL https://ollama.com/install.sh | sh \
 # Compiled binaries from the builder stage.
 COPY --from=builder /out/bin/jarvis-action-bus  /usr/bin/jarvis-action-bus
 COPY --from=builder /out/bin/jarvis-permission  /usr/bin/jarvis-permission
+COPY --from=builder /out/bin/jarvis-settings    /usr/bin/jarvis-settings
 COPY --from=builder /out/bin/jarvis-lilith      /usr/bin/jarvis-lilith
 COPY --from=builder /out/bin/jarvis-updater     /usr/bin/jarvis-updater
 COPY --from=builder /out/bin/jarvis-shell       /usr/bin/jarvis-shell
@@ -106,6 +109,7 @@ COPY --from=builder /out/bin/jarvis-shell       /usr/bin/jarvis-shell
 # spin up when labwc starts. The updater is `Wants=` (advisory) — the rest
 # of the session works even if it fails to come up.
 COPY iso/assets/systemd/jarvis-permission.service /etc/systemd/user/
+COPY iso/assets/systemd/jarvis-settings.service   /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-action-bus.service /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-lilith.service     /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-updater.service    /etc/systemd/user/

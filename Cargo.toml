@@ -4,6 +4,7 @@ members = [
     "system/action-bus",
     "system/permission",
     "system/updater",
+    "system/settings",
     "shell/compositor",
     "ai/lilith",
 ]
