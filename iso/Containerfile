@@ -99,6 +99,13 @@ RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /build/shell -j
 
+# Greeter — separate cmake build. Same Qt6 stack as the shell, but
+# self-contained so it can run under cage as the unprivileged
+# `greeter` user before the main session starts.
+RUN cmake -S shell/jarvis-greeter -B /build/greeter -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /build/greeter -j
+
 # Collect everything that ends up on the final image.
 RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-action-bus    /out/bin/ \
@@ -112,6 +119,7 @@ RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-app           /out/bin/ \
     && cp /build/rust/release/sdk-hello            /out/bin/ \
     && cp /build/shell/jarvis-shell                /out/bin/ \
+    && cp /build/greeter/jarvis-greeter            /out/bin/ \
     && strip /out/bin/*
 
 # ──────────────────────────── Stage 2: final  ────────────────────────────
@@ -128,7 +136,7 @@ LABEL org.opencontainers.image.source="https://github.com/H4x0rModdz/jarvis-os"
 # the shell, the usual user-facing helpers, and Ollama (no model baked in
 # — the post-first-boot updater pulls the LLM weights).
 RUN dnf -y install \
-        labwc foot \
+        labwc foot cage \
         greetd \
         xorg-x11-server-Xwayland \
         qt6-qtbase qt6-qtdeclarative qt6-qtwayland qt6-qtquickcontrols2 \
@@ -140,6 +148,11 @@ RUN dnf -y install \
         pulseaudio-utils \
         alsa-lib \
     && dnf clean all
+
+# `greeter` system user — owns nothing on disk, has no shell login,
+# only exists for greetd to spawn jarvis-greeter under.
+RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \
+            --create-home greeter
 
 # whisper.cpp binary + the multilingual base model shipped in the
 # builder stage. The model lives under /usr/share so it's part of the
@@ -182,6 +195,7 @@ COPY --from=builder /out/bin/jarvis-voice-ctl     /usr/bin/jarvis-voice-ctl
 COPY --from=builder /out/bin/jarvis-app           /usr/bin/jarvis-app
 COPY --from=builder /out/bin/sdk-hello            /usr/bin/sdk-hello
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
+COPY --from=builder /out/bin/jarvis-greeter       /usr/bin/jarvis-greeter
 
 # Example SDK app: ship its manifest under /usr/share/jarvis/apps/
 # so the Action Bus picks it up at startup. DBus auto-activation is

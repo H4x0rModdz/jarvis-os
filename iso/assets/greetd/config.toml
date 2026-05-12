@@ -1,7 +1,7 @@
-# greetd configuration: autologin the dev `jarvis` user and exec labwc
-# directly. No graphical greeter — keeps the ISO slim and the first-boot
-# experience predictable. Production builds will swap in a Qt greeter
-# matching the Jarvis design language.
+# greetd configuration: spawn the Jarvis greeter as the `greeter`
+# user on VT1. The greeter handles auth (via greetd's PAM-backed
+# socket protocol) and, on success, asks greetd to exec labwc as the
+# authenticated user. Replaces the Phase 1 autologin path.
 #
 # https://man.sr.ht/~kennylevinsen/greetd/
 
@@ -9,5 +9,8 @@
 vt = 1
 
 [default_session]
-command = "labwc"
-user = "jarvis"
+# Wrap the greeter in a minimal Wayland compositor (cage) so QtWayland
+# has a wl_display to attach to. cage runs as the `greeter` user and
+# execs the single child it's given.
+command = "cage -s -- jarvis-greeter"
+user    = "greeter"
