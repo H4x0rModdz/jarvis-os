@@ -122,6 +122,107 @@ static RULES: Lazy<Vec<Rule>> = Lazy::new(|| {
                 params: json!({}),
             },
         },
+        // ── browser ────────────────────────────────────────────────────
+        // "open https://…" / "abrir https://…"
+        Rule {
+            pattern: Regex::new(
+                r"^(?:open|abr(?:ir|a))\s+(?P<url>https?://\S+|mailto:\S+)$",
+            )
+            .unwrap(),
+            build: |c| ToolCall {
+                action: "browser.open".into(),
+                params: json!({ "url": &c["url"] }),
+            },
+        },
+        // ── clipboard ──────────────────────────────────────────────────
+        // "copy: <text>" / "copia: <text>" / "copiar: <text>"
+        Rule {
+            pattern: Regex::new(r"^(?:copy|copi(?:ar|a|e))[:\s]+(?P<text>.+)$").unwrap(),
+            build: |c| ToolCall {
+                action: "clipboard.set".into(),
+                params: json!({ "text": c["text"].trim() }),
+            },
+        },
+        // "paste" / "cola" / "colar" — bare verb, no argument
+        Rule {
+            pattern: Regex::new(r"^(?:paste|col(?:ar|a|e))$").unwrap(),
+            build: |_| ToolCall {
+                action: "clipboard.get".into(),
+                params: json!({}),
+            },
+        },
+        // ── screenshot ─────────────────────────────────────────────────
+        // "screenshot" / "print" / "captura tela" / "tira print"
+        Rule {
+            pattern: Regex::new(
+                r"^(?:screenshot|print(?:\s+screen)?|captura(?:r)?\s+(?:a\s+)?tela|tir(?:ar|a|e)\s+print)$",
+            )
+            .unwrap(),
+            build: |_| ToolCall {
+                action: "screenshot.capture".into(),
+                params: json!({ "mode": "full" }),
+            },
+        },
+        // "screenshot region" / "captura região" / "print área"
+        Rule {
+            pattern: Regex::new(
+                r"^(?:screenshot|print|captura(?:r)?)\s+(?:region|área|area|região)$",
+            )
+            .unwrap(),
+            build: |_| ToolCall {
+                action: "screenshot.capture".into(),
+                params: json!({ "mode": "region" }),
+            },
+        },
+        // ── audio ──────────────────────────────────────────────────────
+        // "volume 50" / "set volume 50" / "som 50"
+        Rule {
+            pattern: Regex::new(
+                r"^(?:(?:set\s+)?volume|som)\s+(?P<pct>\d{1,3})$",
+            )
+            .unwrap(),
+            build: |c| ToolCall {
+                action: "audio.set_volume".into(),
+                params: json!({ "percent": parse_id(&c["pct"]) }),
+            },
+        },
+        // "louder" / "volume up" / "aumentar volume" / "subir som"
+        Rule {
+            pattern: Regex::new(
+                r"^(?:louder|volume\s+up|aument(?:ar|a|e)\s+(?:o\s+)?(?:volume|som)|sub(?:ir|a|e)\s+(?:o\s+)?(?:volume|som))$",
+            )
+            .unwrap(),
+            build: |_| ToolCall {
+                action: "audio.adjust_volume".into(),
+                params: json!({ "delta": 10 }),
+            },
+        },
+        // "quieter" / "volume down" / "diminuir volume" / "abaixar som"
+        Rule {
+            pattern: Regex::new(
+                r"^(?:quieter|volume\s+down|diminu(?:ir|a|e)\s+(?:o\s+)?(?:volume|som)|abaix(?:ar|a|e)\s+(?:o\s+)?(?:volume|som))$",
+            )
+            .unwrap(),
+            build: |_| ToolCall {
+                action: "audio.adjust_volume".into(),
+                params: json!({ "delta": -10 }),
+            },
+        },
+        // "mute" / "unmute" / "mutar" / "tira som"
+        Rule {
+            pattern: Regex::new(r"^(?:mute|mut(?:ar|a|e)|tir(?:ar|a|e)\s+(?:o\s+)?som)$").unwrap(),
+            build: |_| ToolCall {
+                action: "audio.toggle_mute".into(),
+                params: json!({}),
+            },
+        },
+        Rule {
+            pattern: Regex::new(r"^(?:unmute|desmut(?:ar|a|e))$").unwrap(),
+            build: |_| ToolCall {
+                action: "audio.toggle_mute".into(),
+                params: json!({ "set_state": false }),
+            },
+        },
         // ── memory ─────────────────────────────────────────────────────
         // "remember <key> = <value>"  or  "lembrar <key> = <value>"
         Rule {
@@ -255,5 +356,107 @@ mod tests {
         let call = parse("esquecer idioma").unwrap();
         assert_eq!(call.action, "memory.forget");
         assert_eq!(call.params["key"], "idioma");
+    }
+
+    #[test]
+    fn parses_browser_open_https() {
+        let call = parse("open https://example.com/foo?q=1").unwrap();
+        assert_eq!(call.action, "browser.open");
+        assert_eq!(call.params["url"], "https://example.com/foo?q=1");
+
+        let call = parse("abrir https://github.com").unwrap();
+        assert_eq!(call.action, "browser.open");
+    }
+
+    #[test]
+    fn parses_browser_open_only_with_scheme() {
+        // Bare hostnames must not match browser.open — they collide with
+        // `app.open` ("abrir firefox"). The scheme is what tells us the user
+        // wants a URL, not an app.
+        let call = parse("open firefox").unwrap();
+        assert_eq!(call.action, "app.open");
+        assert_eq!(call.params["app"], "firefox");
+    }
+
+    #[test]
+    fn parses_clipboard_set_english_and_pt() {
+        let call = parse("copy: hello world").unwrap();
+        assert_eq!(call.action, "clipboard.set");
+        assert_eq!(call.params["text"], "hello world");
+
+        let call = parse("copia: minha senha").unwrap();
+        assert_eq!(call.action, "clipboard.set");
+        assert_eq!(call.params["text"], "minha senha");
+    }
+
+    #[test]
+    fn parses_clipboard_get_bare() {
+        let call = parse("paste").unwrap();
+        assert_eq!(call.action, "clipboard.get");
+
+        let call = parse("cola").unwrap();
+        assert_eq!(call.action, "clipboard.get");
+    }
+
+    #[test]
+    fn parses_screenshot_full() {
+        let call = parse("screenshot").unwrap();
+        assert_eq!(call.action, "screenshot.capture");
+        assert_eq!(call.params["mode"], "full");
+
+        let call = parse("tirar print").unwrap();
+        assert_eq!(call.action, "screenshot.capture");
+        assert_eq!(call.params["mode"], "full");
+    }
+
+    #[test]
+    fn parses_screenshot_region() {
+        let call = parse("screenshot region").unwrap();
+        assert_eq!(call.action, "screenshot.capture");
+        assert_eq!(call.params["mode"], "region");
+
+        let call = parse("captura região").unwrap();
+        assert_eq!(call.action, "screenshot.capture");
+        assert_eq!(call.params["mode"], "region");
+    }
+
+    #[test]
+    fn parses_audio_set_volume() {
+        let call = parse("volume 50").unwrap();
+        assert_eq!(call.action, "audio.set_volume");
+        assert_eq!(call.params["percent"], 50);
+
+        let call = parse("som 75").unwrap();
+        assert_eq!(call.action, "audio.set_volume");
+        assert_eq!(call.params["percent"], 75);
+    }
+
+    #[test]
+    fn parses_audio_adjust_up_and_down() {
+        let up = parse("aumentar volume").unwrap();
+        assert_eq!(up.action, "audio.adjust_volume");
+        assert_eq!(up.params["delta"], 10);
+
+        let down = parse("diminuir som").unwrap();
+        assert_eq!(down.action, "audio.adjust_volume");
+        assert_eq!(down.params["delta"], -10);
+
+        let louder = parse("louder").unwrap();
+        assert_eq!(louder.params["delta"], 10);
+    }
+
+    #[test]
+    fn parses_audio_mute_toggle_and_unmute() {
+        let mute = parse("mute").unwrap();
+        assert_eq!(mute.action, "audio.toggle_mute");
+        // toggle path — no set_state in params
+        assert!(mute.params.get("set_state").is_none());
+
+        let unmute = parse("unmute").unwrap();
+        assert_eq!(unmute.action, "audio.toggle_mute");
+        assert_eq!(unmute.params["set_state"], false);
+
+        let mutar = parse("tirar som").unwrap();
+        assert_eq!(mutar.action, "audio.toggle_mute");
     }
 }

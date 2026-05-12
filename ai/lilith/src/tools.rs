@@ -228,6 +228,83 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["key"]
             }),
         },
+        // ── browser ─────────────────────────────────────────────────────
+        Tool {
+            action: "browser.open",
+            description: "Open a URL in the default browser. Only http://, https://, mailto:.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "Full URL including scheme" }
+                },
+                "required": ["url"]
+            }),
+        },
+        // ── clipboard ───────────────────────────────────────────────────
+        Tool {
+            action: "clipboard.set",
+            description: "Copy text to the system clipboard so the user can paste it.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" },
+                    "mime": { "type": "string", "description": "Optional, defaults to text/plain" }
+                },
+                "required": ["text"]
+            }),
+        },
+        Tool {
+            action: "clipboard.get",
+            description: "Read the current contents of the clipboard. Requires permission.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        // ── screenshot ──────────────────────────────────────────────────
+        Tool {
+            action: "screenshot.capture",
+            description: "Capture a screenshot. Saved to ~/Pictures/Screenshots by default. \
+                          Requires permission.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "mode": { "type": "string", "enum": ["full", "region"], "description": "Default 'full'. 'region' lets the user drag-select." },
+                    "path": { "type": "string", "description": "Absolute path to save to. Optional." }
+                }
+            }),
+        },
+        // ── audio ───────────────────────────────────────────────────────
+        Tool {
+            action: "audio.set_volume",
+            description: "Set the system output volume to an absolute percentage [0, 150].",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "percent": { "type": "integer", "minimum": 0, "maximum": 150 }
+                },
+                "required": ["percent"]
+            }),
+        },
+        Tool {
+            action: "audio.adjust_volume",
+            description: "Adjust the system output volume by a signed delta percent (e.g. +5, -10).",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "delta": { "type": "integer", "description": "Signed percent. Positive raises, negative lowers." }
+                },
+                "required": ["delta"]
+            }),
+        },
+        Tool {
+            action: "audio.toggle_mute",
+            description: "Mute or unmute the default audio sink. Pass set_state to force a value, \
+                          omit it to toggle.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "set_state": { "type": "boolean", "description": "true mutes, false unmutes, omit to toggle" }
+                }
+            }),
+        },
         // ── memory (Lilith-internal — bypasses Action Bus) ─────────────
         Tool {
             action: "memory.remember",
