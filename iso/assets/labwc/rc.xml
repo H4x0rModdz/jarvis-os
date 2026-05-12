@@ -15,13 +15,21 @@
   </core>
 
   <keyboard>
-    <!-- Toggle the Jarvis launcher with Super.
-         Phase 2 plumbing: we'll fire a DBus call into the shell here once
-         a com.jarvis.Shell.ToggleLauncher() method exists. For now, the
-         hamburger button in the bar is the entry point. -->
+    <!-- Super (W) alone toggles voice input — the canonical "press to
+         talk to the AI" gesture. Tapping it once starts listening,
+         tapping again stops and routes the transcript into Lilith.
+         The mic button on the bar is the same action exposed for the
+         mouse path.
+
+         Super+Return opens a terminal, as on Windows / many Linux
+         WMs. A future com.jarvis.Shell.ToggleLauncher() will get
+         its own binding.
+
+         Alt+F4 closes the focused window — the labwc default. -->
 
     <keybind key="A-F4"><action name="Close"/></keybind>
     <keybind key="W-Return"><action name="Execute"><command>foot</command></action></keybind>
+    <keybind key="W"><action name="Execute"><command>jarvis-voice-ctl toggle</command></action></keybind>
   </keyboard>
 
   <mouse>

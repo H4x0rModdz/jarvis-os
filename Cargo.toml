@@ -8,4 +8,5 @@ members = [
     "system/voice",
     "shell/compositor",
     "ai/lilith",
+    "tools/voice-ctl",
 ]
