@@ -12,7 +12,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC OFF)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Quick Qml Network)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Quick Qml Network QuickControls2)
 
 qt_standard_project_setup(REQUIRES 6.5)
 
@@ -40,6 +40,17 @@ qt_add_qml_module(jarvis-greeter
         qml/Main.qml
         qml/LoginScreen.qml
         qml/Theme.qml
+        qml/StandardMode.qml
+        qml/LilithMode.qml
+        qml/FocusMode.qml
+        qml/components/GlassCard.qml
+        qml/components/JarvisLogo.qml
+        qml/components/ModeIndicator.qml
+        qml/components/AuthIcon.qml
+        qml/components/PasswordField.qml
+        qml/components/UnlockButton.qml
+        qml/components/VoiceWaveform.qml
+        qml/components/SuggestionChip.qml
 )
 
 target_link_libraries(jarvis-greeter PRIVATE
@@ -47,6 +58,7 @@ target_link_libraries(jarvis-greeter PRIVATE
     Qt6::Quick
     Qt6::Qml
     Qt6::Network
+    Qt6::QuickControls2
 )
 
 set_target_properties(jarvis-greeter PROPERTIES

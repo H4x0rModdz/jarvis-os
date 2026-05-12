@@ -1,28 +1,117 @@
 import QtQuick
+import QtQuick.Layouts
 import QtQuick.Window
 import Jarvis.Greeter
 
-/// Greeter root window — fullscreen on the primary output, dark
-/// background with the login card floating in the centre. The window
-/// is the only thing on the screen; labwc isn't running yet (greetd
-/// will exec it after start_session succeeds), so we don't compete
-/// for focus and don't need wlr-layer-shell.
+/// Greeter root. Dark background with a slogan banner at the top,
+/// a faint starfield, the LoginScreen with the three-mode SwipeView,
+/// and a minimal footer line.
 Window {
     id: root
     visible: true
-    width: 1280
+    width: 1366
     height: 800
     title: qsTr("Jarvis OS")
     color: Theme.background
 
-    // Maximise on first paint. greetd usually spawns us under a
-    // compositor that already gives us the full output, but if not
-    // we at least try to cover everything.
     Component.onCompleted: {
         showFullScreen();
     }
 
+    // Faint starfield — a handful of dots sprinkled across the
+    // background. Pure decoration; replaced by a particle / shader
+    // pass once the compositor work in Phase 3 owns the rendering.
+    Repeater {
+        model: 42
+
+        Rectangle {
+            x: Math.random() * root.width
+            y: Math.random() * root.height
+            width: Math.random() < 0.85 ? 1 : 2
+            height: width
+            radius: width / 2
+            color: "#aab0c8"
+            opacity: 0.15 + Math.random() * 0.35
+        }
+    }
+
+    // ── Slogan ───────────────────────────────────────────────────
+    ColumnLayout {
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.topMargin: 32
+        spacing: 4
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: "JARVIS"
+            color: Theme.text
+            font.pixelSize: 32
+            font.weight: Font.Bold
+            font.letterSpacing: 6
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            text: "OS"
+            color: Theme.accent
+            font.pixelSize: 10
+            font.letterSpacing: 4
+            font.weight: Font.Bold
+        }
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+            Layout.topMargin: 6
+            text: qsTr("Conscious systems begin with understanding.")
+            color: Theme.textDim
+            font.pixelSize: 12
+            font.italic: true
+        }
+    }
+
+    // ── Login (the SwipeView lives here) ─────────────────────────
     LoginScreen {
-        anchors.centerIn: parent
+        anchors.fill: parent
+        anchors.topMargin: 130
+        anchors.bottomMargin: 70
+
+        onInfoMessage: function(text) {
+            footerHint.text = text;
+            footerHintTimer.restart();
+        }
+    }
+
+    // ── Footer ───────────────────────────────────────────────────
+    RowLayout {
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.margins: 22
+
+        Text {
+            text: "Jarvis OS  2.0"
+            color: Theme.textDim
+            font.pixelSize: 11
+            font.letterSpacing: 1
+        }
+        Item { Layout.fillWidth: true }
+        Text {
+            id: footerHint
+            text: ""
+            color: Theme.accent
+            font.pixelSize: 11
+        }
+        Item { Layout.preferredWidth: 24 }
+        Text {
+            text: qsTr("Secure  ·  Adaptive  ·  Conscious")
+            color: Theme.textDim
+            font.pixelSize: 11
+            font.letterSpacing: 1
+        }
+    }
+
+    Timer {
+        id: footerHintTimer
+        interval: 4000
+        onTriggered: footerHint.text = ""
     }
 }
