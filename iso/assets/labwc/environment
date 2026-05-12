@@ -9,6 +9,14 @@
 #                               session.
 # WLR_NO_HARDWARE_CURSORS=1     VBox's SVGA driver mishandles HW cursors
 #                               under wlroots — software cursor is fine.
+# QT_LOGGING_RULES …            Silences the noisy "Try to disable surface"
+#                               warnings Qt's Wayland text-input v3 plugin
+#                               emits every time a popup or dialog opens
+#                               and steals focus from the bar's input. The
+#                               protocol's focus model and Qt Quick's
+#                               surface-per-Window model disagree — Qt
+#                               recovers, but only after spamming stderr.
 WLR_RENDERER=pixman
 LIBGL_ALWAYS_SOFTWARE=1
 WLR_NO_HARDWARE_CURSORS=1
+QT_LOGGING_RULES=qt.qpa.wayland.textinput.warning=false

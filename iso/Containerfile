@@ -34,10 +34,17 @@ RUN dnf -y install \
 # specific tag so a surprise upstream API change doesn't break our build
 # silently.
 ARG WHISPER_VERSION=v1.7.4
+# Build whisper-cli static so the ISO ships one self-contained binary
+# instead of dragging /usr/lib/libwhisper.so + /usr/lib/libggml.so +
+# friends along — those wouldn't survive the COPY --from=builder line
+# in stage 2 without explicit support, and the daemon would crash-loop
+# with `exit 127` (loader can't find shared deps).
 RUN git clone --depth 1 --branch ${WHISPER_VERSION} \
         https://github.com/ggml-org/whisper.cpp.git /src/whisper.cpp \
     && cmake -S /src/whisper.cpp -B /build/whisper -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release -DWHISPER_BUILD_EXAMPLES=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DWHISPER_BUILD_EXAMPLES=ON \
     && cmake --build /build/whisper -j --target whisper-cli \
     && mkdir -p /out/whisper /out/whisper-models \
     && cp /build/whisper/bin/whisper-cli /out/whisper/whisper-cli \
