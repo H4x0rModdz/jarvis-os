@@ -6,9 +6,36 @@ const COMPAT_SERVICE: &str = "com.jarvis.Compat";
 const COMPAT_PATH: &str = "/com/jarvis/Compat";
 const COMPAT_IFACE: &str = "com.jarvis.Compat";
 
-/// Run a Windows .exe through the Compat daemon. Params:
-///   - `path`     (string, required)
-///   - `args`     (array<string>, optional)
+async fn proxy() -> Result<Proxy<'static>, BusError> {
+    let conn = Connection::session()
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("session bus: {e}"),
+        })?;
+    Proxy::new(&conn, COMPAT_SERVICE, COMPAT_PATH, COMPAT_IFACE)
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Compat proxy: {e}"),
+        })
+}
+
+fn parse_response(response: String, expect_started: bool) -> Result<Value, BusError> {
+    let parsed: Value = serde_json::from_str(&response).map_err(|e| BusError::ExecutionFailed {
+        message: format!("Compat returned non-JSON: {e}"),
+    })?;
+    let success_key = if expect_started { "started" } else { "ok" };
+    if parsed[success_key].as_bool() == Some(true) {
+        Ok(parsed)
+    } else {
+        let reason = parsed["reason"]
+            .as_str()
+            .unwrap_or("unknown reason")
+            .to_string();
+        Err(BusError::ExecutionFailed { message: reason })
+    }
+}
+
+/// Run a Windows .exe in the default prefix.
 pub async fn run_exe(params: Value) -> Result<Value, BusError> {
     let path = params["path"]
         .as_str()
@@ -24,39 +51,76 @@ pub async fn run_exe(params: Value) -> Result<Value, BusError> {
         })
         .unwrap_or_default();
 
-    let conn = Connection::session()
-        .await
-        .map_err(|e| BusError::Unavailable {
-            service: format!("session bus: {e}"),
-        })?;
-    let proxy = Proxy::new(&conn, COMPAT_SERVICE, COMPAT_PATH, COMPAT_IFACE)
-        .await
-        .map_err(|e| BusError::Unavailable {
-            service: format!("Compat proxy: {e}"),
-        })?;
-
-    let response: String = proxy
+    let response: String = proxy()
+        .await?
         .call("RunExe", &(path, args.as_slice()))
         .await
         .map_err(|e| BusError::Unavailable {
             service: format!("Compat.RunExe: {e}"),
         })?;
+    parse_response(response, true)
+}
 
+/// Run a Windows .exe in a named prefix.
+pub async fn run_exe_in(params: Value) -> Result<Value, BusError> {
+    let prefix = params["prefix"]
+        .as_str()
+        .ok_or_else(|| BusError::InvalidParams {
+            message: "missing required param 'prefix'".into(),
+        })?;
+    let path = params["path"]
+        .as_str()
+        .ok_or_else(|| BusError::InvalidParams {
+            message: "missing required param 'path'".into(),
+        })?;
+    let args: Vec<String> = params["args"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let response: String = proxy()
+        .await?
+        .call("RunExeIn", &(prefix, path, args.as_slice()))
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Compat.RunExeIn: {e}"),
+        })?;
+    parse_response(response, true)
+}
+
+/// Create a named Wine prefix without running anything in it.
+pub async fn create_prefix(params: Value) -> Result<Value, BusError> {
+    let name = params["name"]
+        .as_str()
+        .ok_or_else(|| BusError::InvalidParams {
+            message: "missing required param 'name'".into(),
+        })?;
+
+    let response: String = proxy()
+        .await?
+        .call("CreatePrefix", &(name,))
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Compat.CreatePrefix: {e}"),
+        })?;
+    parse_response(response, false)
+}
+
+/// Enumerate every existing Wine prefix.
+pub async fn list_prefixes(_params: Value) -> Result<Value, BusError> {
+    let response: String = proxy()
+        .await?
+        .call("ListPrefixes", &())
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Compat.ListPrefixes: {e}"),
+        })?;
     let parsed: Value = serde_json::from_str(&response).map_err(|e| BusError::ExecutionFailed {
         message: format!("Compat returned non-JSON: {e}"),
     })?;
-
-    if parsed["started"].as_bool() == Some(true) {
-        Ok(json!({
-            "started": true,
-            "pid": parsed["pid"].clone(),
-            "path": path,
-        }))
-    } else {
-        let reason = parsed["reason"]
-            .as_str()
-            .unwrap_or("unknown reason")
-            .to_string();
-        Err(BusError::ExecutionFailed { message: reason })
-    }
+    Ok(json!({ "prefixes": parsed["prefixes"].clone() }))
 }

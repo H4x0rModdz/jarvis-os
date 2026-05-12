@@ -139,6 +139,9 @@ fn build_registry() -> Registry {
     reg!("updater.apply_os", handlers::updater::apply_os);
 
     reg!("compat.run_exe", handlers::compat::run_exe);
+    reg!("compat.run_exe_in", handlers::compat::run_exe_in);
+    reg!("compat.create_prefix", handlers::compat::create_prefix);
+    reg!("compat.list_prefixes", handlers::compat::list_prefixes);
 
     // SDK apps: pick up every manifest under /usr/share/jarvis/apps/
     // and ~/.local/share/jarvis/apps/ and register their declared

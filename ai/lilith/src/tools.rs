@@ -321,8 +321,8 @@ pub fn all_tools() -> Vec<Tool> {
         // ── compat (Windows app runner) ─────────────────────────────────
         Tool {
             action: "compat.run_exe",
-            description: "Run a Windows .exe under Wine. The user must confirm — this action \
-                          executes arbitrary Windows code with access to the user's Wine prefix.",
+            description: "Run a Windows .exe under Wine in the default prefix. The user must \
+                          confirm — this action executes arbitrary Windows code.",
             schema: json!({
                 "type": "object",
                 "properties": {
@@ -335,6 +335,45 @@ pub fn all_tools() -> Vec<Tool> {
                 },
                 "required": ["path"]
             }),
+        },
+        Tool {
+            action: "compat.run_exe_in",
+            description: "Run a Windows .exe in a named Wine prefix. Same approval semantics as \
+                          compat.run_exe. Use this when the user wants a heavyweight app (game / \
+                          MS Office / a specific Photoshop install) isolated from the default.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "prefix": {
+                        "type": "string",
+                        "description": "Prefix name (lowercase / digits / _ / -; first char must be alphanumeric)"
+                    },
+                    "path": { "type": "string" },
+                    "args": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    }
+                },
+                "required": ["prefix", "path"]
+            }),
+        },
+        Tool {
+            action: "compat.create_prefix",
+            description: "Create a new named Wine prefix without running anything. Useful before \
+                          a heavyweight install — front-loads the wineboot --init cost.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" }
+                },
+                "required": ["name"]
+            }),
+        },
+        Tool {
+            action: "compat.list_prefixes",
+            description: "Enumerate every Wine prefix the user has under ~/.jarvis/wine/, with \
+                          metadata (initialised, created_at, last_used_at).",
+            schema: json!({ "type": "object", "properties": {} }),
         },
         // ── updater ─────────────────────────────────────────────────────
         Tool {
