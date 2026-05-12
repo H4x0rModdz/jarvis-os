@@ -16,10 +16,10 @@ keeps a small history Lilith can read.
   shell may choose not to surface a notification (Do-Not-Disturb,
   urgency filtering — both later work), but the daemon records
   everything.
-- Notifications **does not** persist to disk in V1. The recent-history
-  buffer is in-memory and lost on daemon restart. A future commit can
-  back it with the Settings daemon's SQLite if user feedback wants
-  durable history.
+- Notifications **does not** persist to disk yet. The recent-history
+  buffer is in-memory and lost on daemon restart. V3 backs it with
+  the Settings daemon's SQLite if user feedback wants durable
+  history.
 
 ## Interface
 
@@ -35,22 +35,26 @@ DBus  org.freedesktop.Notifications  at  /org/freedesktop/Notifications
   GetServerInformation() -> (name, vendor, version, spec_version)
 
   signal NotificationClosed(id, reason)   // 1=expired 2=dismissed 3=closed-by-call 4=undefined
-  signal ActionInvoked(id, action_key)    // V2 only — V1 ignores actions[]
+  signal ActionInvoked(id, action_key)    // fired when the user clicks a button on a toast
 ```
 
-V1 capabilities reported: `body`, `body-markup`, `persistence`. Actions
-are deliberately *not* in the capability list — V1 ignores the
-`actions` parameter.
+Capabilities reported: `body`, `body-markup`, `persistence`,
+`actions`. The shell renders each `actions[]` entry as a button on
+the toast and calls `InvokeAction(id, key)` on
+`com.jarvis.Notifications` when the user clicks, which makes the
+daemon emit `ActionInvoked(id, key)` for the originating app.
 
 ### Jarvis-private interface (`com.jarvis.Notifications`)
 
 ```
 DBus  com.jarvis.Notifications  at  /com/jarvis/Notifications
 
-  RecentNotifications(limit: u32) -> string   // JSON [{ id, app, summary, body, urgency, posted_at }, ...]
+  RecentNotifications(limit: u32) -> string   // JSON [{ id, app, summary, body, urgency, posted_at, actions }, ...]
+  InvokeAction(id: u32, key: string) -> ()    // shell → daemon when user clicks a toast button
 
   signal NotificationPosted(id: u32, app: string, summary: string,
-                            body: string, urgency: string)
+                            body: string, urgency: string,
+                            actions: array<string>)
 ```
 
 `urgency` collapses the FreeDesktop urgency hint into one of `"low" |

@@ -4,64 +4,109 @@
 
 The Jarvis OS desktop shell — a Qt6/QML application that paints the
 always-present bar at the bottom of the screen, the launcher overlay,
-the permission approval dialog, and the first-boot updater splash.
-Lives in user space, talks to the system daemons via DBus, anchors
-itself to screen edges via the `wlr-layer-shell` Wayland protocol.
+permission approval dialogs, the first-boot updater splash, the
+preferences panel, notification toasts + drawer, and the mic / lock
+glyphs the user clicks to invoke voice or lock the session. Lives in
+user space, talks to every Jarvis daemon via DBus, anchors itself to
+screen edges via the `wlr-layer-shell` Wayland protocol.
 
 ## Boundaries
 
 - jarvis-shell **does not** execute system effects directly. User
-  actions go through `com.jarvis.Lilith.Command` (Lilith path) or
+  actions route through `com.jarvis.Lilith.Command` (Lilith path) or
   `com.jarvis.ActionBus.Dispatch` (direct path — e.g. the launcher
-  clicking an app tile). We never shell out to xdg-open / notify-send /
-  pactl ourselves; those are Action Bus handler concerns.
+  clicking an app tile). We never shell out to xdg-open / notify-send
+  / pactl ourselves; those are Action Bus handler concerns.
 - jarvis-shell **does not** manage windows. The compositor does. We
   display window state via DBus events but never call into Wayland
   ourselves.
 - jarvis-shell **must** degrade gracefully when any daemon is offline:
-  the Lilith status LED turns red, the bar still renders, the clock
-  still ticks, the launcher still opens (it dispatches via the Action
-  Bus directly, not Lilith).
+  the Lilith LED turns red, but the bar still renders, the clock still
+  ticks, the launcher still opens (it dispatches via the Action Bus
+  directly, not Lilith).
 
 ## Components
 
-| QML / C++ | Role |
+The Qt module is registered as `Jarvis.Shell`. Components are split
+across `src/` (C++ bridges) and `qml/`.
+
+### Bar surface
+
+| File | Role |
 |---|---|
-| `qml/Main.qml` | Root layer-shell window holding bar, reply popup, and sibling dialogs. |
-| `qml/Bar.qml` | The bar surface — hamburger, clock, Lilith text input, status LED. |
-| `qml/Launcher.qml` | Overlay with search + 4-column app grid backed by `DesktopAppsModel`. |
-| `qml/ApprovalDialog.qml` | Modal-ish window bound to `PermissionBridge.hasPending`. |
-| `qml/UpdaterSplash.qml` | First-boot splash bound to `UpdaterBridge.active`. |
+| `qml/Main.qml` | Root layer-shell window holding bar + sibling Windows (Launcher, ApprovalDialog, UpdaterSplash, SettingsPanel, NotificationToast, NotificationDrawer). |
+| `qml/Bar.qml` | The bar surface — hamburger, clock, mic, Lilith input, status LED, bell, gear. |
+| `qml/BarMenuButton.qml` | Hamburger glyph on the left (opens the launcher). |
+| `qml/BarGearButton.qml` | Gear glyph (opens the settings panel). |
+| `qml/BarBellButton.qml` | Bell glyph (opens the notification drawer). |
+| `qml/Clock.qml` | HH:MM:SS time, updates every second. |
+| `qml/LilithInput.qml` | Conversational text input. Placeholder rotates with `LilithBridge.busy` + `PermissionBridge.hasPending`. |
+| `qml/StatusIndicator.qml` | Pulsing LED dot reflecting `LilithBridge.reachable` / `busy`. |
+| `qml/MicButton.qml` | Push-to-talk button bound to `VoiceBridge`. |
 | `qml/Theme.qml` | Singleton design tokens (colors, radii, animation durations). |
-| `src/lilith_bridge.{h,cpp}` | `com.jarvis.Lilith.Command` + `Recall`. |
-| `src/permission_bridge.{h,cpp}` | Subscribes to `ApprovalRequested`, exposes pending state + `ResolveApproval`. |
-| `src/action_bus_bridge.{h,cpp}` | Direct `Dispatch` for shell-internal callers (launcher). |
-| `src/updater_bridge.{h,cpp}` | Subscribes to updater `Progress` + `Completed` signals. |
-| `src/desktop_apps_model.{h,cpp}` | `QAbstractListModel` over XDG `applications/` dirs. |
+
+### Overlays
+
+| File | Role |
+|---|---|
+| `qml/Launcher.qml` | App-grid overlay with search, backed by `DesktopAppsModel`. |
+| `qml/AppCell.qml` | Single app tile inside the launcher grid. |
+| `qml/ApprovalDialog.qml` | Modal-ish window driven by `PermissionBridge.hasPending`. |
+| `qml/ApprovalButton.qml` | Pill button used inside ApprovalDialog. |
+| `qml/UpdaterSplash.qml` | First-boot + OS-upgrade splash, three states (active / os-prompt / reboot). |
+| `qml/SettingsPanel.qml` | Preferences window with the live values from `SettingsBridge`. |
+| `qml/NotificationToast.qml` | Bottom-right toast for incoming notifications, including action buttons. |
+| `qml/NotificationDrawer.qml` | Right-edge drawer listing recent history (newest first). |
+
+### Bridges (C++ singletons exposed as `Jarvis.Shell.*`)
+
+| Bridge | Talks to | What it does |
+|---|---|---|
+| `LilithBridge` | `com.jarvis.Lilith` | `Command(text)` + ping for reachability + busy state. |
+| `PermissionBridge` | `com.jarvis.PermissionSystem` | Subscribes to `ApprovalRequested`, exposes pending state, sends `ResolveApproval`. |
+| `ActionBusBridge` | `com.jarvis.ActionBus` | Direct `Dispatch(json)` for shell-internal callers (launcher tile click). |
+| `UpdaterBridge` | `com.jarvis.Updater` | Progress + Completed + OSUpdateAvailable signals, `applyOSUpgrade()`. |
+| `VoiceBridge` | `com.jarvis.Voice` | `toggle()`, subscribes to StateChanged + TranscriptionFinal. |
+| `SettingsBridge` | `com.jarvis.Settings` | Sync getters + async setters + Changed signal re-emit. |
+| `NotificationsBridge` | `com.jarvis.Notifications` + `org.freedesktop.Notifications` | Re-emit NotificationPosted, `invokeAction(id, key)`, history list. |
+| `DesktopAppsModel` | XDG `applications/` dirs | Scan + filter for the launcher. |
 
 ## DBus Surface
 
 This module is a *client*, not a server. It consumes:
 
 ```
-com.jarvis.Lilith.Command(text)         primary input path (bar)
-com.jarvis.Lilith.Recall(key)           inline fact lookup
-com.jarvis.ActionBus.Dispatch(json)     direct dispatch (launcher tile click)
+com.jarvis.Lilith.Command(text)             primary input path (bar)
+com.jarvis.Lilith.Recall(key)               inline fact lookup
+com.jarvis.ActionBus.Dispatch(json)         direct dispatch (launcher tile click)
 com.jarvis.PermissionSystem
-  signal ApprovalRequested(...)         drives ApprovalDialog
-  method ResolveApproval(id, decision)  user button press
+  signal ApprovalRequested(...)             drives ApprovalDialog
+  method ResolveApproval(id, decision)      user button press
 com.jarvis.Updater
-  signal Progress(stage, percent, msg)  drives UpdaterSplash
-  signal Completed(success, message)    dismiss / failure state
+  signal Progress(stage, percent, msg)      drives UpdaterSplash progress bar
+  signal Completed(success, message)        dismiss / reboot prompt
+  signal OSUpdateAvailable(version)         shows the os-prompt mode
+  method ApplyOSUpgrade()                   user-clicked Install
+com.jarvis.Voice
+  signal StateChanged(state)                drives MicButton visual
+  signal TranscriptionFinal(text)           piped into LilithBridge.send
+  method StartListening / StopListening
+com.jarvis.Settings
+  method Get / Set / Delete / List
+  signal Changed(key, value_json)           valueChanged(key) bubble
+org.freedesktop.Notifications
+  signal NotificationPosted(id, ...)        drives toast + drawer
+  method InvokeAction(id, key)              from action-button click
+com.jarvis.Notifications
+  method RecentNotifications(limit)         drawer fetch
 ```
 
 ## Build
 
-Out-of-tree CMake. Qt 6.5+ required (the QML singleton mechanism Theme
-depends on misbehaves under the `REQUIRES 6.4` compat mode — see ADR
-notes inside the commit that fixed it). On Fedora 42 in the ISO build
-the Qt is 6.10; on Ubuntu 24.04 you'll need to install Qt 6.5+ via
-`aqtinstall` (`tools/dev/run-shell-labwc.sh` documents the path).
+Out-of-tree CMake. Qt 6.5+ required (the QML singleton mechanism
+Theme depends on misbehaves under the `REQUIRES 6.4` compat mode).
+Fedora 42 ships Qt 6.10 which is what the ISO build uses; local dev
+on Ubuntu 24.04 needs Qt 6.5+ via aqtinstall.
 
 ```bash
 cmake -S shell/jarvis-shell -B /tmp/jarvis-shell-build \
@@ -70,25 +115,25 @@ cmake --build /tmp/jarvis-shell-build -j
 /tmp/jarvis-shell-build/jarvis-shell
 ```
 
-Run requirements: a working Wayland or X11 display. Under WSL2 + WSLg
-the X11 path is fine for development. The layer-shell anchor only kicks
-in if `LayerShellQt` was found at configure time; otherwise the shell
-falls back to a regular xdg-shell toplevel (same UI, just floats).
+Run requirements: a working Wayland or X11 display. The layer-shell
+anchor only kicks in if `LayerShellQt` was found at configure time;
+otherwise the shell falls back to a regular xdg-shell toplevel.
 
 ## Failure modes
 
 | Failure | Behavior |
 |---|---|
-| Lilith service offline | Status LED red, bar still accepts input but `Command` errors are surfaced in the reply popup. |
+| Lilith service offline | LED red, bar accepts input but `Command` errors flow into the reply popup. |
 | Permission daemon offline | `ApprovalDialog` never opens; dangerous-scope dispatches fail via the Action Bus's local fallback. |
-| Updater daemon offline | `UpdaterSplash` never opens; if the model is missing, Lilith stays offline and the user is on their own. |
-| DBus session bus missing | The shell logs an error and runs with empty bridges — clock + launcher still work. |
-| Command timeout (> 30 s) | Reply popup shows the timeout, input re-enabled. |
+| Updater daemon offline | `UpdaterSplash` never opens; if the model is missing, Lilith stays offline. |
+| Voice daemon offline | MicButton renders disabled; tap is a no-op. |
+| Settings daemon offline | SettingsBridge silently falls back to defaults; the panel's footer chip turns red. |
+| Notifications daemon offline | Toasts + drawer go quiet; system.notify dispatches fail through the bus. |
+| DBus session bus missing | Shell logs an error and runs with empty bridges — clock + launcher still work. |
 
 ## Out of scope (later phases)
 
-- Notifications drawer (Phase 2)
-- Control center / settings panel (Phase 2)
-- Lock screen (Phase 2)
-- Multi-output layout polish (Phase 3, alongside the custom compositor)
-- Glassmorphism shader pass (Phase 3 — requires our compositor for proper backdrop blur)
+- Multi-output layout polish (Phase 3, alongside the custom compositor).
+- Glassmorphism shader pass (Phase 3 — needs our compositor for backdrop blur).
+- Workspace switcher widget on the bar (waits on `workspace.*` actions
+  becoming non-stubs, which waits on the Jarvis compositor).

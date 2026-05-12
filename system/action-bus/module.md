@@ -42,9 +42,9 @@ the exact shape.
 
 ## Action Catalog
 
-28 actions registered. The ones backed by real handlers are usable from
-day one; the stubs return `UNAVAILABLE` so callers don't silently
-no-op.
+36 actions registered (built-ins) + any SDK-app actions picked up at
+startup. The ones backed by real handlers are usable from day one;
+stubs return `UNAVAILABLE` so callers don't silently no-op.
 
 | Namespace | Actions | Status |
 |---|---|---|
@@ -60,8 +60,14 @@ no-op.
 | `screenshot.*` | `capture`                                            | ✅ working (grim/scrot, region mode via slurp) |
 | `audio.*`      | `set_volume`, `adjust_volume`, `toggle_mute`         | ✅ working (pactl → PipeWire/PulseAudio) |
 | `updater.*`    | `check`, `apply_os`                                  | ✅ working (DBus client of `com.jarvis.Updater`) |
-| `compat.*`     | `run_exe`                                            | ✅ working (DBus client of `com.jarvis.Compat`, runs Wine) |
+| `compat.*`     | `run_exe`, `run_exe_in`, `create_prefix`, `list_prefixes` | ✅ working (DBus client of `com.jarvis.Compat`, per-app Wine prefixes) |
 | `voice.*`      | —                                                    | ⏸ direct daemon DBus today; bus actions land alongside hotword work |
+
+SDK app actions appear here too — every manifest discovered under
+`/usr/share/jarvis/apps/` or `~/.local/share/jarvis/apps/`
+contributes one row per declared action, dispatched through a
+generic DBus proxy to the app's `com.jarvis.app.<id>` service. See
+ADR 0011 + [sdk/jarvis-sdk-types/module.md](../../sdk/jarvis-sdk-types/module.md).
 
 ## Permission Flow
 

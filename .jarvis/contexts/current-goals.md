@@ -4,11 +4,13 @@
 
 ## Current Phase
 
-**Phase 2 — User-Facing System**
+**Phase 3 — Real OS Surface**
 
-Phase 1 closed the foundation. Phase 2 turns it into something a person
-can actually log into and use: real first-boot UX, real voice surface,
-real AI agency over the desktop.
+Phase 2 closed the user-facing system: voice, settings, OS upgrades, an
+expanded action namespace. Phase 3 fills in what makes Jarvis OS feel
+like an *operating system* rather than a shell over Fedora — login,
+lock, notifications with real interaction, Windows-app compatibility,
+and a third-party SDK so the action layer isn't a closed catalog.
 
 ## Decisions Locked
 
@@ -19,54 +21,84 @@ real AI agency over the desktop.
   compositor is ready. Decision documented in ADR 0006.
 - **First-boot UX:** dedicated updater daemon + splash, not silent
   in-Lilith bootstrap (ADR 0007).
+- **App install:** Flatpak/Flathub, `--user` scope (ADR 0009 — Phase 3).
+- **Notifications:** Jarvis owns `org.freedesktop.Notifications`
+  rather than depending on mako/dunst (ADR 0010).
+- **SDK contract:** action manifest discovered at
+  `/usr/share/jarvis/apps/` and `~/.local/share/jarvis/apps/`
+  (ADR 0011).
+- **Greeter:** custom Qt greetd UI instead of an off-the-shelf
+  greeter; three modes (Standard / Lilith / Focus) (ADR 0012).
+- **Compat:** Wine via per-app prefixes under `~/.jarvis/wine/`;
+  Proton deferred to Phase 4 (ADR 0013).
+- **Lock:** wlr-layer-shell Overlay + `pamtester` subprocess; full
+  `ext-session-lock-v1` deferred (ADR 0014).
 
-## Phase 1 Outcomes (closed)
+## Phase 2 Outcomes (closed)
 
-- ✅ Action Bus daemon (21 actions, JSON-schema dispatch, permission
-  consult, audit log, unit tests).
-- ✅ Permission System daemon (in-memory grants + approval DBus signal,
-  30 s timeout, full unit + e2e coverage).
-- ✅ Lilith daemon (Ollama integration, tool calling, intent routing,
-  SQLite memory).
-- ✅ Qt shell with layer-shell bottom bar, launcher, approval dialog,
-  Theme singleton design tokens.
-- ✅ Bootable Fedora bootc ISO buildable both locally and in CI.
-- ✅ Updater daemon + splash (Phase 1 scope: Ollama model).
-- ⏸ Smithay compositor — deferred to Phase 3, labwc serves until then.
+- ✅ Voice daemon (`com.jarvis.Voice`) — Whisper.cpp STT + Piper TTS,
+  cpal actor for the `!Send` audio stream.
+- ✅ Action Bus expansion to 28 actions: `browser.open`,
+  `clipboard.*`, `screenshot.capture`, `audio.*`, `window.*` stubs,
+  `system.notify`, `updater.*`.
+- ✅ Updater Phase 2 — `bootc upgrade` driver + `updater.*` actions.
+- ✅ Launcher focus restoration fix.
+- ✅ Settings daemon (`com.jarvis.Settings`) + shell SettingsPanel,
+  SQLite-backed.
 
-## Phase 2 Active Goals (ordered)
+## Phase 3 Active Goals (ordered)
 
-1. **Validate the full first-boot demo on a clean VM.** ISO boots → bar
-   renders → updater splash appears → model downloads → splash fades →
-   user types a question into the bar → Lilith answers.
-2. **Voice pipeline.** Whisper-small STT and Piper TTS, both local.
-   Push-to-talk first, always-listening hotword later. Without voice,
-   the always-present bar is overkill — voice is what justifies its
-   shape.
-3. **Action Bus namespace expansion.** Today's 21 actions are mostly
-   plumbing. Add the user-visible primitives Lilith needs to actually
-   *do* things: `browser.open`, `clipboard.set`, `screenshot.capture`,
-   `audio.volume`, `window.focus`, `window.tile`, `app.launch`.
-4. **Launcher focus restoration.** Deferred bug from Phase 1 — when the
-   launcher closes, focus needs to return to the bar's text input.
-   Small fix, big UX win.
-5. **Updater Phase 2.** Bootc OS upgrade check + `updater.*` actions on
-   the Action Bus so Lilith answers "are there updates?" naturally.
+1. **Wine compat (V1 + V2).** ✅ Shipped. `com.jarvis.Compat` with
+   shared `default` prefix; V2 adds per-app prefixes,
+   `CreatePrefix`, `RunExeIn`, `ListPrefixes`. Action Bus entries
+   `compat.run_exe`, `compat.run_exe_in`, `compat.create_prefix`,
+   `compat.list_prefixes`. Lilith tools wired.
+2. **Flatpak app install / uninstall.** ✅ Shipped. `app.install` and
+   `app.uninstall` now back onto `flatpak --user`; Flathub remote in
+   the ISO. Lilith can install GIMP.
+3. **Jarvis SDK + example app.** ✅ Shipped. Manifest schema in
+   `sdk/jarvis-sdk-types`, helper crate in `sdk/jarvis-sdk-rust`,
+   `examples/jarvis-app-hello` registers one action discoverable
+   through the Action Bus at startup.
+4. **Custom greeter.** ✅ Shipped V1.5. Three-mode SwipeView
+   (Standard / Lilith / Focus), wallpaper + icon assets baked in,
+   last-mode persistence, error toast. Anime avatar, voice/face
+   PAM, audio-reactive waveform deferred to Phase 4.
+5. **Notifications V2.** ✅ Shipped. FreeDesktop `actions[]` honoured
+   end-to-end, drawer in the bar with recent history, urgency
+   coloring.
+6. **Lock screen V1.** ✅ Shipped. `com.jarvis.Lock` daemon +
+   `jarvis-lock-window` Qt overlay, `Super+L` keybind via labwc,
+   `pamtester` for auth. `lock-ctl` CLI mirror. `ext-session-lock-v1`
+   and biometrics deferred.
 
-## Phase 3 Backlog (not yet active)
+## Phase 3 Remaining
+
+- ⏳ End-to-end VM smoke test of the full Phase 3 surface (greeter →
+  shell → notifications drawer → compat run → lock → unlock).
+- ⏳ Polish: SDK example app shown in the launcher's app grid.
+- ⏳ Documentation pass — module.md + README + ADR cross-links
+  all aligned with shipped reality. (In flight — this commit.)
+
+## Phase 4 Backlog (not yet active)
 
 - Smithay-based Jarvis Compositor (replaces labwc).
-- Wine/Proton integration via bottles or a custom wrapper.
-- Jarvis SDK — third-party apps register actions with the Action Bus.
-- Custom greeter replacing greetd autologin.
+- Proton + DXVK toggle per Wine prefix; Steam-runtime container.
 - Glassmorphism polish pass (blur shaders, surface depth) once the
   compositor is ours.
+- Hotword voice activation (`oi lilith`) running off Whisper streams.
+- Idle auto-lock (logind input-idle → `com.jarvis.Lock.Lock`).
+- Biometric / Face ID / Voice ID PAM modules (custom `pam_*.so`).
+- Anime avatar pipeline for the Lilith greeter mode.
+- `ext-session-lock-v1` once labwc (or our compositor) supports it.
 
-## Success Criteria for Phase 2
+## Success Criteria for Phase 3
 
-- The first-boot demo above runs end-to-end on a clean VirtualBox VM
-  with no terminal interaction.
-- A user can hold the bar's mic key, speak, and have the command
-  dispatched through the Action Bus.
-- Lilith can complete an end-to-end task that spans 3+ actions across
-  different namespaces (e.g. "tira um screenshot e abre no editor").
+- A user can boot a clean VM, reach the custom greeter (any of three
+  modes), log in, install a Flatpak via Lilith, run a `.exe` via
+  Lilith, receive a notification with action buttons, click one, and
+  press `Super+L` to lock. All without a terminal.
+- A third party can drop a manifest under
+  `~/.local/share/jarvis/apps/<id>/manifest.json`, restart the
+  Action Bus, and have their action callable from Lilith — without
+  patching Jarvis OS itself.
