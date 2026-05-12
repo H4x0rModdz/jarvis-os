@@ -3,9 +3,8 @@ import QtQuick.Layouts
 import QtQuick.Window
 import Jarvis.Greeter
 
-/// Greeter root. Dark background with a slogan banner at the top,
-/// a faint starfield, the LoginScreen with the three-mode SwipeView,
-/// and a minimal footer line.
+/// Greeter root. The wallpaper PNG handles the brand mark + slogan +
+/// Lilith silhouette; the QML layer adds the interactive cards on top.
 Window {
     id: root
     visible: true
@@ -18,54 +17,27 @@ Window {
         showFullScreen();
     }
 
-    // Faint starfield — a handful of dots sprinkled across the
-    // background. Pure decoration; replaced by a particle / shader
-    // pass once the compositor work in Phase 3 owns the rendering.
-    Repeater {
-        model: 42
-
-        Rectangle {
-            x: Math.random() * root.width
-            y: Math.random() * root.height
-            width: Math.random() < 0.85 ? 1 : 2
-            height: width
-            radius: width / 2
-            color: "#aab0c8"
-            opacity: 0.15 + Math.random() * 0.35
-        }
+    // ── Wallpaper ────────────────────────────────────────────────
+    // The PNG already contains the JARVIS / OS logo on the left,
+    // the "Conscious systems begin with understanding." slogan in
+    // the lower left, and the Lilith character on the right. Filling
+    // the screen with it removes the need for a separate slogan
+    // banner or starfield decoration from V1.
+    Image {
+        anchors.fill: parent
+        source: "qrc:/branding/jarvis-op-default-wallpaper.png"
+        sourceSize.width: root.width
+        sourceSize.height: root.height
+        fillMode: Image.PreserveAspectCrop
+        smooth: true
     }
 
-    // ── Slogan ───────────────────────────────────────────────────
-    ColumnLayout {
-        anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.topMargin: 32
-        spacing: 4
-
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            text: "JARVIS"
-            color: Theme.text
-            font.pixelSize: 32
-            font.weight: Font.Bold
-            font.letterSpacing: 6
-        }
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            text: "OS"
-            color: Theme.accent
-            font.pixelSize: 10
-            font.letterSpacing: 4
-            font.weight: Font.Bold
-        }
-        Text {
-            Layout.alignment: Qt.AlignHCenter
-            Layout.topMargin: 6
-            text: qsTr("Conscious systems begin with understanding.")
-            color: Theme.textDim
-            font.pixelSize: 12
-            font.italic: true
-        }
+    // Subtle vignette + tint so the cards stay legible even when the
+    // wallpaper has bright regions behind them.
+    Rectangle {
+        anchors.fill: parent
+        color: "#000000"
+        opacity: 0.28
     }
 
     // ── Clock (top-right) ────────────────────────────────────────
@@ -80,7 +52,7 @@ Window {
     LoginScreen {
         id: login
         anchors.fill: parent
-        anchors.topMargin: 130
+        anchors.topMargin: 90
         anchors.bottomMargin: 70
 
         onInfoMessage: function(text) {

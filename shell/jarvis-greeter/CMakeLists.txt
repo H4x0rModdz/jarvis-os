@@ -65,6 +65,21 @@ target_link_libraries(jarvis-greeter PRIVATE
     Qt6::QuickControls2
 )
 
+# Bake the wallpaper + icon PNGs from the repo root into the binary
+# under `qrc:/branding/`. Keeping the originals at the repo root
+# preserves a single source of truth — the greeter doesn't get a
+# stale copy when the design changes. CMAKE_SOURCE_DIR points at
+# the workspace root because cmake is invoked with -S
+# shell/jarvis-greeter; we override BASE to use the actual repo
+# root.
+qt_add_resources(jarvis-greeter "branding"
+    PREFIX "/branding"
+    BASE "${CMAKE_SOURCE_DIR}/../.."
+    FILES
+        "${CMAKE_SOURCE_DIR}/../../jarvis-os-default-icon.png"
+        "${CMAKE_SOURCE_DIR}/../../jarvis-op-default-wallpaper.png"
+)
+
 set_target_properties(jarvis-greeter PROPERTIES
     WIN32_EXECUTABLE OFF
     MACOSX_BUNDLE OFF
