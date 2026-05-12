@@ -1,0 +1,42 @@
+#!/bin/sh
+# /usr/libexec/jarvis-session-launch — pick a wlroots renderer and exec
+# the given command. Used in two places:
+#
+#   - greetd's command spawns cage through this so the login screen
+#     gets the right renderer.
+#   - The greeter sends this script (not labwc directly) as the
+#     start_session command, so the user session inherits the same
+#     decision.
+#
+# Default path is "do nothing" — wlroots picks EGL/GLES2, the GPU does
+# its job. We only override to pixman (CPU rendering) when we know the
+# host can't drive EGL safely:
+#
+#   1. VirtualBox VMSVGA. With 3D enabled, EGL init succeeds but
+#      runtime dmabuf import fails and takes the compositor down. Real
+#      bug we hit on first install.
+#   2. No /dev/dri/renderD128. No DRM render node means no EGL path.
+#
+# Other hypervisors (QEMU virtio-gpu, VMware Workstation 3D, Hyper-V
+# GPU-P) and real hardware fall through to the GPU path untouched.
+
+set -eu
+
+force_pixman() {
+    export WLR_RENDERER=pixman
+    export WLR_NO_HARDWARE_CURSORS=1
+}
+
+if [ -r /sys/class/dmi/id/sys_vendor ]; then
+    case "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)" in
+        *VirtualBox*|*Oracle*|innotek*)
+            force_pixman
+            ;;
+    esac
+fi
+
+if [ -z "${WLR_RENDERER-}" ] && [ ! -e /dev/dri/renderD128 ]; then
+    force_pixman
+fi
+
+exec "$@"

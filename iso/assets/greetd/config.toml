@@ -12,5 +12,10 @@ vt = 1
 # Wrap the greeter in a minimal Wayland compositor (cage) so QtWayland
 # has a wl_display to attach to. cage runs as the `greeter` user and
 # execs the single child it's given.
-command = "cage -s -- jarvis-greeter"
+#
+# jarvis-session-launch in front picks WLR_RENDERER at runtime: pixman
+# on broken hosts (VirtualBox VMSVGA where dmabuf import fails), default
+# GPU path on real hardware and well-behaved hypervisors. Symmetric with
+# how the greeter starts labwc post-login.
+command = "/usr/libexec/jarvis-session-launch cage -s -- jarvis-greeter"
 user    = "greeter"

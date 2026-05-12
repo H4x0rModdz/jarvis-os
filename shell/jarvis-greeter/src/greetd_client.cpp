@@ -154,19 +154,17 @@ void GreetdClient::requestStartSession()
     setState(QStringLiteral("starting_session"), {}, false, {});
     QJsonObject msg;
     msg.insert(QStringLiteral("type"), QStringLiteral("start_session"));
+    // Wrap labwc in the session launcher so it inherits the same
+    // renderer decision the greeter ran under — pixman on hosts where
+    // EGL/dmabuf is broken (VirtualBox VMSVGA), GPU path everywhere
+    // else. See iso/assets/launchers/jarvis-session-launch.
     QJsonArray cmd;
+    cmd.append(QStringLiteral("/usr/libexec/jarvis-session-launch"));
     cmd.append(QStringLiteral("labwc"));
     msg.insert(QStringLiteral("cmd"), cmd);
     QJsonArray env;
     env.append(QStringLiteral("XDG_SESSION_TYPE=wayland"));
     env.append(QStringLiteral("XDG_SESSION_DESKTOP=jarvis"));
-    // wlroots renderer fallback. EGL/GBM works on real hardware but
-    // virtualised GPUs (VirtualBox VMSVGA, headless QEMU) frequently
-    // fail at dmabuf import, taking labwc down with them. Pixman is
-    // CPU-rendered, slower but works everywhere — acceptable trade
-    // until Phase 4's custom compositor can do its own probe-then-fall.
-    env.append(QStringLiteral("WLR_RENDERER=pixman"));
-    env.append(QStringLiteral("WLR_NO_HARDWARE_CURSORS=1"));
     msg.insert(QStringLiteral("env"), env);
     sendMessage(QJsonDocument(msg).toJson(QJsonDocument::Compact));
 }
