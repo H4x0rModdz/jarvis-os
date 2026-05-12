@@ -24,6 +24,7 @@ Rectangle {
     }
 
     signal launcherRequested()
+    signal settingsRequested()
 
     function focusInput() {
         input.focusInput();
@@ -72,6 +73,11 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             reachable: LilithBridge.reachable
             busy: LilithBridge.busy
+        }
+
+        BarGearButton {
+            Layout.alignment: Qt.AlignVCenter
+            onClicked: root.settingsRequested()
         }
     }
 

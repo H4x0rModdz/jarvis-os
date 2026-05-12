@@ -201,6 +201,7 @@ Window {
         anchors.margins: 8
         height: Theme.barHeight
         onLauncherRequested: launcher.visible ? launcher.close() : launcher.open()
+        onSettingsRequested: settingsPanel.requestOpen()
     }
 
     Launcher {
@@ -241,14 +242,16 @@ Window {
     }
 
     // Auto-speak Lilith replies through the voice daemon. Whatever
-    // Lilith says in the reply popup also comes out the speakers. When
-    // the voice daemon isn't reachable (or piper/paplay are missing)
-    // the call no-ops on the bridge side — Lilith chat keeps working
-    // text-only.
+    // Lilith says in the reply popup also comes out the speakers. The
+    // user can turn this off in the SettingsPanel (key
+    // `voice.tts_enabled`, default true). When the voice daemon isn't
+    // reachable (or piper/paplay are missing) the call no-ops on the
+    // bridge side.
     Connections {
         target: LilithBridge
         function onReplyReceived(replyText, action, resultJson) {
-            if (VoiceBridge.reachable && replyText.trim().length > 0) {
+            const enabled = SettingsBridge.getBool("voice.tts_enabled", true);
+            if (enabled && VoiceBridge.reachable && replyText.trim().length > 0) {
                 VoiceBridge.speak(replyText);
             }
         }
@@ -261,4 +264,7 @@ Window {
     // First-boot updater splash. Bound to UpdaterBridge.active — invisible
     // until the daemon emits its first Progress, dismisses on Completed.
     UpdaterSplash {}
+
+    // Preferences panel — opens when the user clicks the gear on the bar.
+    SettingsPanel { id: settingsPanel }
 }
