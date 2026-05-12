@@ -42,7 +42,8 @@ jobs:
             libxcursor-dev \
             libdbus-1-dev \
             libnotify-bin \
-            libsqlite3-dev
+            libsqlite3-dev \
+            libasound2-dev
 
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
@@ -77,6 +78,15 @@ jobs:
 
       - name: Test (lilith)
         run: cargo test -p jarvis-lilith
+
+      - name: Test (settings)
+        run: cargo test -p jarvis-settings
+
+      - name: Test (updater)
+        run: cargo test -p jarvis-updater
+
+      - name: Test (voice)
+        run: cargo test -p jarvis-voice
 
   schema-lint:
     name: Validate JSON Schemas
