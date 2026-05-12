@@ -8,10 +8,12 @@ members = [
     "system/voice",
     "system/notifications",
     "system/compat",
+    "system/lock",
     "shell/compositor",
     "ai/lilith",
     "sdk/jarvis-sdk-types",
     "tools/voice-ctl",
     "tools/jarvis-app",
+    "tools/lock-ctl",
     "examples/sdk-hello",
 ]

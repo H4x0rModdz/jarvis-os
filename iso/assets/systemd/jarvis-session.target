@@ -6,7 +6,7 @@ Requires=jarvis-permission.service jarvis-settings.service jarvis-notifications.
 # of the session still works (Lilith chat stays text-only, the shell
 # shows a disabled mic + no updater splash). `Wants=` instead of
 # `Requires=`.
-Wants=jarvis-updater.service jarvis-voice.service jarvis-compat.service
+Wants=jarvis-updater.service jarvis-voice.service jarvis-compat.service jarvis-lock.service
 After=jarvis-permission.service jarvis-settings.service jarvis-notifications.service jarvis-action-bus.service jarvis-lilith.service
 
 # `BindsTo=graphical-session.target` used to live here on the assumption

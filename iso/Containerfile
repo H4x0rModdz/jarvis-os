@@ -93,7 +93,9 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-voice-ctl \
         -p jarvis-app \
         -p sdk-hello \
-        -p jarvis-compat
+        -p jarvis-compat \
+        -p jarvis-lock \
+        -p jarvis-lock-ctl
 
 # Qt shell — separate cmake build out-of-tree.
 RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
@@ -106,6 +108,13 @@ RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
 RUN cmake -S shell/jarvis-greeter -B /build/greeter -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /build/greeter -j
+
+# Lock window — third Qt project. Shares the branding qrc with the
+# greeter, links LayerShellQt for the Overlay-layer + Exclusive
+# keyboard window that gates the session during a lock.
+RUN cmake -S shell/jarvis-lock -B /build/lock -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build /build/lock -j
 
 # Collect everything that ends up on the final image.
 RUN mkdir -p /out/bin \
@@ -120,6 +129,9 @@ RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-app           /out/bin/ \
     && cp /build/rust/release/sdk-hello            /out/bin/ \
     && cp /build/rust/release/jarvis-compat        /out/bin/ \
+    && cp /build/rust/release/jarvis-lock          /out/bin/ \
+    && cp /build/rust/release/jarvis-lock-ctl      /out/bin/ \
+    && cp /build/lock/jarvis-lock-window           /out/bin/ \
     && cp /build/shell/jarvis-shell                /out/bin/ \
     && cp /build/greeter/jarvis-greeter            /out/bin/ \
     && strip /out/bin/*
@@ -151,6 +163,7 @@ RUN dnf -y install \
         alsa-lib \
         wine \
         flatpak \
+        pamtester \
     && dnf clean all
 
 # Flathub remote system-wide so `flatpak install --user flathub <id>`
@@ -206,6 +219,9 @@ COPY --from=builder /out/bin/jarvis-voice-ctl     /usr/bin/jarvis-voice-ctl
 COPY --from=builder /out/bin/jarvis-app           /usr/bin/jarvis-app
 COPY --from=builder /out/bin/sdk-hello            /usr/bin/sdk-hello
 COPY --from=builder /out/bin/jarvis-compat        /usr/bin/jarvis-compat
+COPY --from=builder /out/bin/jarvis-lock          /usr/bin/jarvis-lock
+COPY --from=builder /out/bin/jarvis-lock-ctl      /usr/bin/jarvis-lock-ctl
+COPY --from=builder /out/bin/jarvis-lock-window   /usr/bin/jarvis-lock-window
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
 COPY --from=builder /out/bin/jarvis-greeter       /usr/bin/jarvis-greeter
 
@@ -232,6 +248,7 @@ COPY iso/assets/systemd/jarvis-lilith.service        /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-updater.service       /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-voice.service         /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-compat.service        /etc/systemd/user/
+COPY iso/assets/systemd/jarvis-lock.service          /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-session.target        /etc/systemd/user/
 RUN systemctl --global enable jarvis-session.target
 

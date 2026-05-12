@@ -29,6 +29,7 @@
 
     <keybind key="A-F4"><action name="Close"/></keybind>
     <keybind key="W-Return"><action name="Execute"><command>foot</command></action></keybind>
+    <keybind key="W-L"><action name="Execute"><command>jarvis-lock-ctl lock</command></action></keybind>
     <keybind key="W"><action name="Execute"><command>jarvis-voice-ctl toggle</command></action></keybind>
   </keyboard>
 

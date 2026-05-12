@@ -1,0 +1,15 @@
+[Unit]
+Description=Jarvis Lock (user)
+Documentation=https://github.com/H4x0rModdz/jarvis-os
+After=dbus.socket
+PartOf=jarvis-session.target
+
+[Service]
+Type=dbus
+BusName=com.jarvis.Lock
+ExecStart=/usr/bin/jarvis-lock
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=jarvis-session.target
