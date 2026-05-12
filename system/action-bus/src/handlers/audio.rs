@@ -24,7 +24,7 @@ pub async fn set_volume(params: Value) -> Result<Value, BusError> {
     let arg = format!("{pct}%");
 
     run_pactl(&["set-sink-volume", DEFAULT_SINK, &arg]).await?;
-    Ok(json!({ "set": true, "percent": pct, "clamped": pct as i64 != raw }))
+    Ok(json!({ "set": true, "percent": pct, "clamped": pct != raw }))
 }
 
 /// Adjust the system output volume by a signed delta (`+5`, `-10`).
@@ -117,11 +117,8 @@ mod tests {
         // Err(ExecutionFailed | Unavailable) — both prove validation
         // succeeded.
         let r = set_volume(json!({ "percent": -50 })).await;
-        match r {
-            Err(BusError::InvalidParams { .. }) => {
-                panic!("clamp should have accepted the value before failing");
-            }
-            _ => {}
+        if let Err(BusError::InvalidParams { .. }) = r {
+            panic!("clamp should have accepted the value before failing");
         }
     }
 }
