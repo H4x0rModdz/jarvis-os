@@ -43,13 +43,18 @@ Item {
             }
 
             // Welcome line — click to edit the username.
+            // Sized by whichever child is visible. Avoids `childrenRect`
+            // (binding loop) and keeps anchored children out of Rows.
             Item {
+                id: welcomeLine
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredHeight: 28
-                implicitWidth: childrenRect.width
+                implicitHeight: 28
+                implicitWidth: root.editingUsername
+                    ? usernameEditor.implicitWidth
+                    : welcomeRow.implicitWidth
 
-                // Static label (default).
                 Row {
+                    id: welcomeRow
                     anchors.centerIn: parent
                     spacing: 4
                     visible: !root.editingUsername
@@ -65,21 +70,25 @@ Item {
                         font.pixelSize: 16
                         font.weight: Font.Bold
                     }
+                }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            root.editingUsername = true;
-                            usernameInput.text = root.username;
-                            usernameInput.forceActiveFocus();
-                            usernameInput.selectAll();
-                        }
+                // Click target sits alongside the Row, not inside it —
+                // Row rejects anchored children.
+                MouseArea {
+                    anchors.fill: welcomeRow
+                    visible: !root.editingUsername
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        root.editingUsername = true;
+                        usernameInput.text = root.username;
+                        usernameInput.forceActiveFocus();
+                        usernameInput.selectAll();
                     }
                 }
 
                 // Editor (active while editingUsername).
                 Rectangle {
+                    id: usernameEditor
                     visible: root.editingUsername
                     anchors.centerIn: parent
                     implicitWidth: 220

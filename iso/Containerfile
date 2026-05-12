@@ -253,8 +253,13 @@ COPY iso/assets/systemd/jarvis-session.target        /etc/systemd/user/
 RUN systemctl --global enable jarvis-session.target
 
 # greetd: autologin as `jarvis` and exec labwc. Anaconda creates the user
-# from build.toml so the name matches at install time.
+# from build.toml so the name matches at install time. The drop-in forces
+# wlroots' pixman software renderer because virtualised GPUs (VirtualBox
+# VMSVGA in particular) commonly fail at dmabuf import — without this the
+# greeter falls over on first boot in a VM.
 COPY iso/assets/greetd/config.toml /etc/greetd/config.toml
+COPY iso/assets/systemd/greetd.service.d/wlr-renderer.conf \
+     /etc/systemd/system/greetd.service.d/wlr-renderer.conf
 RUN systemctl enable greetd.service \
     && systemctl set-default graphical.target
 

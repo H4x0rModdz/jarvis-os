@@ -160,6 +160,13 @@ void GreetdClient::requestStartSession()
     QJsonArray env;
     env.append(QStringLiteral("XDG_SESSION_TYPE=wayland"));
     env.append(QStringLiteral("XDG_SESSION_DESKTOP=jarvis"));
+    // wlroots renderer fallback. EGL/GBM works on real hardware but
+    // virtualised GPUs (VirtualBox VMSVGA, headless QEMU) frequently
+    // fail at dmabuf import, taking labwc down with them. Pixman is
+    // CPU-rendered, slower but works everywhere — acceptable trade
+    // until Phase 4's custom compositor can do its own probe-then-fall.
+    env.append(QStringLiteral("WLR_RENDERER=pixman"));
+    env.append(QStringLiteral("WLR_NO_HARDWARE_CURSORS=1"));
     msg.insert(QStringLiteral("env"), env);
     sendMessage(QJsonDocument(msg).toJson(QJsonDocument::Compact));
 }

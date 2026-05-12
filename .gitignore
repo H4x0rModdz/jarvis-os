@@ -19,6 +19,10 @@ Thumbs.db
 *.so
 *.a
 *.d
+# `*.d` above was meant for Rust dep files but also swallows systemd
+# drop-in directories (foo.service.d/). Keep those tracked.
+!**/*.service.d/
+!**/*.service.d/**
 
 # Qt/CMake (shell/)
 shell/*/build/
