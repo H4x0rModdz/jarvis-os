@@ -41,6 +41,8 @@ qt_add_executable(jarvis-shell
     src/desktop_apps_model.h
     src/updater_bridge.cpp
     src/updater_bridge.h
+    src/voice_bridge.cpp
+    src/voice_bridge.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
@@ -68,6 +70,7 @@ qt_add_qml_module(jarvis-shell
         qml/Launcher.qml
         qml/AppCell.qml
         qml/UpdaterSplash.qml
+        qml/MicButton.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE

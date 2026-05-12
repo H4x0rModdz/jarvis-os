@@ -5,6 +5,7 @@ members = [
     "system/permission",
     "system/updater",
     "system/settings",
+    "system/voice",
     "shell/compositor",
     "ai/lilith",
 ]

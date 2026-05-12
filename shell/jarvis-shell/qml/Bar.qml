@@ -53,6 +53,10 @@ Rectangle {
             color: Theme.border
         }
 
+        MicButton {
+            Layout.alignment: Qt.AlignVCenter
+        }
+
         LilithInput {
             id: input
             Layout.fillWidth: true

@@ -36,3 +36,4 @@ Makefile
 .claude/
 skills/
 skills-lock.json
+iso/output/
