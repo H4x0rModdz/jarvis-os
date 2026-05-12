@@ -72,13 +72,22 @@ and a third-party SDK so the action layer isn't a closed catalog.
    `pamtester` for auth. `lock-ctl` CLI mirror. `ext-session-lock-v1`
    and biometrics deferred.
 
+## Phase 3 Polish (closed in this round)
+
+- ✅ Launcher grid lists Flatpak apps (XDG_DATA_DIRS in
+  `jarvis-session-launch` + `DesktopAppsModel.rescan()` on open).
+- ✅ Notifications drawer: per-row dismiss + clear-all, daemon emits
+  `HistoryChanged` so the shell refreshes without polling.
+- ✅ SDK example surfaced in the launcher via
+  `/usr/share/applications/jarvis-sdk-hello.desktop`.
+- ✅ Idle auto-lock: swayidle in the labwc autostart triggers
+  `jarvis-lock-ctl lock` after 5 min.
+
 ## Phase 3 Remaining
 
 - ⏳ End-to-end VM smoke test of the full Phase 3 surface (greeter →
-  shell → notifications drawer → compat run → lock → unlock).
-- ⏳ Polish: SDK example app shown in the launcher's app grid.
-- ⏳ Documentation pass — module.md + README + ADR cross-links
-  all aligned with shipped reality. (In flight — this commit.)
+  shell → notifications drawer → compat run → lock → unlock). Blocks
+  on the next ISO build.
 
 ## Phase 4 Backlog (not yet active)
 
