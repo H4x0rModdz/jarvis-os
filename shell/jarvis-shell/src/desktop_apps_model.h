@@ -44,6 +44,12 @@ public:
 
     int count() const { return m_visible.size(); }
 
+    /// Re-walk every application directory and rebuild the model.
+    /// Called when the launcher opens so apps installed mid-session
+    /// (e.g. a Flatpak Lilith just pulled) appear without needing a
+    /// logout.
+    Q_INVOKABLE void rescan();
+
 signals:
     void filterChanged();
     void countChanged();

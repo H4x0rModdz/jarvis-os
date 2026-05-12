@@ -236,6 +236,12 @@ RUN mkdir -p /usr/share/dbus-1/services \
     && printf '[D-BUS Service]\nName=com.jarvis.app.sdk_hello\nExec=/usr/bin/sdk-hello\n' \
         > /usr/share/dbus-1/services/com.jarvis.app.sdk_hello.service
 
+# .desktop file so the example app shows up in the launcher grid like
+# any other installed application. Demonstrates that an SDK app is a
+# first-class citizen, not just an invisible DBus name.
+COPY examples/sdk-hello/jarvis-sdk-hello.desktop \
+     /usr/share/applications/jarvis-sdk-hello.desktop
+
 # systemd user units for the daemons. `jarvis-session.target` depends on
 # the four core services and binds to `graphical-session.target` so they
 # spin up when labwc starts. The updater is `Wants=` (advisory) — the rest

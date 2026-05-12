@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Hello SDK
+Comment=Canonical Jarvis SDK example — echo + add over DBus
+Exec=/usr/bin/sdk-hello
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;
+Keywords=jarvis;sdk;example;
+StartupNotify=false

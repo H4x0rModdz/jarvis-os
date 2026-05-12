@@ -58,6 +58,17 @@ void DesktopAppsModel::setFilter(const QString& f)
     emit countChanged();
 }
 
+void DesktopAppsModel::rescan()
+{
+    beginResetModel();
+    m_all.clear();
+    m_visible.clear();
+    scan();
+    rebuildVisible();
+    endResetModel();
+    emit countChanged();
+}
+
 void DesktopAppsModel::scan()
 {
     QStringList dirs = QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);

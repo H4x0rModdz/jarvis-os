@@ -31,6 +31,10 @@ Window {
             y = s.virtualY + Math.floor((s.height - height) / 2);
         }
         _ignoreDeactivate = true;
+        // Re-walk the .desktop dirs so anything installed since the
+        // session started (Flatpaks Lilith just pulled, SDK apps that
+        // dropped a manifest) shows up without a relogin.
+        apps.rescan();
         visible = true;
         apps.filter = "";
         search.forceActiveFocus();

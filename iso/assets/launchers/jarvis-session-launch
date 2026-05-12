@@ -39,4 +39,19 @@ if [ -z "${WLR_RENDERER-}" ] && [ ! -e /dev/dri/renderD128 ]; then
     force_pixman
 fi
 
+# Flatpak exports its `.desktop` files outside XDG_DATA_DIRS' defaults,
+# which means QStandardPaths::ApplicationsLocation (and therefore the
+# launcher's app grid) doesn't see Flatpak apps unless we prepend them
+# explicitly. The system-wide export dir is always there; the per-user
+# one only exists once the user has installed at least one Flatpak.
+xdg_flatpak="/var/lib/flatpak/exports/share"
+if [ -n "${HOME-}" ]; then
+    xdg_flatpak="${HOME}/.local/share/flatpak/exports/share:${xdg_flatpak}"
+fi
+if [ -n "${XDG_DATA_DIRS-}" ]; then
+    export XDG_DATA_DIRS="${xdg_flatpak}:${XDG_DATA_DIRS}"
+else
+    export XDG_DATA_DIRS="${xdg_flatpak}:/usr/local/share:/usr/share"
+fi
+
 exec "$@"
