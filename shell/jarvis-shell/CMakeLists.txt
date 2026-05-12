@@ -45,6 +45,8 @@ qt_add_executable(jarvis-shell
     src/voice_bridge.h
     src/settings_bridge.cpp
     src/settings_bridge.h
+    src/notifications_bridge.cpp
+    src/notifications_bridge.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
@@ -75,6 +77,7 @@ qt_add_qml_module(jarvis-shell
         qml/MicButton.qml
         qml/SettingsPanel.qml
         qml/BarGearButton.qml
+        qml/NotificationToast.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE

@@ -1,0 +1,15 @@
+[Unit]
+Description=Jarvis Notifications (user)
+Documentation=https://github.com/H4x0rModdz/jarvis-os
+After=dbus.socket
+PartOf=jarvis-session.target
+
+[Service]
+Type=dbus
+BusName=org.freedesktop.Notifications
+ExecStart=/usr/bin/jarvis-notifications
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=jarvis-session.target

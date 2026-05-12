@@ -6,6 +6,7 @@ members = [
     "system/updater",
     "system/settings",
     "system/voice",
+    "system/notifications",
     "shell/compositor",
     "ai/lilith",
     "tools/voice-ctl",

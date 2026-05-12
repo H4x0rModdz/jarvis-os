@@ -267,4 +267,9 @@ Window {
 
     // Preferences panel — opens when the user clicks the gear on the bar.
     SettingsPanel { id: settingsPanel }
+
+    // Toast for incoming notifications. Bound to NotificationsBridge —
+    // bottom-right of the primary output, 5s auto-hide, click to
+    // dismiss early.
+    NotificationToast {}
 }

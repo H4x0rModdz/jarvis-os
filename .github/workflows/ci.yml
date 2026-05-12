@@ -41,7 +41,6 @@ jobs:
             libxi-dev \
             libxcursor-dev \
             libdbus-1-dev \
-            libnotify-bin \
             libsqlite3-dev \
             libasound2-dev
 
@@ -87,6 +86,9 @@ jobs:
 
       - name: Test (voice)
         run: cargo test -p jarvis-voice
+
+      - name: Test (notifications)
+        run: cargo test -p jarvis-notifications
 
   schema-lint:
     name: Validate JSON Schemas

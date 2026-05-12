@@ -12,21 +12,59 @@ pub async fn notify(params: Value) -> Result<Value, BusError> {
     let urgency = params["urgency"].as_str().unwrap_or("normal");
     let icon = params["icon"].as_str().unwrap_or("dialog-information");
 
-    let output = tokio::process::Command::new("notify-send")
-        .args(["--urgency", urgency, "--icon", icon, title, body])
-        .output()
+    // Route through org.freedesktop.Notifications (owned by
+    // jarvis-notifications). This gives third-party `notify-send`
+    // calls and Lilith's notifications the same UX path, and it lets
+    // Lilith query `RecentNotifications()` later to see what's been
+    // surfaced.
+    let conn = zbus::Connection::session()
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("session bus: {e}"),
+        })?;
+    let proxy = zbus::Proxy::new(
+        &conn,
+        "org.freedesktop.Notifications",
+        "/org/freedesktop/Notifications",
+        "org.freedesktop.Notifications",
+    )
+    .await
+    .map_err(|e| BusError::Unavailable {
+        service: format!("Notifications proxy: {e}"),
+    })?;
+
+    // FreeDesktop urgency hint: 0=low, 1=normal, 2=critical.
+    let urgency_byte: u8 = match urgency {
+        "low" => 0,
+        "critical" => 2,
+        _ => 1,
+    };
+
+    let actions: Vec<&str> = Vec::new();
+    let mut hints: std::collections::HashMap<&str, zbus::zvariant::Value> =
+        std::collections::HashMap::new();
+    hints.insert("urgency", zbus::zvariant::Value::U8(urgency_byte));
+
+    let id: u32 = proxy
+        .call(
+            "Notify",
+            &(
+                "Jarvis", // app_name
+                0u32,     // replaces_id
+                icon,     // app_icon
+                title,    // summary
+                body,     // body
+                actions,  // actions
+                hints,    // hints
+                -1i32,    // expire_timeout (-1 = server default)
+            ),
+        )
         .await
         .map_err(|e| BusError::ExecutionFailed {
-            message: e.to_string(),
+            message: format!("Notifications.Notify: {e}"),
         })?;
 
-    if output.status.success() {
-        Ok(json!({ "sent": true }))
-    } else {
-        Err(BusError::ExecutionFailed {
-            message: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
-    }
+    Ok(json!({ "sent": true, "id": id }))
 }
 
 /// Read a setting from the Settings daemon.

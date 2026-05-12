@@ -53,7 +53,7 @@ no-op.
 | `file.*`       | `move`, `copy`, `delete`                             | ✅ working (`gio trash` by default; `permanent: true` skips the trash) |
 | `window.*`     | `focus`, `minimize`, `maximize`, `close`, `move`, `resize`, `snap_left`, `snap_right` | ⏸ stub — the Jarvis compositor (Phase 3) will register real handlers |
 | `workspace.*`  | `switch`, `move_window`, `create`                    | ⏸ stub — same as above |
-| `system.*`     | `notify`                                             | ✅ working (notify-send) |
+| `system.*`     | `notify`                                             | ✅ working (DBus client of `org.freedesktop.Notifications` — owned by `jarvis-notifications`) |
 | `system.*`     | `set_setting`, `get_setting`                         | ✅ working (DBus client of `com.jarvis.Settings`) |
 | `browser.*`    | `open`                                               | ✅ working (xdg-open, http/https/mailto only) |
 | `clipboard.*`  | `set`, `get`                                         | ✅ working (wl-clipboard with xclip fallback) |
