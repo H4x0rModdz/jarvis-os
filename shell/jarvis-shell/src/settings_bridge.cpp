@@ -4,6 +4,7 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusReply>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
