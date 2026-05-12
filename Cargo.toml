@@ -11,5 +11,6 @@ members = [
     "ai/lilith",
     "sdk/jarvis-sdk-types",
     "tools/voice-ctl",
+    "tools/jarvis-app",
     "examples/sdk-hello",
 ]

@@ -1,0 +1,16 @@
+[package]
+name = "jarvis-app"
+version = "0.1.0"
+edition = "2021"
+description = "Developer CLI for Jarvis OS SDK apps — scaffold + validate"
+
+[[bin]]
+name = "jarvis-app"
+path = "src/main.rs"
+
+[dependencies]
+anyhow            = "1"
+jarvis-sdk-types  = { path = "../../sdk/jarvis-sdk-types" }
+
+[dev-dependencies]
+tempfile = "3"

@@ -96,6 +96,9 @@ jobs:
       - name: Test (sdk-hello example)
         run: cargo test -p sdk-hello
 
+      - name: Test (jarvis-app CLI)
+        run: cargo test -p jarvis-app
+
   schema-lint:
     name: Validate JSON Schemas
     runs-on: ubuntu-24.04

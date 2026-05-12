@@ -91,6 +91,7 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-updater \
         -p jarvis-voice \
         -p jarvis-voice-ctl \
+        -p jarvis-app \
         -p sdk-hello
 
 # Qt shell — separate cmake build out-of-tree.
@@ -108,6 +109,7 @@ RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-updater       /out/bin/ \
     && cp /build/rust/release/jarvis-voice         /out/bin/ \
     && cp /build/rust/release/jarvis-voice-ctl     /out/bin/ \
+    && cp /build/rust/release/jarvis-app           /out/bin/ \
     && cp /build/rust/release/sdk-hello            /out/bin/ \
     && cp /build/shell/jarvis-shell                /out/bin/ \
     && strip /out/bin/*
@@ -177,6 +179,7 @@ COPY --from=builder /out/bin/jarvis-lilith        /usr/bin/jarvis-lilith
 COPY --from=builder /out/bin/jarvis-updater       /usr/bin/jarvis-updater
 COPY --from=builder /out/bin/jarvis-voice         /usr/bin/jarvis-voice
 COPY --from=builder /out/bin/jarvis-voice-ctl     /usr/bin/jarvis-voice-ctl
+COPY --from=builder /out/bin/jarvis-app           /usr/bin/jarvis-app
 COPY --from=builder /out/bin/sdk-hello            /usr/bin/sdk-hello
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
 

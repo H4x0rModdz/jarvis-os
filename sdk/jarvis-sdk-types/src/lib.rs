@@ -103,6 +103,13 @@ impl Manifest {
 static APP_ID_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-z][a-z0-9_]*$").unwrap());
 static ACTION_NAME_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-z][a-z0-9_.]*$").unwrap());
 
+/// True when `id` matches the SDK app id pattern. Exposed so callers
+/// (e.g. the `jarvis-app new` scaffold) can validate input without
+/// touching the filesystem.
+pub fn is_valid_app_id(id: &str) -> bool {
+    APP_ID_RE.is_match(id)
+}
+
 /// Load a single manifest from `manifest_path`. The parent directory's
 /// name is checked against `app.id` so reverse lookups stay trivial.
 pub fn load_one(manifest_path: &Path) -> Result<Manifest, ManifestError> {
