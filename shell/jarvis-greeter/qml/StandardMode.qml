@@ -3,11 +3,15 @@ import QtQuick.Layouts
 import Jarvis.Greeter
 
 /// 01 · STANDARD — the default mode. Glass card with the ring logo,
-/// a welcome line, password entry, and the row of alt-auth pills
-/// (visually present in V1, functional only for password).
+/// a welcome line that doubles as the username editor (click to
+/// change), password entry, and the row of alt-auth pills.
+///
+/// V1.5 polish: username is bound to `GreeterState.username` and
+/// persisted across boots, so "Welcome back, …" reads as personal.
 Item {
     id: root
-    property string username: "lucas"
+    property string username: GreeterState.username
+    property bool editingUsername: false
     signal infoMessage(string text)
 
     GlassCard {
@@ -24,7 +28,6 @@ Item {
             anchors.bottomMargin: 28
             spacing: 14
 
-            // Header chip
             Text {
                 Layout.alignment: Qt.AlignHCenter
                 text: qsTr("STANDARD LOGIN")
@@ -39,11 +42,66 @@ Item {
                 size: 96
             }
 
-            Text {
+            // Welcome line — click to edit the username.
+            Item {
                 Layout.alignment: Qt.AlignHCenter
-                text: qsTr("Welcome back, ") + root.username + "."
-                color: Theme.text
-                font.pixelSize: 16
+                Layout.preferredHeight: 28
+                implicitWidth: childrenRect.width
+
+                // Static label (default).
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 4
+                    visible: !root.editingUsername
+
+                    Text {
+                        text: qsTr("Welcome back, ")
+                        color: Theme.text
+                        font.pixelSize: 16
+                    }
+                    Text {
+                        text: root.username + "."
+                        color: Theme.accent
+                        font.pixelSize: 16
+                        font.weight: Font.Bold
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            root.editingUsername = true;
+                            usernameInput.text = root.username;
+                            usernameInput.forceActiveFocus();
+                            usernameInput.selectAll();
+                        }
+                    }
+                }
+
+                // Editor (active while editingUsername).
+                Rectangle {
+                    visible: root.editingUsername
+                    anchors.centerIn: parent
+                    implicitWidth: 220
+                    implicitHeight: 28
+                    radius: 14
+                    color: Qt.rgba(1, 1, 1, 0.05)
+                    border.color: Theme.accent
+                    border.width: 1
+
+                    TextInput {
+                        id: usernameInput
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Theme.text
+                        font.pixelSize: 13
+                        clip: true
+                        onAccepted: root.commitUsername()
+                        Keys.onEscapePressed: root.editingUsername = false
+                    }
+                }
             }
 
             PasswordField {
@@ -60,7 +118,6 @@ Item {
                 onClicked: root.submit()
             }
 
-            // Alt-auth row
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 12
@@ -81,18 +138,16 @@ Item {
                     onPicked: root.infoMessage(qsTr("PIN — disponível em breve"))
                 }
             }
-
-            // Error line.
-            Text {
-                visible: GreetdClient.error.length > 0
-                Layout.fillWidth: true
-                text: GreetdClient.error
-                color: Theme.danger
-                font.pixelSize: 12
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-            }
         }
+    }
+
+    function commitUsername() {
+        const v = usernameInput.text.trim();
+        if (v.length > 0) {
+            root.username = v;
+            GreeterState.username = v;
+        }
+        root.editingUsername = false;
     }
 
     function submit() {
@@ -101,6 +156,7 @@ Item {
             pwField.text = "";
             return;
         }
+        GreeterState.persist();
         GreetdClient.beginLogin(root.username);
     }
 }

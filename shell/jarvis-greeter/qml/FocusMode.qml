@@ -7,7 +7,7 @@ import Jarvis.Greeter
 /// low battery, and users who just want to log in fast.
 Item {
     id: root
-    property string username: "jarvis"
+    property string username: GreeterState.username
 
     ColumnLayout {
         anchors.centerIn: parent
@@ -68,15 +68,6 @@ Item {
             onClicked: root.submit()
         }
 
-        Text {
-            visible: GreetdClient.error.length > 0
-            Layout.fillWidth: true
-            text: GreetdClient.error
-            color: Theme.danger
-            font.pixelSize: 12
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-        }
     }
 
     function submit() {
@@ -85,6 +76,7 @@ Item {
             pwField.text = "";
             return;
         }
+        GreeterState.persist();
         GreetdClient.beginLogin(root.username);
     }
 }

@@ -68,16 +68,37 @@ Window {
         }
     }
 
+    // ── Clock (top-right) ────────────────────────────────────────
+    Clock {
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: 28
+        anchors.rightMargin: 32
+    }
+
     // ── Login (the SwipeView lives here) ─────────────────────────
     LoginScreen {
+        id: login
         anchors.fill: parent
         anchors.topMargin: 130
         anchors.bottomMargin: 70
 
         onInfoMessage: function(text) {
-            footerHint.text = text;
-            footerHintTimer.restart();
+            toast.error = false;
+            toast.message = text;
         }
+        onErrorMessage: function(text) {
+            toast.error = true;
+            toast.message = text;
+        }
+    }
+
+    // ── Toast (above the footer) ─────────────────────────────────
+    Toast {
+        id: toast
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 60
+        anchors.horizontalCenter: parent.horizontalCenter
     }
 
     // ── Footer ───────────────────────────────────────────────────
@@ -95,23 +116,10 @@ Window {
         }
         Item { Layout.fillWidth: true }
         Text {
-            id: footerHint
-            text: ""
-            color: Theme.accent
-            font.pixelSize: 11
-        }
-        Item { Layout.preferredWidth: 24 }
-        Text {
             text: qsTr("Secure  ·  Adaptive  ·  Conscious")
             color: Theme.textDim
             font.pixelSize: 11
             font.letterSpacing: 1
         }
-    }
-
-    Timer {
-        id: footerHintTimer
-        interval: 4000
-        onTriggered: footerHint.text = ""
     }
 }

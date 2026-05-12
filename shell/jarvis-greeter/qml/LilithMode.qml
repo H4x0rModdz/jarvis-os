@@ -12,7 +12,7 @@ import Jarvis.Greeter
 /// lives behind PAM hooks added in V2/V3.
 Item {
     id: root
-    property string username: "lucas"
+    property string username: GreeterState.username
     signal infoMessage(string text)
 
     GlassCard {
@@ -111,16 +111,6 @@ Item {
                 }
             }
 
-            // Error line.
-            Text {
-                visible: GreetdClient.error.length > 0
-                Layout.fillWidth: true
-                text: GreetdClient.error
-                color: Theme.danger
-                font.pixelSize: 12
-                wrapMode: Text.WordWrap
-                horizontalAlignment: Text.AlignHCenter
-            }
         }
     }
 
@@ -130,6 +120,7 @@ Item {
             pwField.text = "";
             return;
         }
+        GreeterState.persist();
         GreetdClient.beginLogin(root.username);
     }
 }

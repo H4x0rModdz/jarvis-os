@@ -15,12 +15,33 @@ import Jarvis.Greeter
 /// design rationale.
 Item {
     id: root
-    property string username: "lucas"
+    property string username: GreeterState.username
     signal infoMessage(string text)
+    signal errorMessage(string text)
 
     focus: true
     Keys.onLeftPressed: swipe.currentIndex = Math.max(0, swipe.currentIndex - 1)
     Keys.onRightPressed: swipe.currentIndex = Math.min(2, swipe.currentIndex + 1)
+
+    // Persist the user's preferred mode so the next boot opens
+    // straight to it. GreeterState writes to QSettings on persist.
+    Connections {
+        target: swipe
+        function onCurrentIndexChanged() {
+            GreeterState.modeIndex = swipe.currentIndex;
+            GreeterState.persist();
+        }
+    }
+
+    // Bubble GreetdClient errors up to Main.qml's Toast.
+    Connections {
+        target: GreetdClient
+        function onStateChanged() {
+            if (GreetdClient.error.length > 0) {
+                root.errorMessage(GreetdClient.error);
+            }
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -33,7 +54,7 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: 560
             clip: true
-            currentIndex: 0
+            currentIndex: GreeterState.modeIndex
 
             StandardMode {
                 username: root.username

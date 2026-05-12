@@ -20,6 +20,8 @@ qt_add_executable(jarvis-greeter
     src/main.cpp
     src/greetd_client.cpp
     src/greetd_client.h
+    src/greeter_state.cpp
+    src/greeter_state.h
 )
 
 target_include_directories(jarvis-greeter PRIVATE src)
@@ -51,6 +53,8 @@ qt_add_qml_module(jarvis-greeter
         qml/components/UnlockButton.qml
         qml/components/VoiceWaveform.qml
         qml/components/SuggestionChip.qml
+        qml/components/Clock.qml
+        qml/components/Toast.qml
 )
 
 target_link_libraries(jarvis-greeter PRIVATE
