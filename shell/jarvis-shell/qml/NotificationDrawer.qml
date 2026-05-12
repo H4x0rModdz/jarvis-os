@@ -53,12 +53,49 @@ Window {
             anchors.margins: 20
             spacing: 12
 
-            Text {
-                text: qsTr("NOTIFICAÇÕES")
-                color: Theme.accent
-                font.pixelSize: 11
-                font.weight: Font.Bold
-                font.letterSpacing: 2
+            RowLayout {
+                Layout.fillWidth: true
+                Text {
+                    text: qsTr("NOTIFICAÇÕES")
+                    color: Theme.accent
+                    font.pixelSize: 11
+                    font.weight: Font.Bold
+                    font.letterSpacing: 2
+                    Layout.fillWidth: true
+                }
+                // "Clear all" — only meaningful when there's history.
+                // Daemon's HistoryChanged signal repaints the list.
+                Item {
+                    visible: NotificationsBridge.history.length > 0
+                    implicitWidth: clearLabel.implicitWidth + 16
+                    implicitHeight: 22
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 11
+                        color: clearArea.containsMouse
+                            ? Qt.rgba(1, 1, 1, 0.08)
+                            : Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Theme.border
+                        border.width: 1
+                    }
+                    Text {
+                        id: clearLabel
+                        anchors.centerIn: parent
+                        text: qsTr("LIMPAR TUDO")
+                        color: Theme.textDim
+                        font.pixelSize: 9
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1
+                    }
+                    MouseArea {
+                        id: clearArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: NotificationsBridge.clear()
+                    }
+                }
             }
 
             Text {
@@ -93,8 +130,13 @@ Window {
 
                     ColumnLayout {
                         id: rowCol
-                        anchors.fill: parent
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
                         anchors.margins: 8
+                        // Leave room on the right for the dismiss button so
+                        // long summaries don't slide under it.
+                        anchors.rightMargin: 28
                         spacing: 2
 
                         Text {
@@ -120,6 +162,35 @@ Window {
                             font.pixelSize: 12
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
+                        }
+                    }
+
+                    // Per-row dismiss. Daemon-side Dismiss(id) removes
+                    // the entry and emits HistoryChanged so the list
+                    // repaints without an explicit refresh.
+                    Item {
+                        id: dismissBtn
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: 4
+                        width: 20
+                        height: 20
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "×"
+                            color: dismissArea.containsMouse
+                                ? Theme.text
+                                : Theme.textDim
+                            font.pixelSize: 18
+                            font.weight: Font.Bold
+                        }
+                        MouseArea {
+                            id: dismissArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: NotificationsBridge.dismiss(modelData.id)
                         }
                     }
                 }

@@ -43,6 +43,21 @@ NotificationsBridge::NotificationsBridge(QObject* parent) : QObject(parent)
         QStringLiteral("/com/jarvis/Notifications"),
         QStringLiteral("com.jarvis.Notifications"),
         bus, this);
+
+    // Auto-refresh when the daemon's history mutates (Dismiss / Clear
+    // landed). Saves the shell from polling.
+    bus.connect(
+        QStringLiteral("com.jarvis.Notifications"),
+        QStringLiteral("/com/jarvis/Notifications"),
+        QStringLiteral("com.jarvis.Notifications"),
+        QStringLiteral("HistoryChanged"),
+        this,
+        SLOT(onHistoryChanged()));
+}
+
+void NotificationsBridge::onHistoryChanged()
+{
+    refreshHistory();
 }
 
 void NotificationsBridge::onPosted(uint id, const QString& app,
@@ -76,6 +91,23 @@ void NotificationsBridge::invokeAction(quint32 id, const QString& key)
         QStringLiteral("org.freedesktop.Notifications"),
         bus);
     iface.asyncCall(QStringLiteral("InvokeAction"), id, key);
+}
+
+void NotificationsBridge::dismiss(quint32 id)
+{
+    if (!m_history_iface) return;
+    qCInfo(lcNotif) << "Dismissing notification" << id;
+    m_history_iface->asyncCall(QStringLiteral("Dismiss"), id);
+    // The daemon emits HistoryChanged after the drop; the slot
+    // pulls a fresh list. No optimistic update here so we never
+    // get out of sync with the daemon's view.
+}
+
+void NotificationsBridge::clear()
+{
+    if (!m_history_iface) return;
+    qCInfo(lcNotif) << "Clearing notification history";
+    m_history_iface->asyncCall(QStringLiteral("Clear"));
 }
 
 void NotificationsBridge::refreshHistory()

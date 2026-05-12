@@ -53,6 +53,15 @@ public:
     /// on demand when the drawer opens.
     Q_INVOKABLE void refreshHistory();
 
+    /// Drop one entry from the daemon's history. UI-only — the
+    /// originating app is not notified. Used by the × on each
+    /// drawer row.
+    Q_INVOKABLE void dismiss(quint32 id);
+
+    /// Wipe the daemon's history. Used by the drawer's "Clear all"
+    /// button.
+    Q_INVOKABLE void clear();
+
 signals:
     void notificationChanged();
     void historyChanged();
@@ -61,6 +70,7 @@ private slots:
     void onPosted(uint id, const QString& app, const QString& summary,
                   const QString& body, const QString& urgency,
                   const QStringList& actions);
+    void onHistoryChanged();
 
 private:
     QDBusInterface* m_history_iface = nullptr;

@@ -228,6 +228,52 @@ impl History {
         };
         json!(snapshot).to_string()
     }
+
+    /// Drop one entry from the history buffer. Called by the shell
+    /// when the user clicks the × on a row in the drawer. Distinct
+    /// from FreeDesktop's `CloseNotification` because that signals
+    /// the originating app (reason=3) — Dismiss is purely a UI
+    /// concern, the app doesn't need to know.
+    async fn dismiss(
+        &self,
+        id: u32,
+        #[zbus(signal_context)] ctx: SignalContext<'_>,
+    ) -> bool {
+        let removed = {
+            let mut h = self.history.lock().await;
+            let before = h.len();
+            h.retain(|e| e.id != id);
+            before != h.len()
+        };
+        if removed {
+            if let Err(e) = Self::history_changed(&ctx).await {
+                tracing::warn!("HistoryChanged emit failed: {e}");
+            }
+        }
+        removed
+    }
+
+    /// Wipe every entry. Triggered by the drawer's "Clear all"
+    /// button — same UI-only semantics as Dismiss.
+    async fn clear(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> u32 {
+        let cleared = {
+            let mut h = self.history.lock().await;
+            let n = h.len() as u32;
+            h.clear();
+            n
+        };
+        if cleared > 0 {
+            if let Err(e) = Self::history_changed(&ctx).await {
+                tracing::warn!("HistoryChanged emit failed: {e}");
+            }
+        }
+        cleared
+    }
+
+    /// Fires after Dismiss / Clear so the shell knows to re-pull
+    /// the list rather than polling.
+    #[zbus(signal)]
+    async fn history_changed(ctx: &SignalContext<'_>) -> zbus::Result<()>;
 }
 
 #[tokio::main]
