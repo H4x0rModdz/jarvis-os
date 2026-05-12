@@ -49,7 +49,7 @@ no-op.
 | Namespace | Actions | Status |
 |---|---|---|
 | `app.*`        | `open`, `close`                                      | ✅ working (xdg-open / pkill) |
-| `app.*`        | `install`, `uninstall`                               | ⏸ stub — needs compatibility layer |
+| `app.*`        | `install`, `uninstall`                               | ✅ working (Flatpak/Flathub, `--user` install) |
 | `file.*`       | `move`, `copy`, `delete`                             | ✅ working (`gio trash` by default; `permanent: true` skips the trash) |
 | `window.*`     | `focus`, `minimize`, `maximize`, `close`, `move`, `resize`, `snap_left`, `snap_right` | ⏸ stub — the Jarvis compositor (Phase 3) will register real handlers |
 | `workspace.*`  | `switch`, `move_window`, `create`                    | ⏸ stub — same as above |
@@ -95,7 +95,5 @@ the system doesn't brick itself when the daemon hiccups. See
 - Window and workspace actions return `UNAVAILABLE` until the Jarvis
   compositor lands and registers its own handlers (the registry supports
   per-handler override).
-- `app.install` / `app.uninstall` are stubbed pending the compatibility
-  layer (Wine/Proton + Flatpak bridge).
 - Async dispatch (fire-and-forget with `ActionCompleted` signal) is
   designed in the schema but not implemented.

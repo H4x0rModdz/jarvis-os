@@ -150,7 +150,15 @@ RUN dnf -y install \
         pulseaudio-utils \
         alsa-lib \
         wine \
+        flatpak \
     && dnf clean all
+
+# Flathub remote system-wide so `flatpak install --user flathub <id>`
+# resolves on first call. Adding it at image build time keeps the
+# first-boot path zero-config — Lilith can install Firefox before
+# the user has typed anything else.
+RUN flatpak remote-add --if-not-exists flathub \
+        https://flathub.org/repo/flathub.flatpakrepo
 
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.

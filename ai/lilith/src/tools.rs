@@ -48,20 +48,32 @@ pub fn all_tools() -> Vec<Tool> {
         },
         Tool {
             action: "app.install",
-            description: "Install an application package.",
+            description: "Install a Linux app via Flatpak/Flathub. The user must confirm — \
+                          installing software is a privileged action. `app_id` is the \
+                          Flatpak identifier (e.g. 'org.mozilla.firefox', 'org.signal.Signal').",
             schema: json!({
                 "type": "object",
-                "properties": { "package": { "type": "string" } },
-                "required": ["package"]
+                "properties": {
+                    "app_id": {
+                        "type": "string",
+                        "description": "Flatpak app id (reverse-DNS form, e.g. org.mozilla.firefox)"
+                    }
+                },
+                "required": ["app_id"]
             }),
         },
         Tool {
             action: "app.uninstall",
-            description: "Uninstall an application package.",
+            description: "Uninstall a Flatpak app by its app id.",
             schema: json!({
                 "type": "object",
-                "properties": { "package": { "type": "string" } },
-                "required": ["package"]
+                "properties": {
+                    "app_id": {
+                        "type": "string",
+                        "description": "Flatpak app id (reverse-DNS form)"
+                    }
+                },
+                "required": ["app_id"]
             }),
         },
         // ── files ───────────────────────────────────────────────────────
