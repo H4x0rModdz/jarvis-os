@@ -2,87 +2,93 @@
 
 ## Purpose
 
-The Jarvis OS desktop shell — a Qt6/QML application that paints the bar,
-launcher, control center, and on-screen overlays. Lives in user space, talks
-to Lilith via DBus, and (Phase 1b onward) anchors itself to screen edges via
-the `wlr-layer-shell` Wayland protocol.
+The Jarvis OS desktop shell — a Qt6/QML application that paints the
+always-present bar at the bottom of the screen, the launcher overlay,
+the permission approval dialog, and the first-boot updater splash.
+Lives in user space, talks to the system daemons via DBus, anchors
+itself to screen edges via the `wlr-layer-shell` Wayland protocol.
 
 ## Boundaries
 
-- jarvis-shell **does not** execute system effects directly. User actions are
-  forwarded to Lilith (`com.jarvis.Lilith.Command(...)`) or to the Action Bus
-  for direct calls; never to xdg-open/notify-send/etc. ourselves.
-- jarvis-shell **does not** manage windows — the compositor does. We *display*
-  window state but never call into Smithay.
-- jarvis-shell **must** degrade gracefully when Lilith is unreachable: the
-  status LED turns red, but the UI keeps working (clock, settings panel).
+- jarvis-shell **does not** execute system effects directly. User
+  actions go through `com.jarvis.Lilith.Command` (Lilith path) or
+  `com.jarvis.ActionBus.Dispatch` (direct path — e.g. the launcher
+  clicking an app tile). We never shell out to xdg-open / notify-send /
+  pactl ourselves; those are Action Bus handler concerns.
+- jarvis-shell **does not** manage windows. The compositor does. We
+  display window state via DBus events but never call into Wayland
+  ourselves.
+- jarvis-shell **must** degrade gracefully when any daemon is offline:
+  the Lilith status LED turns red, the bar still renders, the clock
+  still ticks, the launcher still opens (it dispatches via the Action
+  Bus directly, not Lilith).
 
-## Phase 1a (done)
+## Components
 
-- Qt6 + QML application that opens a normal toplevel window.
-- A 64 px translucent bar at the bottom edge (manually centered).
-- Clock (HH:MM:SS) on the left, AI input field in the center, status LED on
-  the right.
-- Pressing Enter on the input sends `com.jarvis.Lilith.Command(text)`. The
-  parsed reply appears in a fading popup above the bar.
-- Validates the entire C++ → Qt → DBus → Lilith → Action Bus chain.
+| QML / C++ | Role |
+|---|---|
+| `qml/Main.qml` | Root layer-shell window holding bar, reply popup, and sibling dialogs. |
+| `qml/Bar.qml` | The bar surface — hamburger, clock, Lilith text input, status LED. |
+| `qml/Launcher.qml` | Overlay with search + 4-column app grid backed by `DesktopAppsModel`. |
+| `qml/ApprovalDialog.qml` | Modal-ish window bound to `PermissionBridge.hasPending`. |
+| `qml/UpdaterSplash.qml` | First-boot splash bound to `UpdaterBridge.active`. |
+| `qml/Theme.qml` | Singleton design tokens (colors, radii, animation durations). |
+| `src/lilith_bridge.{h,cpp}` | `com.jarvis.Lilith.Command` + `Recall`. |
+| `src/permission_bridge.{h,cpp}` | Subscribes to `ApprovalRequested`, exposes pending state + `ResolveApproval`. |
+| `src/action_bus_bridge.{h,cpp}` | Direct `Dispatch` for shell-internal callers (launcher). |
+| `src/updater_bridge.{h,cpp}` | Subscribes to updater `Progress` + `Completed` signals. |
+| `src/desktop_apps_model.{h,cpp}` | `QAbstractListModel` over XDG `applications/` dirs. |
 
-## Phase 1b (done — wlr-layer-shell anchoring)
-
-- Optionally links against [LayerShellQt][1] (KDE's Qt6 binding for the
-  `wlr-layer-shell` protocol). When the library is found at configure time,
-  the shell anchors itself to the **bottom** of every output, sits on the
-  **Top** layer, and reserves its full height as **exclusive zone** so other
-  windows never overlap.
-- `LayerShellQt::Shell::useLayerShell()` is called before `QGuiApplication`
-  so Qt's Wayland plumbing picks the layer-shell integration plugin at
-  startup. If the compositor doesn't speak the protocol (e.g. plain
-  GNOME/Mutter or WSLg's Weston), Qt falls back to xdg-shell and the bar
-  appears as a regular floating window — Phase 1a behavior, no crash.
-- The `LayerShellQt_FOUND` CMake conditional keeps this a non-mandatory
-  dependency. CI and slim builds work without it.
-- KDE's LayerShellQt requires Qt 6.6+; Ubuntu 24.04 ships only 6.4.2, so we
-  install Qt 6.8.3 via `aqtinstall` into `~/Qt/6.8.3/gcc_64` and build
-  LayerShellQt v6.0.0 against it (see `tools/dev/run-shell-labwc.sh`).
-
-[1]: https://invent.kde.org/plasma/layer-shell-qt
-
-[1]: https://invent.kde.org/plasma/layer-shell-qt
-
-## Out of scope (later phases)
-
-- Launcher overlay (search & app grid)
-- Notifications drawer
-- Control center / settings panel
-- Lock screen
-- Multi-output layout
-
-## Build
-
-Out-of-tree build with CMake. Qt 6.4+ required (Ubuntu 24.04 ships 6.4.2):
-
-```bash
-cmake -S shell/jarvis-shell -B /tmp/jarvis-shell-build
-cmake --build /tmp/jarvis-shell-build -j
-/tmp/jarvis-shell-build/jarvis-shell
-```
-
-Run requirements: a working Wayland or X11 display. Inside WSL2, WSLg
-provides this transparently — no `DISPLAY` setup needed.
-
-## DBus surface
+## DBus Surface
 
 This module is a *client*, not a server. It consumes:
 
 ```
-com.jarvis.Lilith.Command(string) -> string    // primary input path
-com.jarvis.Lilith.Recall(string)  -> string    // for inline fact lookup
+com.jarvis.Lilith.Command(text)         primary input path (bar)
+com.jarvis.Lilith.Recall(key)           inline fact lookup
+com.jarvis.ActionBus.Dispatch(json)     direct dispatch (launcher tile click)
+com.jarvis.PermissionSystem
+  signal ApprovalRequested(...)         drives ApprovalDialog
+  method ResolveApproval(id, decision)  user button press
+com.jarvis.Updater
+  signal Progress(stage, percent, msg)  drives UpdaterSplash
+  signal Completed(success, message)    dismiss / failure state
 ```
+
+## Build
+
+Out-of-tree CMake. Qt 6.5+ required (the QML singleton mechanism Theme
+depends on misbehaves under the `REQUIRES 6.4` compat mode — see ADR
+notes inside the commit that fixed it). On Fedora 42 in the ISO build
+the Qt is 6.10; on Ubuntu 24.04 you'll need to install Qt 6.5+ via
+`aqtinstall` (`tools/dev/run-shell-labwc.sh` documents the path).
+
+```bash
+cmake -S shell/jarvis-shell -B /tmp/jarvis-shell-build \
+      -DCMAKE_BUILD_TYPE=Release
+cmake --build /tmp/jarvis-shell-build -j
+/tmp/jarvis-shell-build/jarvis-shell
+```
+
+Run requirements: a working Wayland or X11 display. Under WSL2 + WSLg
+the X11 path is fine for development. The layer-shell anchor only kicks
+in if `LayerShellQt` was found at configure time; otherwise the shell
+falls back to a regular xdg-shell toplevel (same UI, just floats).
 
 ## Failure modes
 
 | Failure | Behavior |
 |---|---|
-| Lilith service offline | Status LED red, input disabled with tooltip |
-| DBus session bus missing | Window opens with an error banner, no input |
-| Command timeout (> 30 s) | Show timeout in reply popup, input re-enabled |
+| Lilith service offline | Status LED red, bar still accepts input but `Command` errors are surfaced in the reply popup. |
+| Permission daemon offline | `ApprovalDialog` never opens; dangerous-scope dispatches fail via the Action Bus's local fallback. |
+| Updater daemon offline | `UpdaterSplash` never opens; if the model is missing, Lilith stays offline and the user is on their own. |
+| DBus session bus missing | The shell logs an error and runs with empty bridges — clock + launcher still work. |
+| Command timeout (> 30 s) | Reply popup shows the timeout, input re-enabled. |
+
+## Out of scope (later phases)
+
+- Notifications drawer (Phase 2)
+- Control center / settings panel (Phase 2)
+- Lock screen (Phase 2)
+- Multi-output layout polish (Phase 3, alongside the custom compositor)
+- Glassmorphism shader pass (Phase 3 — requires our compositor for proper backdrop blur)

@@ -1,58 +1,101 @@
-# Module: action-bus
+# Action Bus
 
 ## Purpose
 
-The Jarvis Action Bus (JAB) is the single orchestration layer for all system interactions.
-Every operation — from Lilith AI commands to user gestures to automation scripts — dispatches
-through the bus. It is the contract layer between callers and system capabilities.
+The Jarvis Action Bus (JAB) is the single orchestration layer for every
+system interaction on Jarvis OS. Lilith, the shell, automations, and any
+future SDK app dispatch through here — there is no other supported path
+to "do something" on the system.
 
-## Exposes
+## Boundaries
 
-### DBus Interface
-- `com.jarvis.ActionBus` at `/com/jarvis/ActionBus`
-- Method: `Dispatch(action_json: String) -> String` — synchronous dispatch
-- Method: `ListActions() -> Array<String>` — introspection
-- Signal: `ActionCompleted(job_id: String, result_json: String)` — async completion
+- The bus **dispatches** — it does not implement domain logic. Each
+  action's actual work lives in its handler module (`handlers/<ns>.rs`).
+- The bus **does not** decide permissions on its own. It calls the
+  `Permission System` daemon before every dispatch and obeys the verdict.
+- Apps and Lilith **do not** call DBus services directly to bypass the
+  bus. Doing so skips permission gating and audit — every dispatch is
+  logged to `~/.jarvis/logs/action-bus.log` (JSON Lines).
 
-### Action Namespaces
-- `app.*` — application lifecycle (open, close, install, uninstall)
-- `file.*` — file operations (move, copy, delete)
-- `window.*` — window management (focus, minimize, maximize, close)
-- `workspace.*` — virtual desktop management
-- `system.*` — system operations (notify, set_setting)
-- `browser.*` — open URLs (http/https/mailto only) via xdg-open
-- `clipboard.*` — read/write text via wl-clipboard with xclip fallback
-- `screenshot.*` — capture full screen or region via grim/scrot
-- `audio.*` — output volume + mute via pactl
-- `voice.*` — voice pipeline control (planned)
+## Interface
 
-## Depends On
+```
+DBus  com.jarvis.ActionBus  at  /com/jarvis/ActionBus
 
-- `permission-system` — for permission scope validation (stubbed until built)
-- `audit-log` — JSON Lines file written to `~/.jarvis/logs/action-bus.log`
+  Dispatch(action_json: string) -> string   // JSON response
+  ListActions() -> array<string>            // capability discovery
+```
 
-## Permissions Required
+`action_json` is the standard request envelope:
 
-The Action Bus itself requires no permissions. It enforces permissions on behalf of callers.
+```json
+{
+  "action": "browser.open",
+  "params": { "url": "https://example.com" },
+  "caller": { "type": "lilith", "id": "lilith" }
+}
+```
 
-## AI Integration Notes
+The response always includes `action`, `status`, `duration_ms`, and
+either `result` (success) or `error` (failure). See `src/action.rs` for
+the exact shape.
 
-Lilith dispatches all system actions through this bus. Lilith cannot call system APIs directly.
-Every Lilith action must:
-1. Use a registered action name
-2. Pass `"caller": { "type": "lilith" }` in the request
-3. Receive approval from the permission system before execution
+## Action Catalog
+
+28 actions registered. The ones backed by real handlers are usable from
+day one; the stubs return `UNAVAILABLE` so callers don't silently
+no-op.
+
+| Namespace | Actions | Status |
+|---|---|---|
+| `app.*`        | `open`, `close`                                      | ✅ working (xdg-open / pkill) |
+| `app.*`        | `install`, `uninstall`                               | ⏸ stub — needs compatibility layer |
+| `file.*`       | `move`, `copy`, `delete`                             | ✅ working (`gio trash` by default; `permanent: true` skips the trash) |
+| `window.*`     | `focus`, `minimize`, `maximize`, `close`, `move`, `resize`, `snap_left`, `snap_right` | ⏸ stub — the Jarvis compositor (Phase 3) will register real handlers |
+| `workspace.*`  | `switch`, `move_window`, `create`                    | ⏸ stub — same as above |
+| `system.*`     | `notify`                                             | ✅ working (notify-send) |
+| `system.*`     | `set_setting`, `get_setting`                         | ⏸ stub — settings daemon not built |
+| `browser.*`    | `open`                                               | ✅ working (xdg-open, http/https/mailto only) |
+| `clipboard.*`  | `set`, `get`                                         | ✅ working (wl-clipboard with xclip fallback) |
+| `screenshot.*` | `capture`                                            | ✅ working (grim/scrot, region mode via slurp) |
+| `audio.*`      | `set_volume`, `adjust_volume`, `toggle_mute`         | ✅ working (pactl → PipeWire/PulseAudio) |
+| `voice.*`      | —                                                    | ⏸ planned (Phase 2 voice pipeline) |
+
+## Permission Flow
+
+```
+caller → Dispatch(request)
+            ↓
+       Permission.Check(caller, scope, action)
+            ↓ approved
+       handler.run(params)
+            ↓
+       audit log
+            ↓
+       response to caller
+```
+
+If the Permission daemon is unreachable, the bus falls back to a local
+deny-by-default policy on dangerous scopes; safe scopes stay allowed so
+the system doesn't brick itself when the daemon hiccups. See
+`src/permission.rs`.
 
 ## Performance Characteristics
 
-- Startup time: < 50ms
-- Dispatch overhead: < 1ms per action (excluding handler execution)
-- Memory footprint: < 8MB idle
-- Latency-sensitive: yes — every user/AI interaction passes through here
+- Startup time: < 50 ms
+- Dispatch overhead: ~1 ms for the bus itself (the handler is whatever
+  the underlying shell-out costs)
+- Memory: < 8 MB idle
+- Latency-sensitive: yes — sits in every user/AI interaction path
 
 ## Known Limitations
 
-- Permission system is stubbed (always allows) until `permission-system` module is built
-- Window actions are stubbed until `compositor` module is built
-- `app.install` is stubbed until `compatibility` layer is built
-- Async dispatch (fire-and-forget) not yet implemented
+- Window and workspace actions return `UNAVAILABLE` until the Jarvis
+  compositor lands and registers its own handlers (the registry supports
+  per-handler override).
+- `app.install` / `app.uninstall` are stubbed pending the compatibility
+  layer (Wine/Proton + Flatpak bridge).
+- `system.set_setting` / `system.get_setting` are stubbed pending the
+  settings daemon.
+- Async dispatch (fire-and-forget with `ActionCompleted` signal) is
+  designed in the schema but not implemented.
