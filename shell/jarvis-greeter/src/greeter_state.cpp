@@ -12,8 +12,12 @@ GreeterState::GreeterState(QObject* parent)
                  QStringLiteral("Jarvis"),
                  QStringLiteral("jarvis-greeter"))
 {
-    m_username = m_settings.value(kKeyUsername,
-                                  QStringLiteral(kDefaultUsername)).toString();
+    // QStringLiteral is a compile-time macro and can't wrap a runtime
+    // const char* — use QString::fromLatin1 instead so kDefaultUsername
+    // stays a single source of truth.
+    m_username = m_settings
+                     .value(kKeyUsername, QString::fromLatin1(kDefaultUsername))
+                     .toString();
     m_modeIndex = m_settings.value(kKeyMode, 0).toInt();
     // Clamp — the mode count is 3 in V1; if the file came from a future
     // build with more modes we shouldn't crash, just fall back.
