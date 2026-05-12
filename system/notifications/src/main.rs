@@ -39,6 +39,11 @@ struct Entry {
     body: String,
     urgency: String,
     posted_at: String,
+    /// FreeDesktop `actions` array, alternating key + display label.
+    /// V1 ignored this; V2 stores it so the shell can render buttons
+    /// and call `InvokeAction` back when the user clicks one.
+    #[serde(default)]
+    actions: Vec<String>,
 }
 
 struct Service {
@@ -51,8 +56,9 @@ struct Service {
 
 #[interface(name = "org.freedesktop.Notifications")]
 impl Service {
-    /// FreeDesktop spec entry point. Lots of params we don't honour yet
-    /// (actions, image data) — see ADR 0010's V1 vs V2 table.
+    /// FreeDesktop spec entry point. V2 honours `actions` (key/label
+    /// pairs the shell renders as buttons) and emits `ActionInvoked`
+    /// when the user clicks one. Image hints still deferred.
     #[allow(clippy::too_many_arguments)]
     async fn notify(
         &self,
@@ -61,7 +67,7 @@ impl Service {
         _app_icon: &str,
         summary: &str,
         body: &str,
-        _actions: Vec<String>,
+        actions: Vec<String>,
         hints: HashMap<String, ZValue<'_>>,
         _expire_timeout: i32,
         #[zbus(signal_context)] ctx: SignalContext<'_>,
@@ -87,6 +93,7 @@ impl Service {
             body: body.to_string(),
             urgency: urgency.to_string(),
             posted_at: Utc::now().to_rfc3339(),
+            actions: actions.clone(),
         };
 
         // Keep history bounded.
@@ -104,12 +111,29 @@ impl Service {
 
         tracing::info!(id, app = %app_name, summary, urgency, "Notification posted");
 
-        if let Err(e) = Self::notification_posted(&ctx, id, app_name, summary, body, urgency).await
+        if let Err(e) =
+            Self::notification_posted(&ctx, id, app_name, summary, body, urgency, &actions).await
         {
             tracing::warn!("NotificationPosted emit failed: {e}");
         }
 
         id
+    }
+
+    /// Called by the shell when the user clicks one of the action
+    /// buttons on a toast. Re-emits as the FreeDesktop spec's
+    /// `ActionInvoked` signal so the originating app sees its
+    /// callback fire.
+    async fn invoke_action(
+        &self,
+        id: u32,
+        action_key: &str,
+        #[zbus(signal_context)] ctx: SignalContext<'_>,
+    ) {
+        tracing::info!(id, action_key, "Action invoked");
+        if let Err(e) = Self::action_invoked(&ctx, id, action_key).await {
+            tracing::warn!("ActionInvoked emit failed: {e}");
+        }
     }
 
     async fn close_notification(
@@ -132,10 +156,15 @@ impl Service {
     }
 
     /// What this server supports. `body-markup` lets apps put basic
-    /// HTML-ish formatting in the body; we render it as plain text in
-    /// V1 but report support so they don't downgrade.
+    /// HTML-ish formatting in the body; `actions` enables the button
+    /// row added in V2.
     async fn get_capabilities(&self) -> Vec<String> {
-        vec!["body".into(), "body-markup".into(), "persistence".into()]
+        vec![
+            "body".into(),
+            "body-markup".into(),
+            "persistence".into(),
+            "actions".into(),
+        ]
     }
 
     async fn get_server_information(&self) -> (String, String, String, String) {
@@ -151,8 +180,17 @@ impl Service {
     async fn notification_closed(ctx: &SignalContext<'_>, id: u32, reason: u32)
         -> zbus::Result<()>;
 
-    /// Re-emitted Notify() — this is what the shell subscribes to so it
-    /// doesn't have to implement the spec itself.
+    /// FreeDesktop spec signal — fires when the user clicks an action
+    /// button on the toast. The originating app receives this and
+    /// dispatches whatever the action key was supposed to trigger.
+    #[zbus(signal)]
+    async fn action_invoked(ctx: &SignalContext<'_>, id: u32, action_key: &str)
+        -> zbus::Result<()>;
+
+    /// Re-emitted Notify() — this is what the shell subscribes to so
+    /// it doesn't have to implement the spec itself. V2 adds the
+    /// `actions` slice so the toast can render its button row without
+    /// a separate roundtrip.
     #[zbus(signal)]
     async fn notification_posted(
         ctx: &SignalContext<'_>,
@@ -161,6 +199,7 @@ impl Service {
         summary: &str,
         body: &str,
         urgency: &str,
+        actions: &[String],
     ) -> zbus::Result<()>;
 }
 
@@ -250,6 +289,7 @@ mod tests {
                 body: "".into(),
                 urgency: "normal".into(),
                 posted_at: "".into(),
+                actions: vec![],
             })
             .collect();
         let buf = Arc::new(AsyncMutex::new(h));
@@ -267,6 +307,7 @@ mod tests {
                 body: "".into(),
                 urgency: "normal".into(),
                 posted_at: "".into(),
+                actions: vec![],
             });
         }
 

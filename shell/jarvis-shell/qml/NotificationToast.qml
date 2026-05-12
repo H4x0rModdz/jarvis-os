@@ -72,7 +72,6 @@ Window {
             anchors.margins: 14
             spacing: 4
 
-            // App chip
             Text {
                 text: NotificationsBridge.currentApp.length > 0
                     ? NotificationsBridge.currentApp.toUpperCase()
@@ -82,7 +81,6 @@ Window {
                 font.weight: Font.Bold
             }
 
-            // Summary
             Text {
                 visible: NotificationsBridge.currentSummary.length > 0
                 text: NotificationsBridge.currentSummary
@@ -93,7 +91,6 @@ Window {
                 Layout.fillWidth: true
             }
 
-            // Body
             Text {
                 visible: NotificationsBridge.currentBody.length > 0
                 text: NotificationsBridge.currentBody
@@ -101,6 +98,61 @@ Window {
                 font.pixelSize: 13
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
+            }
+
+            // V2 — action buttons. The daemon hands us a flat
+            // `key, label, key, label, …` list. Pair them up at
+            // render time. Clicking sends the user's choice back
+            // through NotificationsBridge.invokeAction.
+            Flow {
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                spacing: 6
+                visible: NotificationsBridge.currentActions.length >= 2
+
+                Repeater {
+                    model: Math.floor(NotificationsBridge.currentActions.length / 2)
+
+                    Rectangle {
+                        readonly property string actionKey:
+                            NotificationsBridge.currentActions[index * 2]
+                        readonly property string actionLabel:
+                            NotificationsBridge.currentActions[index * 2 + 1]
+
+                        height: 26
+                        width: btnText.implicitWidth + 22
+                        radius: 13
+                        color: btnArea.containsMouse
+                            ? Theme.accent
+                            : Qt.rgba(0.49, 0.36, 1.0, 0.18)
+                        border.color: Theme.accent
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                        Text {
+                            id: btnText
+                            anchors.centerIn: parent
+                            text: parent.actionLabel
+                            color: Theme.text
+                            font.pixelSize: 11
+                            font.weight: Font.Bold
+                        }
+
+                        MouseArea {
+                            id: btnArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                NotificationsBridge.invokeAction(
+                                    NotificationsBridge.currentId,
+                                    parent.actionKey);
+                                root.visible = false;
+                                hideTimer.stop();
+                            }
+                        }
+                    }
+                }
             }
         }
 

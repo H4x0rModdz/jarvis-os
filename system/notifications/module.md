@@ -72,10 +72,10 @@ restart, deliberately — see ADR 0010.
 
 ## V1 vs V2
 
-| Item | V1 (this) | V2 |
-|---|---|---|
-| Storage | RAM ring buffer | + SQLite via the Settings daemon |
-| Actions (buttons) | Ignored | Full `ActionInvoked` support |
-| Hints honoured | `urgency` | + `image-data`, `category`, `transient`, `desktop-entry` |
-| Drawer UI | None — only toasts | History list in the shell |
-| Action Bus | `system.notify` posts | + `notifications.read`, `notifications.dismiss` |
+| Item | V1 | V2 (current) | V3 |
+|---|---|---|---|
+| Storage | RAM ring buffer | RAM ring buffer | + SQLite via the Settings daemon |
+| Actions (buttons) | Ignored | ✅ Full `ActionInvoked` round-trip | — |
+| Hints honoured | `urgency` | `urgency` | + `image-data`, `category`, `transient`, `desktop-entry` |
+| Drawer UI | None — only toasts | ✅ History list in the shell | + dismiss/clear, group by app |
+| Action Bus | `system.notify` posts | `system.notify` posts | + `notifications.read`, `notifications.dismiss` |

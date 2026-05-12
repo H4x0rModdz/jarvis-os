@@ -202,6 +202,7 @@ Window {
         height: Theme.barHeight
         onLauncherRequested: launcher.visible ? launcher.close() : launcher.open()
         onSettingsRequested: settingsPanel.requestOpen()
+        onNotificationsRequested: notificationDrawer.requestOpen()
     }
 
     Launcher {
@@ -272,4 +273,7 @@ Window {
     // bottom-right of the primary output, 5s auto-hide, click to
     // dismiss early.
     NotificationToast {}
+
+    // History drawer — opens when the user clicks the bell on the bar.
+    NotificationDrawer { id: notificationDrawer }
 }
