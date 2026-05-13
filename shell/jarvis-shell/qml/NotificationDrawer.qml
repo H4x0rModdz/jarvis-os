@@ -40,13 +40,9 @@ Window {
         if (!active && visible) root.visible = false;
     }
 
-    Rectangle {
+    GlassPanel {
         anchors.fill: parent
         anchors.margins: 8
-        radius: Theme.radius
-        color: Theme.surfaceBright
-        border.color: Theme.border
-        border.width: 1
 
         ColumnLayout {
             anchors.fill: parent

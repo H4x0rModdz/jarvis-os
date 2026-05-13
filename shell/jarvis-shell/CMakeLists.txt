@@ -80,6 +80,7 @@ qt_add_qml_module(jarvis-shell
         qml/NotificationToast.qml
         qml/NotificationDrawer.qml
         qml/BarBellButton.qml
+        qml/GlassPanel.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE

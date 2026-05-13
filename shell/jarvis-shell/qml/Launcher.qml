@@ -70,24 +70,12 @@ Window {
 
     DesktopAppsModel { id: apps }
 
-    Rectangle {
+    GlassPanel {
         anchors.fill: parent
         anchors.margins: 8
-        radius: Theme.radius
-        color: Theme.surfaceBright
-        border.color: Theme.border
-        border.width: 1
-
-        // Soft top highlight.
-        Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.margins: 1
-            height: 1
-            color: Qt.rgba(1, 1, 1, 0.06)
-            radius: Theme.radius
-        }
+        // accentGlow lights the border when typing — visual cue that
+        // the launcher is the focused surface.
+        accentGlow: search.activeFocus ? 1.0 : 0.0
 
         ColumnLayout {
             anchors.fill: parent

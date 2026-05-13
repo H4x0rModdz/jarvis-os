@@ -51,6 +51,12 @@ The UI should look like it belongs in 2030, but remain practical for 8-hour work
 - Background opacity: 0.6–0.85, never fully transparent
 - Always test blur on low-end GPU before shipping
 - Glass should be optional/fallback on systems without GPU acceleration
+- Canonical glass surface: `qml/GlassPanel.qml`. New panels start from
+  it instead of stacking a fresh `Rectangle + top highlight` recipe.
+  Real backdrop-blur (desktop visible through panels) needs the
+  Jarvis Smithay compositor — labwc can't expose a blur protocol, so
+  GlassPanel keeps the colour stack opaque enough that "no real
+  blur" reads as deliberate flat-glass, not as a missing feature.
 
 ## Color & Depth
 
