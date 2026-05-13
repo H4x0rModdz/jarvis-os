@@ -91,11 +91,35 @@ visual transition login → desktop → lock stays continuous.
 ✅ Clock top-right, locale-aware
 ✅ Toast for errors / info (replaces inline per-mode error rows)
 
+## Avatar Pipeline (V1.6)
+
+`qml/components/AnimeAvatar.qml` is the slot. Behaviour:
+
+- If `qrc:/avatar/lilith-{idle,talking,listening}.png` is compiled
+  into the binary, the avatar shows the right sprite per state.
+- If not (V1 reality — the Lilith character art is V2 work), the
+  procedural fallback renders the same vertical glow column with a
+  breathing animation tuned to the state.
+
+Drop-in contract for the real assets: 256 × 360 PNG portraits with
+transparent backgrounds, single subject centred, named exactly:
+
+```
+qrc:/avatar/lilith-idle.png
+qrc:/avatar/lilith-talking.png
+qrc:/avatar/lilith-listening.png
+```
+
+Adding them: extend the `qt_add_resources` block in
+`CMakeLists.txt` with a new `PREFIX "/avatar"` group pointing at the
+PNG files. The layout doesn't re-flow when sprites arrive — both
+paths render at 140 × 180 inside the greeter card.
+
 ## True V2 (deferred — needs new infrastructure)
 
 | Item | Blocked on |
 |---|---|
-| Anime avatar real | Asset pipeline + licensing for the Lilith character |
+| Anime avatar real | Asset pipeline + licensing for the Lilith character. Infrastructure for it ships in V1.6 (see above). |
 | Voice / Face / PIN functional | PAM hooks (custom `pam_*.so` modules) |
 | Audio-reactive waveform | cpal capture running as the `greeter` user (audio device permission) |
 | Adaptive mode switching | Greeter pre-session can't reach the Settings daemon (it isn't up yet) |

@@ -38,32 +38,17 @@ Item {
                 font.letterSpacing: 2
             }
 
-            // Avatar placeholder — a tall column with accent glow.
-            // Real anime character lands in V2 with an asset
-            // pipeline + licensing story. The composition keeps the
-            // proportions of the template image (vertical figure).
-            Item {
+            // Avatar slot. AnimeAvatar swaps between PNG sprites
+            // when the qrc:/avatar/ assets are present, falls back to
+            // the procedural glow column when they aren't (V1 reality
+            // — real Lilith art is V2 work). The state drives both
+            // the sprite choice and the procedural pulse rate, so the
+            // composition reads as "alive" either way.
+            AnimeAvatar {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: 140
                 Layout.preferredHeight: 180
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.width * 0.7
-                    height: parent.height
-                    radius: width / 2
-                    color: Qt.rgba(0.49, 0.36, 1.0, 0.18)
-                    border.color: Theme.accent
-                    border.width: 1
-                }
-                Text {
-                    anchors.centerIn: parent
-                    text: "Lilith"
-                    color: Theme.text
-                    font.pixelSize: 20
-                    font.weight: Font.Bold
-                    font.italic: true
-                }
+                state: pwField.text.length > 0 ? "listening" : "idle"
             }
 
             Text {

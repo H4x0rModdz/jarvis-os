@@ -55,6 +55,7 @@ qt_add_qml_module(jarvis-greeter
         qml/components/SuggestionChip.qml
         qml/components/Clock.qml
         qml/components/Toast.qml
+        qml/components/AnimeAvatar.qml
 )
 
 target_link_libraries(jarvis-greeter PRIVATE
