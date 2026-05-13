@@ -217,6 +217,51 @@ Window {
                 }
             }
 
+            // ── Row: Idle auto-lock timeout ──────────────────────────
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                Text {
+                    text: qsTr("Bloqueio automático por inatividade")
+                    color: Theme.text
+                    font.pixelSize: 14
+                }
+                Text {
+                    text: qsTr("Segundos sem atividade antes do bloqueio. 0 desativa.")
+                    color: Theme.textDim
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 36
+                    radius: Theme.radius - 4
+                    color: Qt.rgba(1, 1, 1, 0.05)
+                    border.color: idleInput.activeFocus ? Theme.accent : Theme.border
+                    border.width: 1
+                    Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+                    TextInput {
+                        id: idleInput
+                        anchors.fill: parent
+                        anchors.leftMargin: 12
+                        anchors.rightMargin: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: Theme.text
+                        font.pixelSize: 14
+                        clip: true
+                        // Treat invalid input as the default (300s) on commit.
+                        text: (root._settingsTick, String(Math.round(SettingsBridge.getNumber("lock.idle_timeout_seconds", 300))))
+                        validator: IntValidator { bottom: 0; top: 3600 }
+                        onEditingFinished: {
+                            const v = parseInt(text);
+                            const clamped = isNaN(v) ? 300 : Math.max(0, Math.min(3600, v));
+                            SettingsBridge.setNumber("lock.idle_timeout_seconds", clamped);
+                        }
+                    }
+                }
+            }
+
             // ── Row: STT language ─────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true

@@ -163,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
         child: Arc::new(AsyncMutex::new(None)),
     };
 
-    let _conn = connection::Builder::session()?
+    let conn = connection::Builder::session()?
         .name("com.jarvis.Lock")?
         .serve_at("/com/jarvis/Lock", service)?
         .build()
@@ -171,7 +171,111 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Lock ready on com.jarvis.Lock");
 
+    // Auto-lock supervisor. The old labwc autostart used a hardcoded
+    // swayidle invocation; now the lock daemon owns it and respawns
+    // swayidle whenever `lock.idle_timeout_seconds` changes in
+    // com.jarvis.Settings. Off when timeout == 0.
+    let conn_for_supervisor = conn.clone();
+    tokio::spawn(async move {
+        if let Err(e) = idle_lock_supervisor(conn_for_supervisor).await {
+            tracing::warn!(error = %e, "idle-lock supervisor exited");
+        }
+    });
+
     loop {
         tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
     }
+}
+
+/// Reads `lock.idle_timeout_seconds` from com.jarvis.Settings, spawns
+/// swayidle with that timeout, and respawns when the setting changes.
+/// Treats Settings being unreachable as "use the default" rather than
+/// crashing — boot races between lock and settings are normal.
+async fn idle_lock_supervisor(conn: zbus::Connection) -> anyhow::Result<()> {
+    use futures_util::stream::StreamExt;
+
+    const DEFAULT_TIMEOUT: u64 = 300;
+    const SETTINGS_KEY: &str = "lock.idle_timeout_seconds";
+
+    // Wait briefly for Settings to come up — typical race at session
+    // start, both daemons are Wants= on jarvis-session.target.
+    let proxy = loop {
+        match zbus::Proxy::new(
+            &conn,
+            "com.jarvis.Settings",
+            "/com/jarvis/Settings",
+            "com.jarvis.Settings",
+        )
+        .await
+        {
+            Ok(p) => match p.call::<_, _, String>("Get", &("__ping__",)).await {
+                Ok(_) => break p,
+                Err(_) => tokio::time::sleep(std::time::Duration::from_millis(500)).await,
+            },
+            Err(_) => tokio::time::sleep(std::time::Duration::from_millis(500)).await,
+        }
+    };
+
+    let mut current: Option<tokio::process::Child> = None;
+    let mut active_timeout: u64 = 0;
+
+    let apply = |seconds: u64, current: &mut Option<tokio::process::Child>, active: &mut u64| {
+        if *active == seconds {
+            return;
+        }
+        if let Some(mut prev) = current.take() {
+            let _ = prev.start_kill();
+        }
+        *active = seconds;
+        if seconds == 0 {
+            tracing::info!("Auto-lock disabled (timeout=0)");
+            return;
+        }
+        tracing::info!(seconds, "Spawning swayidle");
+        match tokio::process::Command::new("swayidle")
+            .args([
+                "-w",
+                "timeout",
+                &seconds.to_string(),
+                "jarvis-lock-ctl lock",
+            ])
+            .spawn()
+        {
+            Ok(c) => *current = Some(c),
+            Err(e) => tracing::warn!(error = %e, "swayidle spawn failed"),
+        }
+    };
+
+    // Initial read.
+    let initial = read_timeout_seconds(&proxy, SETTINGS_KEY).await.unwrap_or(DEFAULT_TIMEOUT);
+    apply(initial, &mut current, &mut active_timeout);
+
+    // Subscribe to Changed signals. zbus 4 returns a signal stream;
+    // filter to our key only.
+    let mut stream = proxy.receive_signal("Changed").await?;
+    while let Some(msg) = stream.next().await {
+        let Ok((key, _value_json)) = msg.body().deserialize::<(String, String)>() else {
+            continue;
+        };
+        if key != SETTINGS_KEY {
+            continue;
+        }
+        let seconds = read_timeout_seconds(&proxy, SETTINGS_KEY)
+            .await
+            .unwrap_or(DEFAULT_TIMEOUT);
+        apply(seconds, &mut current, &mut active_timeout);
+    }
+    Ok(())
+}
+
+/// Read a number from Settings. The store holds JSON strings, so we
+/// parse and coerce. None means key missing / malformed / wrong type
+/// — caller falls back to its own default.
+async fn read_timeout_seconds(proxy: &zbus::Proxy<'_>, key: &str) -> Option<u64> {
+    let resp: String = proxy.call("Get", &(key,)).await.ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&resp).ok()?;
+    if !parsed.get("found")?.as_bool()? {
+        return None;
+    }
+    parsed.get("value")?.as_u64()
 }

@@ -13,5 +13,6 @@ anyhow             = "1"
 serde_json         = "1"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process", "io-util"] }
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process", "io-util", "time"] }
+futures-util       = "0.3"
 zbus               = { version = "4", features = ["tokio"] }

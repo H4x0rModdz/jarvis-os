@@ -66,16 +66,17 @@ DBus  com.jarvis.Lock  at  /com/jarvis/Lock
 
 ## Auto-lock on idle
 
-Driven by `swayidle`, spawned from labwc's autostart with a 5-minute
-hardcoded timeout. swayidle speaks `ext-idle-notify-v1` to the
-compositor and runs `jarvis-lock-ctl lock` once the input has been
-idle long enough. The lock daemon's `Lock()` is idempotent, so a
-race against `Super+L` is harmless.
+Driven by `swayidle`, supervised by the daemon. `idle_lock_supervisor`
+reads `lock.idle_timeout_seconds` from `com.jarvis.Settings`, spawns
+swayidle with that timeout, and respawns whenever the setting
+changes. swayidle speaks `ext-idle-notify-v1` to the compositor and
+runs `jarvis-lock-ctl lock` once input has been idle long enough.
+The lock daemon's `Lock()` is idempotent, so racing with `Super+L`
+is harmless.
 
-V1 of auto-lock is intentionally non-configurable. V2 reads the
-timeout from `com.jarvis.Settings` and respawns swayidle when the
-setting changes; until then, editing the labwc autostart is the
-only knob.
+Default timeout: 300 s. Zero disables auto-lock — supervisor kills
+swayidle and doesn't respawn. SettingsPanel.qml exposes the slider;
+changes take effect immediately.
 
 ## V1 Limitations (deferred)
 
@@ -83,7 +84,6 @@ only knob.
 |---|---|
 | `ext-session-lock-v1` | labwc didn't ship the protocol when V1 landed; layer-shell Overlay + KeyboardInteractivityExclusive covers everyday lock UX with one caveat (VT switch escapes). |
 | Biometric / Face ID / Voice ID | Needs custom `pam_*.so` modules. Same blocker as the greeter V2. |
-| Configurable idle timeout | Hardcoded 5 min in labwc/autostart; future V2 will pull the value from the Settings daemon. |
 
 ## Failure Modes
 
