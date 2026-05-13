@@ -33,21 +33,29 @@ prefix. See ADR 0013 for the rationale.
 DBus  com.jarvis.Compat  at  /com/jarvis/Compat
 
   RunExe(path: string, args: array<string>) -> string  // JSON
-       └─ Default-prefix runner. Same shape as RunExeIn with
+       └─ Default-prefix Wine runner. Same shape as RunExeIn with
           prefix="default" hard-coded.
 
   RunExeIn(prefix: string, path: string, args: array<string>) -> string  // JSON
        └─ { started: bool, pid?: u32, prefix: string, reason?: string }
-          Creates the prefix on first use; concurrent first-time
-          calls serialise behind a tokio Mutex.
+          Wine in a named prefix. Creates on first use; concurrent
+          first-time calls serialise behind a tokio Mutex.
+
+  RunProton(prefix: string, path: string, args: array<string>) -> string  // JSON
+       └─ { started: bool, pid?: u32, prefix: string, engine: "proton", reason?: string }
+          Proton-GE in a named prefix at `~/.jarvis/proton-data/<name>/`.
+          Returns `reason: "proton not installed — …"` when Proton-GE
+          isn't present (see ADR 0017).
 
   CreatePrefix(name: string) -> string  // JSON
        └─ { ok: bool, already?: bool, path?: string, reason?: string }
-          Pre-creates a named prefix so the wineboot --init cost
+          Pre-creates a Wine prefix so the wineboot --init cost
           lands before the first app launch.
 
   ListPrefixes() -> string  // JSON
-       └─ { prefixes: [{ name, path, initialised, created_at, last_used_at }, …] }
+       └─ { prefixes: [{ name, path, initialised, created_at, last_used_at, engine }, …] }
+          Lists both Wine and Proton prefixes; same name can appear
+          twice (once per engine).
 
   signal ProcessExited(pid: u32, status: i32)
        └─ Fires when one of our spawned children terminates;
@@ -88,11 +96,12 @@ system.reg's mtime.
 
 ## V1 vs V2 vs V3
 
-| Item | V1 | V2 (current) | V3 |
-|---|---|---|---|
-| Engines | wine | wine | + Proton via the Steam runtime |
-| Prefix model | shared `default` | + per-app via RunExeIn / CreatePrefix | — |
-| App catalog | none | none | metadata + .lnk parsing + start-menu integration |
-| DXVK / VKD3D | wine's bundled fallback | wine's bundled fallback | toggle per-prefix |
-| Lifecycle | fire-and-forget spawn | fire-and-forget spawn | tracked PIDs, `compat.list_running`, `compat.terminate` |
-| Action Bus surface | `compat.run_exe` | + `run_exe_in`, `create_prefix`, `list_prefixes` | + install / uninstall / recreate |
+| Item | V1 | V2 | V3 (current) | V4 |
+|---|---|---|---|---|
+| Engines | wine | wine | + Proton-GE direct (see ADR 0017) | + Steam Runtime container option |
+| Prefix model | shared `default` | + per-app via RunExeIn / CreatePrefix | Wine + Proton roots coexist | — |
+| App catalog | none | none | none | metadata + .lnk parsing + start-menu integration |
+| DXVK / VKD3D | wine bundled | wine bundled | wine bundled; Proton bundles its own | toggle per-prefix |
+| Proton install | — | — | manual drop at `~/.jarvis/proton-ge/` | `compat.install_proton` with progress UI |
+| Lifecycle | fire-and-forget spawn | fire-and-forget spawn | fire-and-forget spawn | tracked PIDs, `compat.list_running`, `compat.terminate` |
+| Action Bus surface | `compat.run_exe` | + `run_exe_in`, `create_prefix`, `list_prefixes` | + `run_proton` | + install / uninstall / recreate |

@@ -140,6 +140,7 @@ fn build_registry() -> Registry {
 
     reg!("compat.run_exe", handlers::compat::run_exe);
     reg!("compat.run_exe_in", handlers::compat::run_exe_in);
+    reg!("compat.run_proton", handlers::compat::run_proton);
     reg!("compat.create_prefix", handlers::compat::create_prefix);
     reg!("compat.list_prefixes", handlers::compat::list_prefixes);
 
