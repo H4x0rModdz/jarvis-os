@@ -23,6 +23,14 @@ const DEFAULT_PREFIX: &str = "default";
 /// (dev / advanced users), then falls back to `~/.jarvis/proton-ge/`.
 const PROTON_DIR_ENV: &str = "JARVIS_PROTON_DIR";
 
+/// Default Proton-GE release we fetch in `install_proton`. Pinned so a
+/// surprise upstream change doesn't break our install path silently.
+/// Bumped manually as Proton-GE cuts new releases.
+const PROTON_GE_VERSION: &str = "GE-Proton9-25";
+const PROTON_GE_URL: &str =
+    "https://github.com/GloriousEggroll/proton-ge-custom/releases/download/\
+     GE-Proton9-25/GE-Proton9-25.tar.gz";
+
 struct CompatService {
     /// Held during `wineboot --init` so concurrent first-time calls
     /// queue up behind the prefix bring-up instead of racing it.
@@ -222,6 +230,48 @@ impl CompatService {
         })
         .to_string()
     }
+
+    /// Download + extract Proton-GE to the canonical install dir.
+    /// Idempotent — if the `proton` binary already exists where we'd
+    /// install it, returns `{ ok: true, already: true }` without
+    /// touching the network. Emits `InstallProgress(percent,
+    /// message)` signals during the download and pushes a single
+    /// FreeDesktop notification (with `replaces_id`) that updates in
+    /// place so the user sees a single moving progress toast rather
+    /// than a stack.
+    async fn install_proton(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
+        if proton_binary().is_some() {
+            return json!({
+                "ok": true,
+                "already": true,
+                "version": PROTON_GE_VERSION,
+            })
+            .to_string();
+        }
+        match do_install_proton(&ctx).await {
+            Ok(path) => json!({
+                "ok": true,
+                "already": false,
+                "version": PROTON_GE_VERSION,
+                "path": path.to_string_lossy(),
+            })
+            .to_string(),
+            Err(e) => {
+                tracing::warn!(error = %e, "install_proton failed");
+                json!({ "ok": false, "reason": e.to_string() }).to_string()
+            }
+        }
+    }
+
+    /// Fired during `install_proton` so callers can render a real
+    /// progress bar. `percent` is 0..=100; `message` is human-readable
+    /// ("downloading 12 MB / 312 MB", "extracting", "ready").
+    #[zbus(signal)]
+    async fn install_progress(
+        ctx: &SignalContext<'_>,
+        percent: u32,
+        message: &str,
+    ) -> zbus::Result<()>;
 
     /// Returns every prefix under `~/.jarvis/wine/` with its
     /// metadata. Used by Lilith for "which prefixes do I have?"
@@ -532,6 +582,167 @@ fn read_prefix_meta(prefix_path: &Path, default_engine: &str) -> (Option<String>
         .map(String::from)
         .unwrap_or_else(|| default_engine.to_string());
     (created_at, last_used_at, engine)
+}
+
+/// Download Proton-GE and extract it to the canonical install dir.
+/// Streams the response so progress reporting is accurate; notifies
+/// through FreeDesktop with `replaces_id` so the user sees one
+/// updating toast instead of a stack.
+async fn do_install_proton(ctx: &SignalContext<'_>) -> anyhow::Result<PathBuf> {
+    use futures_util::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let target = proton_root().ok_or_else(|| anyhow::anyhow!("no HOME directory"))?;
+    tokio::fs::create_dir_all(&target).await?;
+
+    let tmpfile = std::env::temp_dir().join(format!("jarvis-{PROTON_GE_VERSION}.tar.gz"));
+
+    // ── Open the toast (notification id 0 = new) ─────────────────────
+    let notif = NotifChannel::new().await;
+    let mut notif_id = notif
+        .post(0, "Instalando Proton-GE", "Conectando…")
+        .await
+        .unwrap_or(0);
+
+    // ── Download ─────────────────────────────────────────────────────
+    tracing::info!(url = PROTON_GE_URL, "Downloading Proton-GE");
+    let response = reqwest::Client::builder()
+        .build()?
+        .get(PROTON_GE_URL)
+        .send()
+        .await?
+        .error_for_status()?;
+    let total = response.content_length();
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut file = tokio::fs::File::create(&tmpfile).await?;
+
+    // Throttle progress emissions so we don't fire 10 000 signals on a
+    // gigabit download; one update per percentage point is enough for
+    // the eye and DBus.
+    let mut last_pct: i32 = -1;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        file.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
+        if let Some(t) = total {
+            let pct = ((downloaded * 100) / t.max(1)) as i32;
+            // Reserve 0..=90 for download; extract gets 90..=100.
+            let mapped = (pct as u32 * 90) / 100;
+            if pct != last_pct {
+                let _ = CompatService::install_progress(
+                    ctx,
+                    mapped,
+                    &format!(
+                        "Baixando {:.0} MB / {:.0} MB",
+                        downloaded as f64 / 1_048_576.0,
+                        t as f64 / 1_048_576.0,
+                    ),
+                )
+                .await;
+                notif_id = notif
+                    .post(
+                        notif_id,
+                        "Instalando Proton-GE",
+                        &format!(
+                            "Baixando {:.0} MB / {:.0} MB ({mapped}%)",
+                            downloaded as f64 / 1_048_576.0,
+                            t as f64 / 1_048_576.0,
+                        ),
+                    )
+                    .await
+                    .unwrap_or(notif_id);
+                last_pct = pct;
+            }
+        }
+    }
+    file.flush().await?;
+    drop(file);
+
+    // ── Extract ──────────────────────────────────────────────────────
+    let _ = CompatService::install_progress(ctx, 92, "Extraindo").await;
+    notif_id = notif
+        .post(notif_id, "Instalando Proton-GE", "Extraindo…")
+        .await
+        .unwrap_or(notif_id);
+
+    // --strip-components=1 because the tarball has a top-level
+    // GE-ProtonX-Y/ directory and we want the contents flat in
+    // ~/.jarvis/proton-ge/.
+    let status = tokio::process::Command::new("tar")
+        .arg("-xzf")
+        .arg(&tmpfile)
+        .arg("-C")
+        .arg(&target)
+        .arg("--strip-components=1")
+        .status()
+        .await?;
+    if !status.success() {
+        anyhow::bail!("tar exited with {status}");
+    }
+
+    // ── Cleanup + final notify ───────────────────────────────────────
+    let _ = tokio::fs::remove_file(&tmpfile).await;
+    let _ = CompatService::install_progress(ctx, 100, "ready").await;
+    let _ = notif
+        .post(
+            notif_id,
+            "Proton-GE instalado",
+            &format!("{PROTON_GE_VERSION} pronto em ~/.jarvis/proton-ge"),
+        )
+        .await;
+
+    Ok(target)
+}
+
+/// Tiny helper that holds a long-lived DBus proxy to
+/// `org.freedesktop.Notifications` so install_proton can reuse the
+/// same `replaces_id` across the download — single updating toast
+/// instead of a stack.
+struct NotifChannel {
+    proxy: Option<zbus::Proxy<'static>>,
+}
+
+impl NotifChannel {
+    async fn new() -> Self {
+        let proxy = match zbus::Connection::session().await {
+            Ok(conn) => zbus::Proxy::new(
+                &conn,
+                "org.freedesktop.Notifications",
+                "/org/freedesktop/Notifications",
+                "org.freedesktop.Notifications",
+            )
+            .await
+            .ok(),
+            Err(_) => None,
+        };
+        Self { proxy }
+    }
+
+    /// Post or replace a notification; returns the assigned id.
+    /// Pass `0` as `replaces_id` to open a new toast.
+    async fn post(&self, replaces_id: u32, summary: &str, body: &str) -> Option<u32> {
+        let proxy = self.proxy.as_ref()?;
+        let hints: std::collections::HashMap<&str, zbus::zvariant::Value> =
+            std::collections::HashMap::new();
+        let actions: Vec<&str> = Vec::new();
+        let result: zbus::Result<u32> = proxy
+            .call(
+                "Notify",
+                &(
+                    "jarvis-compat",
+                    replaces_id,
+                    "",
+                    summary,
+                    body,
+                    actions.as_slice(),
+                    hints,
+                    -1i32,
+                ),
+            )
+            .await;
+        result.ok()
+    }
 }
 
 #[tokio::main]

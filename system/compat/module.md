@@ -47,6 +47,18 @@ DBus  com.jarvis.Compat  at  /com/jarvis/Compat
           Returns `reason: "proton not installed — …"` when Proton-GE
           isn't present (see ADR 0017).
 
+  InstallProton() -> string  // JSON
+       └─ { ok: bool, already?: bool, version, path?, reason? }
+          Downloads + extracts Proton-GE to `~/.jarvis/proton-ge/`.
+          Idempotent — returns `already: true` when the binary is
+          present. Emits `InstallProgress(percent, message)` signals
+          throughout; pushes a single updating toast notification.
+
+  signal InstallProgress(percent: u32, message: string)
+       └─ Fires repeatedly during InstallProton. 0..=90 covers the
+          download, 90..=100 covers extraction. Subscribers throttle
+          themselves by checking `percent` doesn't repeat.
+
   CreatePrefix(name: string) -> string  // JSON
        └─ { ok: bool, already?: bool, path?: string, reason?: string }
           Pre-creates a Wine prefix so the wineboot --init cost

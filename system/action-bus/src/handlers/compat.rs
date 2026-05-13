@@ -145,6 +145,21 @@ pub async fn create_prefix(params: Value) -> Result<Value, BusError> {
     parse_response(response, false)
 }
 
+/// Download + extract Proton-GE to ~/.jarvis/proton-ge/.
+/// Long-running (300 MB); the daemon emits `InstallProgress` signals
+/// during the fetch and pushes a single updating notification toast
+/// so the user has a real progress indicator.
+pub async fn install_proton(_params: Value) -> Result<Value, BusError> {
+    let response: String = proxy()
+        .await?
+        .call("InstallProton", &())
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Compat.InstallProton: {e}"),
+        })?;
+    parse_response(response, false)
+}
+
 /// Enumerate every existing Wine prefix.
 pub async fn list_prefixes(_params: Value) -> Result<Value, BusError> {
     let response: String = proxy()

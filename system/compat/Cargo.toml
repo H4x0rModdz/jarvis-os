@@ -16,6 +16,11 @@ serde_json         = "1"
 thiserror          = "1"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process"] }
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "process", "fs", "io-util"] }
 zbus               = { version = "4", features = ["tokio"] }
 dirs               = "5"
+# install_proton needs HTTP + streaming so we can report download
+# progress. rustls-tls avoids dragging the system openssl into the
+# image — the bootc base has rustls-friendly trust roots.
+reqwest            = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+futures-util       = "0.3"
