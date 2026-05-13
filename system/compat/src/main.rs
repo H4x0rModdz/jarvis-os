@@ -10,6 +10,7 @@ use anyhow::Context;
 use chrono::Utc;
 use serde::Serialize;
 use serde_json::json;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
@@ -35,6 +36,22 @@ struct CompatService {
     /// Held during `wineboot --init` so concurrent first-time calls
     /// queue up behind the prefix bring-up instead of racing it.
     prefix_init: Arc<AsyncMutex<()>>,
+    /// Every child spawned by run_in_prefix / run_proton is recorded
+    /// here keyed by PID. The post-spawn wait task removes the entry
+    /// when the child exits — so list_running stays accurate without
+    /// a separate sweeper.
+    running: Arc<AsyncMutex<HashMap<u32, RunningEntry>>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RunningEntry {
+    pid: u32,
+    prefix: String,
+    engine: String,
+    /// Path of the .exe that was spawned. Surfaces in `list_running`
+    /// so the UI / Lilith can show "Steam (C:\\Steam\\steam.exe)".
+    exe: String,
+    started_at: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -211,12 +228,25 @@ impl CompatService {
         let pid = child.id().unwrap_or(0);
         tracing::info!(pid, prefix = prefix_name, %path, "Spawned proton process");
 
+        self.running.lock().await.insert(
+            pid,
+            RunningEntry {
+                pid,
+                prefix: prefix_name.to_string(),
+                engine: "proton".into(),
+                exe: path.to_string(),
+                started_at: Utc::now().to_rfc3339(),
+            },
+        );
+
         let ctx_owned = ctx.to_owned();
+        let running = self.running.clone();
         tokio::spawn(async move {
             let mut child = child;
             let status = child.wait().await;
             let code = status.ok().and_then(|s| s.code()).unwrap_or(-1);
             tracing::info!(pid, exit = code, "Proton process exited");
+            running.lock().await.remove(&pid);
             if let Err(e) = Self::process_exited(&ctx_owned, pid, code).await {
                 tracing::warn!("ProcessExited emit failed: {e}");
             }
@@ -280,6 +310,49 @@ impl CompatService {
         match enumerate_prefixes() {
             Ok(items) => json!({ "prefixes": items }).to_string(),
             Err(e) => json!({ "prefixes": [], "error": e.to_string() }).to_string(),
+        }
+    }
+
+    /// Snapshot of every child the daemon is currently tracking.
+    /// Lilith uses this for "what's running under Wine?" plus the
+    /// follow-up "close X". `process_exited` updates the map, so the
+    /// list is always live without a polling sweep.
+    async fn list_running(&self) -> String {
+        let snapshot: Vec<RunningEntry> = self.running.lock().await.values().cloned().collect();
+        json!({ "running": snapshot }).to_string()
+    }
+
+    /// Send SIGTERM to `pid`. Returns `{ok: true}` when the kill(2)
+    /// call succeeded — the process may still be reaping, the
+    /// `process_exited` signal fires when it's gone. We deliberately
+    /// don't escalate to SIGKILL on first call: Windows apps can
+    /// install signal handlers via Wine and the ergonomic close
+    /// (matching Cmd-Q) is the polite default. A future
+    /// `terminate(force=true)` overload (V2) takes the SIGKILL path.
+    async fn terminate(&self, pid: u32) -> String {
+        if !self.running.lock().await.contains_key(&pid) {
+            return json!({
+                "ok": false,
+                "reason": format!("pid {pid} not tracked"),
+            })
+            .to_string();
+        }
+        let status = tokio::process::Command::new("kill")
+            .arg(pid.to_string())
+            .status()
+            .await;
+        match status {
+            Ok(s) if s.success() => json!({ "ok": true }).to_string(),
+            Ok(s) => json!({
+                "ok": false,
+                "reason": format!("kill exited with {s}"),
+            })
+            .to_string(),
+            Err(e) => json!({
+                "ok": false,
+                "reason": format!("spawn kill: {e}"),
+            })
+            .to_string(),
         }
     }
 
@@ -355,12 +428,27 @@ impl CompatService {
         let pid = child.id().unwrap_or(0);
         tracing::info!(pid, prefix = prefix_name, %path, "Spawned wine process");
 
+        // Record before spawning the watcher so a fast-exiting process
+        // can still be observed by list_running for at least a tick.
+        self.running.lock().await.insert(
+            pid,
+            RunningEntry {
+                pid,
+                prefix: prefix_name.to_string(),
+                engine: "wine".into(),
+                exe: path.to_string(),
+                started_at: Utc::now().to_rfc3339(),
+            },
+        );
+
         let ctx_owned = ctx.to_owned();
+        let running = self.running.clone();
         tokio::spawn(async move {
             let mut child = child;
             let status = child.wait().await;
             let code = status.ok().and_then(|s| s.code()).unwrap_or(-1);
             tracing::info!(pid, exit = code, "Wine process exited");
+            running.lock().await.remove(&pid);
             if let Err(e) = Self::process_exited(&ctx_owned, pid, code).await {
                 tracing::warn!("ProcessExited emit failed: {e}");
             }
@@ -758,6 +846,7 @@ async fn main() -> anyhow::Result<()> {
 
     let service = CompatService {
         prefix_init: Arc::new(AsyncMutex::new(())),
+        running: Arc::new(AsyncMutex::new(HashMap::new())),
     };
 
     let _conn = connection::Builder::session()?

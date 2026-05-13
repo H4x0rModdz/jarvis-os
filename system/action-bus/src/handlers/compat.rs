@@ -174,3 +174,38 @@ pub async fn list_prefixes(_params: Value) -> Result<Value, BusError> {
     })?;
     Ok(json!({ "prefixes": parsed["prefixes"].clone() }))
 }
+
+/// Snapshot of every running Wine/Proton child.
+pub async fn list_running(_params: Value) -> Result<Value, BusError> {
+    let response: String = proxy()
+        .await?
+        .call("ListRunning", &())
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Compat.ListRunning: {e}"),
+        })?;
+    let parsed: Value = serde_json::from_str(&response).map_err(|e| BusError::ExecutionFailed {
+        message: format!("Compat returned non-JSON: {e}"),
+    })?;
+    Ok(json!({ "running": parsed["running"].clone() }))
+}
+
+/// SIGTERM a tracked child by pid. The daemon refuses pids it
+/// doesn't track — only Wine/Proton children spawned through compat
+/// can be terminated through this surface.
+pub async fn terminate(params: Value) -> Result<Value, BusError> {
+    let pid = params["pid"]
+        .as_u64()
+        .ok_or_else(|| BusError::InvalidParams {
+            message: "missing required param 'pid' (u32)".into(),
+        })? as u32;
+
+    let response: String = proxy()
+        .await?
+        .call("Terminate", &(pid,))
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Compat.Terminate: {e}"),
+        })?;
+    parse_response(response, false)
+}

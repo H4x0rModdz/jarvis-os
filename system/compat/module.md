@@ -69,6 +69,14 @@ DBus  com.jarvis.Compat  at  /com/jarvis/Compat
           Lists both Wine and Proton prefixes; same name can appear
           twice (once per engine).
 
+  ListRunning() -> string  // JSON
+       └─ { running: [{ pid, prefix, engine, exe, started_at }, …] }
+          Snapshot of every child the daemon is currently tracking.
+
+  Terminate(pid: u32) -> string  // JSON
+       └─ { ok: bool, reason?: string }
+          SIGTERM the tracked child. Refuses pids it doesn't track.
+
   signal ProcessExited(pid: u32, status: i32)
        └─ Fires when one of our spawned children terminates;
           subscribers use this for "your app closed" toasts.

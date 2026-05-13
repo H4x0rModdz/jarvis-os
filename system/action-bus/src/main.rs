@@ -144,6 +144,8 @@ fn build_registry() -> Registry {
     reg!("compat.install_proton", handlers::compat::install_proton);
     reg!("compat.create_prefix", handlers::compat::create_prefix);
     reg!("compat.list_prefixes", handlers::compat::list_prefixes);
+    reg!("compat.list_running", handlers::compat::list_running);
+    reg!("compat.terminate", handlers::compat::terminate);
 
     // SDK apps: pick up every manifest under /usr/share/jarvis/apps/
     // and ~/.local/share/jarvis/apps/ and register their declared
