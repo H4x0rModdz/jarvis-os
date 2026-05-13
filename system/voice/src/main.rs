@@ -15,6 +15,7 @@ mod capture;
 mod hotword;
 mod stt;
 mod tts;
+mod voiceprint;
 
 use capture::CaptureHandle;
 use hotword::HotwordHandle;
@@ -22,6 +23,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
+use voiceprint::VoiceprintStore;
 use zbus::{connection, interface, SignalContext};
 
 /// 16 kHz mono — matches the resampler target in `capture.rs` and what
@@ -51,6 +53,7 @@ struct VoiceService {
     state: Arc<AsyncMutex<State>>,
     capture: CaptureHandle,
     hotword: HotwordHandle,
+    voiceprints: Arc<VoiceprintStore>,
 }
 
 #[interface(name = "com.jarvis.Voice")]
@@ -241,6 +244,98 @@ impl VoiceService {
         self.hotword.is_enabled().await
     }
 
+    /// Capture `seconds` of audio from the default mic and store the
+    /// resulting feature vector as `user`'s voiceprint. Blocks the
+    /// state machine for the duration — caller should expect the
+    /// `StateChanged` cycle (idle → listening → processing → idle).
+    /// V1 features are temporal log-RMS — see `voiceprint.rs` for the
+    /// honest scope.
+    async fn enroll_voiceprint(
+        &self,
+        user: &str,
+        seconds: u32,
+        #[zbus(signal_context)] ctx: SignalContext<'_>,
+    ) -> String {
+        let seconds = seconds.clamp(1, 10) as u64;
+        match self.capture_seconds(seconds, &ctx).await {
+            Ok(samples) => {
+                let features = voiceprint::extract_features(&samples);
+                if features.is_empty() {
+                    return json!({ "ok": false, "reason": "no audio captured" }).to_string();
+                }
+                if let Err(e) = self.voiceprints.enroll(user, &features) {
+                    return json!({ "ok": false, "reason": e.to_string() }).to_string();
+                }
+                tracing::info!(user, seconds, frames = features.len(), "Voiceprint enrolled");
+                json!({
+                    "ok": true,
+                    "user": user,
+                    "frames": features.len(),
+                })
+                .to_string()
+            }
+            Err(e) => json!({ "ok": false, "reason": e.to_string() }).to_string(),
+        }
+    }
+
+    /// Capture a short sample and compare against `user`'s enrolled
+    /// voiceprint. Returns `{ ok: bool, score: f32 }` where `ok` is
+    /// `score >= MATCH_THRESHOLD`. `score` is exposed so callers (PAM
+    /// module, settings UI) can show calibration feedback.
+    async fn verify_voiceprint(
+        &self,
+        user: &str,
+        #[zbus(signal_context)] ctx: SignalContext<'_>,
+    ) -> String {
+        let stored = match self.voiceprints.fetch(user) {
+            Ok(Some(v)) => v,
+            Ok(None) => {
+                return json!({
+                    "ok": false,
+                    "reason": format!("user '{user}' not enrolled"),
+                })
+                .to_string()
+            }
+            Err(e) => {
+                return json!({ "ok": false, "reason": e.to_string() }).to_string()
+            }
+        };
+        // 2 s is long enough for "oi lilith" plus a beat, short enough
+        // that the user doesn't wait forever to be let in.
+        let samples = match self.capture_seconds(2, &ctx).await {
+            Ok(s) => s,
+            Err(e) => return json!({ "ok": false, "reason": e.to_string() }).to_string(),
+        };
+        let probe = voiceprint::extract_features(&samples);
+        let score = voiceprint::similarity(&stored, &probe);
+        let ok = score >= voiceprint::MATCH_THRESHOLD;
+        tracing::info!(user, score, ok, "Voiceprint verify");
+        json!({
+            "ok": ok,
+            "score": score,
+            "threshold": voiceprint::MATCH_THRESHOLD,
+        })
+        .to_string()
+    }
+
+    /// Enrolled users, oldest enrollment first. Shell uses this to
+    /// know whether to show "Enrolled ✓" or "Not enrolled" badges.
+    async fn list_enrolled(&self) -> String {
+        match self.voiceprints.list() {
+            Ok(users) => json!({ "users": users }).to_string(),
+            Err(e) => json!({ "users": [], "error": e.to_string() }).to_string(),
+        }
+    }
+
+    /// Remove a user's voiceprint. Returns whether anything was
+    /// removed (idempotent).
+    async fn delete_voiceprint(&self, user: &str) -> String {
+        match self.voiceprints.delete(user) {
+            Ok(was) => json!({ "deleted": was }).to_string(),
+            Err(e) => json!({ "deleted": false, "error": e.to_string() }).to_string(),
+        }
+    }
+
     #[zbus(signal)]
     async fn state_changed(ctx: &SignalContext<'_>, state: &str) -> zbus::Result<()>;
 
@@ -250,6 +345,18 @@ impl VoiceService {
     #[zbus(signal)]
     async fn transcription_failed(ctx: &SignalContext<'_>, reason: &str) -> zbus::Result<()>;
 
+    /// Fires after EnrollVoiceprint/VerifyVoiceprint finish capture
+    /// so the shell can stop showing a progress indicator. `op` is
+    /// `"enroll"` or `"verify"`; `outcome` is the verbose JSON the
+    /// method returned. Letting the shell bind a signal saves it from
+    /// having to await the long-running DBus call from the UI thread.
+    #[zbus(signal)]
+    async fn voiceprint_complete(
+        ctx: &SignalContext<'_>,
+        op: &str,
+        outcome: &str,
+    ) -> zbus::Result<()>;
+
     /// Fires when the hotword actor matched a wake-word in its
     /// sliding-window transcript. `text` is the full transcript that
     /// matched — the shell strips the wake-word and feeds the
@@ -257,6 +364,38 @@ impl VoiceService {
     /// (the user said only the wake-word).
     #[zbus(signal)]
     async fn hotword_detected(ctx: &SignalContext<'_>, text: &str) -> zbus::Result<()>;
+}
+
+impl VoiceService {
+    /// Hold the state machine for `seconds`, capturing audio the whole
+    /// time. Used by EnrollVoiceprint and VerifyVoiceprint — both
+    /// want a fixed-duration capture without going through the
+    /// start/stop split the push-to-talk path uses.
+    async fn capture_seconds(
+        &self,
+        seconds: u64,
+        ctx: &SignalContext<'_>,
+    ) -> anyhow::Result<Vec<i16>> {
+        // Acquire the state guard up front so we fail fast if another
+        // operation is already in flight — keeps the cpal stream
+        // single-owner.
+        let mut state = self.state.lock().await;
+        if *state != State::Idle {
+            anyhow::bail!("voice daemon busy ({})", state.as_str());
+        }
+        *state = State::Listening;
+        let _ = Self::state_changed(ctx, State::Listening.as_str()).await;
+        drop(state);
+
+        self.capture.start().await?;
+        tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
+        let samples = self.capture.stop().await?;
+
+        let mut state = self.state.lock().await;
+        *state = State::Idle;
+        let _ = Self::state_changed(ctx, State::Idle.as_str()).await;
+        Ok(samples)
+    }
 }
 
 /// Bottom half of the STT pipeline: finish the capture, write the WAV,
@@ -317,10 +456,20 @@ async fn main() -> anyhow::Result<()> {
 
     let (hotword_handle, mut hotword_events) = hotword::spawn();
 
+    let vp_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".jarvis/voiceprints.db");
+    let voiceprints = Arc::new(
+        VoiceprintStore::open(&vp_path)
+            .map_err(|e| anyhow::anyhow!("voiceprint store: {e}"))?,
+    );
+    tracing::info!(db = %vp_path.display(), "Voiceprint store ready");
+
     let service = VoiceService {
         state: Arc::new(AsyncMutex::new(State::Idle)),
         capture: capture::spawn(),
         hotword: hotword_handle,
+        voiceprints,
     };
 
     let conn = connection::Builder::session()?

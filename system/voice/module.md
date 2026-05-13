@@ -79,6 +79,22 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
           wake-word substring. `text` is the full transcript; the
           shell strips the wake-word and dispatches the remainder
           (or pops the mic when the remainder is empty).
+
+  EnrollVoiceprint(user: string, seconds: u32) -> string  // JSON
+       └─ { ok: bool, user, frames?, reason? }
+          Captures `seconds` (clamped 1..=10) of audio, computes the
+          V1 temporal log-RMS feature vector, stores it.
+
+  VerifyVoiceprint(user: string) -> string  // JSON
+       └─ { ok: bool, score: f32, threshold: f32, reason? }
+          Captures ~2 s, compares against the stored print via cosine
+          similarity. `score >= threshold` (0.85 in V1) sets ok=true.
+
+  ListEnrolled() -> string  // JSON
+       └─ { users: [{ user, enrolled_at }, …] }
+
+  DeleteVoiceprint(user: string) -> string  // JSON
+       └─ { deleted: bool }
 ```
 
 ## State Machine
@@ -102,12 +118,13 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 
 ## Implementation Phases
 
-| Phase | Microphone | STT | TTS | Hotword |
-|---|---|---|---|---|
-| V1 | — | `Unavailable` | `Unavailable` | — |
-| V2 | cpal | whisper.cpp subprocess | `Unavailable` | — |
-| V3 | cpal | whisper.cpp subprocess | piper subprocess + paplay | — |
-| V4 (current) | cpal | whisper.cpp subprocess | piper subprocess + paplay | sliding-window Whisper, separate cpal stream |
+| Phase | Microphone | STT | TTS | Hotword | Voiceprint |
+|---|---|---|---|---|---|
+| V1 | — | `Unavailable` | `Unavailable` | — | — |
+| V2 | cpal | whisper.cpp subprocess | `Unavailable` | — | — |
+| V3 | cpal | whisper.cpp subprocess | piper subprocess + paplay | — | — |
+| V4 (current) | cpal | whisper.cpp subprocess | piper subprocess + paplay | sliding-window Whisper, separate cpal stream | log-RMS temporal envelope + cosine similarity (scaffold; ADR 0018) |
+| V5 (Phase 6) | unchanged | unchanged | unchanged | openWakeWord (lower CPU, <300ms latency) | MFCC + DTW or x-vector embeddings (real biometric strength) |
 
 ## Failure Modes
 

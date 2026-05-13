@@ -24,3 +24,9 @@ zbus               = { version = "4", features = ["tokio"] }
 # whisper-cli expects: 16-bit signed PCM, 16 kHz, mono.
 cpal               = "0.15"
 hound              = "3"
+
+# V4 — voiceprint storage. SQLite holds the feature vectors so
+# enrollments survive daemon restarts. Bundled feature pulls in the
+# sqlite3 static lib; same configuration as system/settings.
+rusqlite           = { version = "0.32", features = ["bundled"] }
+dirs               = "5"
