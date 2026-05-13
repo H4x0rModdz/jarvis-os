@@ -279,7 +279,9 @@ async fn idle_lock_supervisor(conn: zbus::Connection) -> anyhow::Result<()> {
     };
 
     // Initial read.
-    let initial = read_timeout_seconds(&proxy, SETTINGS_KEY).await.unwrap_or(DEFAULT_TIMEOUT);
+    let initial = read_timeout_seconds(&proxy, SETTINGS_KEY)
+        .await
+        .unwrap_or(DEFAULT_TIMEOUT);
     apply(initial, &mut current, &mut active_timeout);
 
     // Subscribe to Changed signals. zbus 4 returns a signal stream;

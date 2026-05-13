@@ -228,11 +228,7 @@ fn dct_table(n_mfcc: usize, n_mel: usize) -> Vec<Vec<f32>> {
             let scale = (2.0 / n_mel as f32).sqrt();
             let alpha = if n == 0 { 1.0 / (2.0_f32).sqrt() } else { 1.0 };
             (0..n_mel)
-                .map(|m| {
-                    scale
-                        * alpha
-                        * (PI * (m as f32 + 0.5) * n as f32 / n_mel as f32).cos()
-                })
+                .map(|m| scale * alpha * (PI * (m as f32 + 0.5) * n as f32 / n_mel as f32).cos())
                 .collect()
         })
         .collect()
@@ -247,7 +243,7 @@ fn dtw_distance(a: &FeatureVector, b: &FeatureVector) -> f32 {
     let m = b.len();
     let mut cost = vec![f32::INFINITY; (n + 1) * (m + 1)];
     cost[0] = 0.0; // (0,0)
-    // Mark first row/col INFINITY so the path is anchored.
+                   // Mark first row/col INFINITY so the path is anchored.
     let idx = |i: usize, j: usize| i * (m + 1) + j;
 
     for i in 1..=n {

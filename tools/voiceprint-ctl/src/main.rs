@@ -36,12 +36,14 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<ExitCode> {
     let mut args = std::env::args().skip(1);
-    let verb = args
-        .next()
-        .ok_or_else(|| anyhow!("usage: jarvis-voiceprint-ctl <enroll|verify|list|delete> [user]"))?;
+    let verb = args.next().ok_or_else(|| {
+        anyhow!("usage: jarvis-voiceprint-ctl <enroll|verify|list|delete> [user]")
+    })?;
 
     let conn = Connection::session().await.context("session bus")?;
-    let proxy = Proxy::new(&conn, SERVICE, PATH, IFACE).await.context("proxy")?;
+    let proxy = Proxy::new(&conn, SERVICE, PATH, IFACE)
+        .await
+        .context("proxy")?;
 
     match verb.as_str() {
         "enroll" => {

@@ -177,13 +177,14 @@ pub async fn list_prefixes(_params: Value) -> Result<Value, BusError> {
 
 /// Snapshot of every running Wine/Proton child.
 pub async fn list_running(_params: Value) -> Result<Value, BusError> {
-    let response: String = proxy()
-        .await?
-        .call("ListRunning", &())
-        .await
-        .map_err(|e| BusError::Unavailable {
-            service: format!("Compat.ListRunning: {e}"),
-        })?;
+    let response: String =
+        proxy()
+            .await?
+            .call("ListRunning", &())
+            .await
+            .map_err(|e| BusError::Unavailable {
+                service: format!("Compat.ListRunning: {e}"),
+            })?;
     let parsed: Value = serde_json::from_str(&response).map_err(|e| BusError::ExecutionFailed {
         message: format!("Compat returned non-JSON: {e}"),
     })?;

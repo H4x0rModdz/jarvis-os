@@ -647,7 +647,10 @@ fn enumerate_prefixes() -> anyhow::Result<Vec<PrefixInfo>> {
 /// Shared meta reader for Wine and Proton prefix dirs. Falls back to
 /// the caller's default-engine string when the meta is missing or
 /// silent about the engine.
-fn read_prefix_meta(prefix_path: &Path, default_engine: &str) -> (Option<String>, Option<String>, String) {
+fn read_prefix_meta(
+    prefix_path: &Path,
+    default_engine: &str,
+) -> (Option<String>, Option<String>, String) {
     let meta_path = prefix_path.join(".jarvis-meta.json");
     let parsed: Option<serde_json::Value> = std::fs::read_to_string(&meta_path)
         .ok()
