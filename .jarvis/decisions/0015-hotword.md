@@ -88,15 +88,39 @@ setting persists via `com.jarvis.Settings` under
 
 **Bad:**
 - 10–25% of one core when enabled. Acceptable on the desktop class
-  we target; not viable on a battery-conscious laptop without a V2
+  we target; not viable on a battery-conscious laptop without a V3
   that swaps to openWakeWord or Porcupine.
-- 2-second tick adds up to 2 s of latency between phrase end and
-  HotwordDetected. Feels slow vs. dedicated engines that fire in
+- 1.5-second tick latency between phrase end and HotwordDetected
+  (V1 was 2 s). Still slow vs. dedicated engines that fire in
   under 300 ms.
 
-V2 will probably move to a tiny dedicated wake-word model
+V3 will probably move to a tiny dedicated wake-word model
 (openWakeWord ships ONNX files in the 1–3 MB range) but the
 substring-on-Whisper path is fine to ship today.
+
+## V2 update (Phase 6)
+
+Same engine (substring-on-Whisper), tightened loop:
+
+- Window cut from 3 s to 1.5 s. Whisper still has enough context for
+  "oi lilith" (two syllables, ~400 ms) and the surrounding silence;
+  the ~50 % cut in input length is roughly a ~50 % cut in
+  per-tick whisper-cli cost.
+- Tick interval cut from 2 s to 1.5 s — matches the window so we
+  cover audio continuously, and the worst-case detection latency
+  drops from 4 s (tick + window) to 1.5 s (tick = window).
+- Ring buffer cut to 3 s (was 4 s) — needed window + margin only.
+- VAD: added a zero-crossing-rate ceiling alongside the existing
+  RMS energy gate. ZCR > 0.40 with high RMS is the classic
+  signature of broadband noise (fricatives at the wrong volume,
+  keyboard tapping, AC hum, cooler ramping). Rejected before
+  whisper-cli runs.
+
+Net effect: CPU usage roughly halved (window halved, plus VAD
+filters out the ~30 % of noise-floor windows that V1 still
+transcribed); latency drops from 4 s worst-case to ~1.5 s.
+
+V3 still planned as the openWakeWord swap.
 
 ## Alternatives Considered
 

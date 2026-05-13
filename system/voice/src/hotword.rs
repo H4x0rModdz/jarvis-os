@@ -22,15 +22,25 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot};
 
 const TARGET_SAMPLE_RATE: u32 = 16_000;
-/// Past audio we hang on to. Larger than WINDOW so we never feed
-/// whisper an underfull buffer at startup.
-const BUFFER_SECONDS: usize = 4;
-/// How often we transcribe + check for a wake word.
-const TICK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(2000);
-/// Slice fed to whisper-cli each tick.
-const WINDOW_SECONDS: usize = 3;
+/// Past audio we hang on to. V2 cut the buffer to 3 s — just enough
+/// for the window plus margin — since the window is now 1.5 s.
+const BUFFER_SECONDS: usize = 3;
+/// How often we transcribe + check for a wake word. V2 dropped from
+/// 2 s to 1.5 s so the worst-case latency between "user said it" and
+/// "we noticed" is the tick interval, not the tick + window.
+const TICK_INTERVAL: std::time::Duration = std::time::Duration::from_millis(1500);
+/// Slice fed to whisper-cli each tick. V1 was 3 s — too much audio
+/// for a wake-word; the operator only ever says two syllables.
+/// 1.5 s keeps the surrounding context for Whisper while halving
+/// the per-tick whisper-cli work.
+const WINDOW_MS: u64 = 1500;
 /// RMS below this means "no speech" — skip transcribe.
 const SILENCE_RMS_THRESHOLD: f64 = 350.0;
+/// Zero-crossing rate ceiling. Speech sits in roughly [0.02, 0.25];
+/// noise / fricatives / electrical hum often go well above 0.4.
+/// Combined with the RMS gate above this rejects most non-speech
+/// windows without spending whisper-cli CPU on them.
+const SPEECH_ZCR_CEILING: f64 = 0.40;
 
 /// Lowercased substrings. Loose by design — Whisper's Portuguese head
 /// mishears "lilith" as "lilit"/"lilis" intermittently and the cost of
@@ -130,7 +140,14 @@ pub fn spawn() -> (HotwordHandle, mpsc::Receiver<String>) {
                         _ = tick.tick(), if live.is_some() => {
                             let snapshot = live.as_ref().and_then(|h| h.snapshot_window());
                             let Some(window) = snapshot else { continue };
-                            if rms(&window) < SILENCE_RMS_THRESHOLD { continue; }
+                            // Two-feature VAD: cheap energy gate first
+                            // (rejects silence), zero-crossing-rate
+                            // ceiling second (rejects most non-speech
+                            // noise: keyboard typing, AC hum, the cooler
+                            // ramping up). Both run in microseconds and
+                            // save the ~150–500 ms whisper-cli would
+                            // otherwise spend on a noise window.
+                            if !is_speech(&window) { continue; }
                             match transcribe_window(window).await {
                                 Ok(text) => {
                                     let lower = text.to_lowercase();
@@ -243,7 +260,7 @@ impl LiveHotword {
         })
     }
 
-    /// Pull the last `WINDOW_SECONDS` of audio out of the ring buffer,
+    /// Pull the last `WINDOW_MS` of audio out of the ring buffer,
     /// downmixed to mono and resampled to 16 kHz so whisper-cli is
     /// happy without us thinking about it.
     fn snapshot_window(&self) -> Option<Vec<i16>> {
@@ -260,7 +277,7 @@ impl LiveHotword {
         } else {
             resample_linear(&mono, self.source_sample_rate, TARGET_SAMPLE_RATE)
         };
-        let needed = TARGET_SAMPLE_RATE as usize * WINDOW_SECONDS;
+        let needed = (TARGET_SAMPLE_RATE as u64 * WINDOW_MS / 1000) as usize;
         let tail = if resampled.len() > needed {
             resampled[resampled.len() - needed..].to_vec()
         } else {
@@ -322,6 +339,37 @@ fn rms(samples: &[i16]) -> f64 {
     }
     let sum_sq: f64 = samples.iter().map(|s| (*s as f64).powi(2)).sum();
     (sum_sq / samples.len() as f64).sqrt()
+}
+
+/// Zero-crossing rate: fraction of adjacent sample pairs that change
+/// sign. Cheap proxy for "spectral content above the energy floor" —
+/// speech sits in roughly [0.02, 0.25]; broadband noise climbs past
+/// 0.4. We combine it with the RMS gate so silence and most non-
+/// speech noise are both filtered before whisper-cli is invoked.
+fn zcr(samples: &[i16]) -> f64 {
+    if samples.len() < 2 {
+        return 0.0;
+    }
+    let crossings = samples
+        .windows(2)
+        .filter(|w| (w[0] >= 0) != (w[1] >= 0))
+        .count();
+    crossings as f64 / (samples.len() - 1) as f64
+}
+
+/// Two-feature VAD. Rejects:
+///   - windows quieter than `SILENCE_RMS_THRESHOLD` (no signal)
+///   - windows with ZCR above `SPEECH_ZCR_CEILING` (noisy fricatives,
+///     fans, keyboard tapping, AC hum)
+/// Anything that survives both gates gets fed to whisper-cli.
+fn is_speech(samples: &[i16]) -> bool {
+    if rms(samples) < SILENCE_RMS_THRESHOLD {
+        return false;
+    }
+    if zcr(samples) > SPEECH_ZCR_CEILING {
+        return false;
+    }
+    true
 }
 
 async fn transcribe_window(samples: Vec<i16>) -> Result<String> {
@@ -393,5 +441,51 @@ mod tests {
         append_ring(&buf, &[5, 6], 4);
         let snapshot: Vec<i16> = buf.lock().unwrap().iter().cloned().collect();
         assert_eq!(snapshot, vec![3, 4, 5, 6]);
+    }
+
+    // ── V2 VAD ──────────────────────────────────────────────────────
+
+    #[test]
+    fn zcr_constant_signal_is_zero() {
+        assert_eq!(zcr(&[1000, 1000, 1000, 1000]), 0.0);
+    }
+
+    #[test]
+    fn zcr_alternating_is_one() {
+        let r = zcr(&[1, -1, 1, -1, 1]);
+        assert!((r - 1.0).abs() < 1e-9, "got {r}");
+    }
+
+    #[test]
+    fn is_speech_rejects_silence() {
+        assert!(!is_speech(&vec![0i16; 24000]));
+    }
+
+    #[test]
+    fn is_speech_rejects_alternating_noise() {
+        // Loud + perfectly alternating = ZCR ≈ 1.0; classic fricative
+        // or square-wave noise pattern that the energy gate alone
+        // would let through.
+        let n = 24000;
+        let noise: Vec<i16> = (0..n)
+            .map(|i| if i % 2 == 0 { 5000 } else { -5000 })
+            .collect();
+        assert!(rms(&noise) > SILENCE_RMS_THRESHOLD, "test setup");
+        assert!(!is_speech(&noise));
+    }
+
+    #[test]
+    fn is_speech_accepts_voiced_pattern() {
+        // 200 Hz sine at 16 kHz → ZCR ≈ 0.025, in speech range.
+        let sr = 16000.0;
+        let f = 200.0;
+        let samples: Vec<i16> = (0..16000)
+            .map(|i| {
+                let t = i as f32 / sr;
+                (8000.0 * (2.0 * std::f32::consts::PI * f * t).sin()) as i16
+            })
+            .collect();
+        assert!(rms(&samples) > SILENCE_RMS_THRESHOLD, "test setup");
+        assert!(is_speech(&samples));
     }
 }
