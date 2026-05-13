@@ -5,22 +5,22 @@
 //! interface (so the shell can render in our style + Lilith can read
 //! the recent history).
 //!
-//! See `system/notifications/module.md` for the contract and ADR 0010
-//! for the rationale.
+//! V3 — history is persisted to `~/.jarvis/notifications.db` via
+//! SQLite. Survives daemon restarts; capped at 500 rows with
+//! oldest-first eviction. See `module.md` and ADR 0010.
 
+mod store;
+
+use anyhow::Context;
 use chrono::Utc;
-use serde::Serialize;
 use serde_json::json;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
+use store::{Entry, HistoryStore};
 use tokio::sync::Mutex as AsyncMutex;
 use zbus::{connection, interface, SignalContext};
 use zvariant::Value as ZValue;
-
-/// How many notifications we keep in the in-memory history. Picked low
-/// enough to be cheap; high enough that "show me everything from the
-/// last hour" is plausible.
-const HISTORY_CAPACITY: usize = 64;
 
 /// FreeDesktop urgency hint values: 0=low, 1=normal, 2=critical.
 fn urgency_from_byte(b: u8) -> &'static str {
@@ -31,32 +31,19 @@ fn urgency_from_byte(b: u8) -> &'static str {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct Entry {
-    id: u32,
-    app: String,
-    summary: String,
-    body: String,
-    urgency: String,
-    posted_at: String,
-    /// FreeDesktop `actions` array, alternating key + display label.
-    /// V1 ignored this; V2 stores it so the shell can render buttons
-    /// and call `InvokeAction` back when the user clicks one.
-    #[serde(default)]
-    actions: Vec<String>,
-}
-
 struct Service {
     next_id: AsyncMutex<u32>,
-    /// Shared with the `History` interface served on a sibling DBus
-    /// path — same `Vec` is both written from `Notify()` and read from
-    /// `RecentNotifications()`.
-    history: Arc<AsyncMutex<VecDeque<Entry>>>,
+    /// SQLite-backed history. Same store is shared with the `History`
+    /// interface served on a sibling DBus path; both interfaces are
+    /// served by separate structs that hold their own clone of the
+    /// Arc, because zbus can't serve the same struct under two
+    /// interfaces on the same connection.
+    history: Arc<HistoryStore>,
 }
 
 #[interface(name = "org.freedesktop.Notifications")]
 impl Service {
-    /// FreeDesktop spec entry point. V2 honours `actions` (key/label
+    /// FreeDesktop spec entry point. Honours `actions` (key/label
     /// pairs the shell renders as buttons) and emits `ActionInvoked`
     /// when the user clicks one. Image hints still deferred.
     #[allow(clippy::too_many_arguments)]
@@ -96,17 +83,9 @@ impl Service {
             actions: actions.clone(),
         };
 
-        // Keep history bounded.
-        {
-            let mut h = self.history.lock().await;
-            // Replace-by-id when replaces_id was provided.
-            if replaces_id != 0 {
-                h.retain(|e| e.id != replaces_id);
-            }
-            if h.len() == HISTORY_CAPACITY {
-                h.pop_front();
-            }
-            h.push_back(entry.clone());
+        // INSERT OR REPLACE — replaces_id semantics fall out for free.
+        if let Err(e) = self.history.insert(&entry) {
+            tracing::warn!(error = %e, "Notification persist failed");
         }
 
         tracing::info!(id, app = %app_name, summary, urgency, "Notification posted");
@@ -140,14 +119,8 @@ impl Service {
         &self,
         id: u32,
         #[zbus(signal_context)] ctx: SignalContext<'_>,
-    ) -> () {
-        let removed = {
-            let mut h = self.history.lock().await;
-            let before = h.len();
-            h.retain(|e| e.id != id);
-            before != h.len()
-        };
-
+    ) {
+        let removed = self.history.dismiss(id).unwrap_or(false);
         if removed {
             if let Err(e) = Self::notification_closed(&ctx, id, 3 /* closed by call */).await {
                 tracing::warn!("NotificationClosed emit failed: {e}");
@@ -157,7 +130,8 @@ impl Service {
 
     /// What this server supports. `body-markup` lets apps put basic
     /// HTML-ish formatting in the body; `actions` enables the button
-    /// row added in V2.
+    /// row added in V2; `persistence` becomes meaningful in V3 (we
+    /// actually survive a daemon restart now).
     async fn get_capabilities(&self) -> Vec<String> {
         vec![
             "body".into(),
@@ -180,17 +154,10 @@ impl Service {
     async fn notification_closed(ctx: &SignalContext<'_>, id: u32, reason: u32)
         -> zbus::Result<()>;
 
-    /// FreeDesktop spec signal — fires when the user clicks an action
-    /// button on the toast. The originating app receives this and
-    /// dispatches whatever the action key was supposed to trigger.
     #[zbus(signal)]
     async fn action_invoked(ctx: &SignalContext<'_>, id: u32, action_key: &str)
         -> zbus::Result<()>;
 
-    /// Re-emitted Notify() — this is what the shell subscribes to so
-    /// it doesn't have to implement the spec itself. V2 adds the
-    /// `actions` slice so the toast can render its button row without
-    /// a separate roundtrip.
     #[zbus(signal)]
     async fn notification_posted(
         ctx: &SignalContext<'_>,
@@ -207,7 +174,7 @@ impl Service {
 /// can't be used twice, so we put RecentNotifications on a different
 /// path/interface served by the same struct.
 struct History {
-    history: Arc<AsyncMutex<VecDeque<Entry>>>,
+    history: Arc<HistoryStore>,
 }
 
 #[interface(name = "com.jarvis.Notifications")]
@@ -216,35 +183,33 @@ impl History {
     /// `limit == 0`), oldest first. Serialised as JSON for parity with
     /// the rest of the Jarvis daemons.
     async fn recent_notifications(&self, limit: u32) -> String {
-        let snapshot: Vec<Entry> = {
-            let h = self.history.lock().await;
-            if limit == 0 {
-                h.iter().cloned().collect()
-            } else {
-                let take = limit as usize;
-                let skip = h.len().saturating_sub(take);
-                h.iter().skip(skip).cloned().collect()
-            }
-        };
-        json!(snapshot).to_string()
+        let snapshot = self.history.recent(limit).unwrap_or_default();
+        // Reuse the store::Entry serializer; it matches what the V2
+        // client (the shell drawer) already expects.
+        json!(snapshot
+            .iter()
+            .map(|e| json!({
+                "id": e.id,
+                "app": e.app,
+                "summary": e.summary,
+                "body": e.body,
+                "urgency": e.urgency,
+                "posted_at": e.posted_at,
+                "actions": e.actions,
+            }))
+            .collect::<Vec<_>>())
+        .to_string()
     }
 
-    /// Drop one entry from the history buffer. Called by the shell
-    /// when the user clicks the × on a row in the drawer. Distinct
-    /// from FreeDesktop's `CloseNotification` because that signals
-    /// the originating app (reason=3) — Dismiss is purely a UI
-    /// concern, the app doesn't need to know.
+    /// Drop one entry from the history buffer. UI-only — distinct
+    /// from FreeDesktop's `CloseNotification` which signals the
+    /// originating app.
     async fn dismiss(
         &self,
         id: u32,
         #[zbus(signal_context)] ctx: SignalContext<'_>,
     ) -> bool {
-        let removed = {
-            let mut h = self.history.lock().await;
-            let before = h.len();
-            h.retain(|e| e.id != id);
-            before != h.len()
-        };
+        let removed = self.history.dismiss(id).unwrap_or(false);
         if removed {
             if let Err(e) = Self::history_changed(&ctx).await {
                 tracing::warn!("HistoryChanged emit failed: {e}");
@@ -253,15 +218,9 @@ impl History {
         removed
     }
 
-    /// Wipe every entry. Triggered by the drawer's "Clear all"
-    /// button — same UI-only semantics as Dismiss.
+    /// Wipe every entry.
     async fn clear(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> u32 {
-        let cleared = {
-            let mut h = self.history.lock().await;
-            let n = h.len() as u32;
-            h.clear();
-            n
-        };
+        let cleared = self.history.clear().unwrap_or(0);
         if cleared > 0 {
             if let Err(e) = Self::history_changed(&ctx).await {
                 tracing::warn!("HistoryChanged emit failed: {e}");
@@ -270,8 +229,6 @@ impl History {
         cleared
     }
 
-    /// Fires after Dismiss / Clear so the shell knows to re-pull
-    /// the list rather than polling.
     #[zbus(signal)]
     async fn history_changed(ctx: &SignalContext<'_>) -> zbus::Result<()>;
 }
@@ -285,15 +242,25 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    tracing::info!("Starting Jarvis Notifications");
+    let db_path = dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join(".jarvis/notifications.db");
 
-    let history = Arc::new(AsyncMutex::new(VecDeque::with_capacity(HISTORY_CAPACITY)));
+    tracing::info!(db = %db_path.display(), "Starting Jarvis Notifications");
+
+    let store = Arc::new(HistoryStore::open(&db_path).context("open notifications db")?);
+    // Seed next_id from whatever's on disk so we don't reuse ids
+    // across a daemon restart. New notifications continue from
+    // max_id + 1.
+    let starting_id = store.max_id().unwrap_or(0);
+    tracing::info!(starting_id, "Seeded next_id from store");
+
     let service = Service {
-        next_id: AsyncMutex::new(0),
-        history: history.clone(),
+        next_id: AsyncMutex::new(starting_id),
+        history: store.clone(),
     };
     let history_iface = History {
-        history: history.clone(),
+        history: store.clone(),
     };
 
     let _conn = connection::Builder::session()?
@@ -323,43 +290,5 @@ mod tests {
         assert_eq!(urgency_from_byte(1), "normal");
         assert_eq!(urgency_from_byte(2), "critical");
         assert_eq!(urgency_from_byte(7), "normal"); // unknown -> normal
-    }
-
-    #[tokio::test]
-    async fn history_evicts_oldest_at_capacity() {
-        let h: VecDeque<Entry> = (0..HISTORY_CAPACITY as u32)
-            .map(|i| Entry {
-                id: i + 1,
-                app: format!("app{i}"),
-                summary: "".into(),
-                body: "".into(),
-                urgency: "normal".into(),
-                posted_at: "".into(),
-                actions: vec![],
-            })
-            .collect();
-        let buf = Arc::new(AsyncMutex::new(h));
-
-        // Push one more — should evict the first entry.
-        {
-            let mut lock = buf.lock().await;
-            if lock.len() == HISTORY_CAPACITY {
-                lock.pop_front();
-            }
-            lock.push_back(Entry {
-                id: 999,
-                app: "new".into(),
-                summary: "".into(),
-                body: "".into(),
-                urgency: "normal".into(),
-                posted_at: "".into(),
-                actions: vec![],
-            });
-        }
-
-        let lock = buf.lock().await;
-        assert_eq!(lock.len(), HISTORY_CAPACITY);
-        assert_eq!(lock.front().unwrap().id, 2);
-        assert_eq!(lock.back().unwrap().id, 999);
     }
 }

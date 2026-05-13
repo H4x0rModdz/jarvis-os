@@ -63,8 +63,15 @@ absent. The shell uses this to colour the toast.
 
 ## Storage
 
-V1: ring buffer of the last 64 notifications in RAM. Drops on daemon
-restart, deliberately — see ADR 0010.
+V3 (current): SQLite at `~/.jarvis/notifications.db`. Capped at 500
+rows; insertion order tracked monotonically and oldest rows are
+evicted when the table grows past the cap. Survives daemon restarts;
+`next_id` is seeded from `MAX(id)` on startup so we don't recycle
+ids across restarts.
+
+V1 ran in RAM only (64 entries, dropped on restart). V3 keeps the
+same shape on the wire — `RecentNotifications` JSON is identical —
+just backs it with disk.
 
 ## Failure Modes
 
@@ -76,10 +83,10 @@ restart, deliberately — see ADR 0010.
 
 ## V1 vs V2
 
-| Item | V1 | V2 (current) | V3 |
-|---|---|---|---|
-| Storage | RAM ring buffer | RAM ring buffer | + SQLite via the Settings daemon |
-| Actions (buttons) | Ignored | ✅ Full `ActionInvoked` round-trip | — |
-| Hints honoured | `urgency` | `urgency` | + `image-data`, `category`, `transient`, `desktop-entry` |
-| Drawer UI | None — only toasts | ✅ History list in the shell | + dismiss/clear, group by app |
-| Action Bus | `system.notify` posts | `system.notify` posts | + `notifications.read`, `notifications.dismiss` |
+| Item | V1 | V2 | V3 (current) | V4 |
+|---|---|---|---|---|
+| Storage | RAM ring buffer (64) | RAM ring buffer (64) | SQLite at `~/.jarvis/notifications.db` (500 cap) | + sync between devices |
+| Actions (buttons) | Ignored | ✅ Full `ActionInvoked` round-trip | unchanged | — |
+| Hints honoured | `urgency` | `urgency` | `urgency` | + `image-data`, `category`, `transient`, `desktop-entry` |
+| Drawer UI | None — only toasts | ✅ History list | + per-row dismiss + clear all | + group by app, DND policies |
+| Action Bus | `system.notify` posts | `system.notify` posts | unchanged | + `notifications.read`, `notifications.dismiss` |
