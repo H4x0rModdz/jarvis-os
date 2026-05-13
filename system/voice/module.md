@@ -2,9 +2,13 @@
 
 ## Status
 
-**Phase V3 — STT + TTS shipped.** Push-to-talk via whisper.cpp;
-auto-speak Lilith replies via piper. The full voice loop is live in
-the ISO. See [ADR 0009](../../.jarvis/decisions/0009-voice-pipeline.md).
+**Phase V4 — STT + TTS + hotword.** Push-to-talk via whisper.cpp;
+auto-speak Lilith replies via piper; continuous wake-word listening
+for "oi lilith" via a separate Whisper sliding window. The full
+voice loop is live in the ISO. See
+[ADR 0009](../../.jarvis/decisions/0009-voice-pipeline.md) for the
+STT/TTS scope and
+[ADR 0015](../../.jarvis/decisions/0015-hotword.md) for hotword.
 
 ## Purpose
 
@@ -51,6 +55,16 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
   GetState() -> string         // JSON { state: "idle"|"listening"|
                                           "processing"|"speaking" }
 
+  StartHotword() -> string     // JSON { enabled: bool, reason?: string }
+       └─ Begin continuous wake-word listening. Runs an independent
+          cpal stream alongside push-to-talk; on PipeWire (Fedora
+          default) both share the source cleanly.
+
+  StopHotword() -> string      // JSON { enabled: false }
+       └─ Disengage the hotword actor. Idempotent.
+
+  GetHotwordEnabled() -> bool
+
   signal StateChanged(state: string)
        └─ fires every time the state machine moves.
 
@@ -59,6 +73,12 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 
   signal TranscriptionFailed(reason: string)
        └─ fires when STT errors out (no audio, model failure, …).
+
+  signal HotwordDetected(text: string)
+       └─ fires when the sliding-window transcript contains a
+          wake-word substring. `text` is the full transcript; the
+          shell strips the wake-word and dispatches the remainder
+          (or pops the mic when the remainder is empty).
 ```
 
 ## State Machine
@@ -82,11 +102,12 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 
 ## Implementation Phases
 
-| Phase | Microphone | STT | TTS |
-|---|---|---|---|
-| V1 | — | `Unavailable` | `Unavailable` |
-| V2 | cpal | whisper.cpp subprocess | `Unavailable` |
-| V3 (current) | cpal | whisper.cpp subprocess | piper subprocess + paplay |
+| Phase | Microphone | STT | TTS | Hotword |
+|---|---|---|---|---|
+| V1 | — | `Unavailable` | `Unavailable` | — |
+| V2 | cpal | whisper.cpp subprocess | `Unavailable` | — |
+| V3 | cpal | whisper.cpp subprocess | piper subprocess + paplay | — |
+| V4 (current) | cpal | whisper.cpp subprocess | piper subprocess + paplay | sliding-window Whisper, separate cpal stream |
 
 ## Failure Modes
 
@@ -96,3 +117,5 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 | STT model missing on disk | `TranscriptionFailed("model not found")`. The updater is expected to fetch it; V2 ships with the model baked, V3 may pull on first use. |
 | TTS voice model missing | `Speak` returns `spoken: false, reason: "voice model not found"`. Reply still shows in the popup, just no audio. |
 | Daemon offline | The shell's `VoiceBridge` shows the mic icon as disabled with a tooltip; Lilith chat keeps working in text-only mode. |
+| Hotword false-fire (random speech matches "oi lilith") | The shell dispatches whatever remainder follows the wake-word to Lilith; if there's no remainder, the mic pops and waits for a command. Worst case: a stray cycle that ends in "no command found". |
+| Hotword can't open the mic (busy by push-to-talk, etc.) | `StartHotword` returns `enabled: false` with the underlying cpal error. Setting persists; daemon retries on the next StartHotword call. |

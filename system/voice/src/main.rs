@@ -12,10 +12,12 @@
 //! See ADR 0009 for the scope split and `module.md` for the contract.
 
 mod capture;
+mod hotword;
 mod stt;
 mod tts;
 
 use capture::CaptureHandle;
+use hotword::HotwordHandle;
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -48,6 +50,7 @@ impl State {
 struct VoiceService {
     state: Arc<AsyncMutex<State>>,
     capture: CaptureHandle,
+    hotword: HotwordHandle,
 }
 
 #[interface(name = "com.jarvis.Voice")]
@@ -210,6 +213,34 @@ impl VoiceService {
         json!({ "state": state.as_str() }).to_string()
     }
 
+    /// Engage continuous wake-word listening. Runs an independent
+    /// cpal stream alongside whatever else the daemon is doing — on
+    /// PipeWire (Fedora default) multiple capture clients share the
+    /// source cleanly. See ADR 0015 for the design.
+    async fn start_hotword(&self) -> String {
+        match self.hotword.enable().await {
+            Ok(()) => {
+                tracing::info!("Hotword enabled");
+                json!({ "enabled": true }).to_string()
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "StartHotword failed");
+                json!({ "enabled": false, "reason": e.to_string() }).to_string()
+            }
+        }
+    }
+
+    /// Disengage hotword listening. Idempotent.
+    async fn stop_hotword(&self) -> String {
+        self.hotword.disable().await;
+        tracing::info!("Hotword disabled");
+        json!({ "enabled": false }).to_string()
+    }
+
+    async fn get_hotword_enabled(&self) -> bool {
+        self.hotword.is_enabled().await
+    }
+
     #[zbus(signal)]
     async fn state_changed(ctx: &SignalContext<'_>, state: &str) -> zbus::Result<()>;
 
@@ -218,6 +249,14 @@ impl VoiceService {
 
     #[zbus(signal)]
     async fn transcription_failed(ctx: &SignalContext<'_>, reason: &str) -> zbus::Result<()>;
+
+    /// Fires when the hotword actor matched a wake-word in its
+    /// sliding-window transcript. `text` is the full transcript that
+    /// matched — the shell strips the wake-word and feeds the
+    /// remainder to Lilith. Empty payload means "no remainder"
+    /// (the user said only the wake-word).
+    #[zbus(signal)]
+    async fn hotword_detected(ctx: &SignalContext<'_>, text: &str) -> zbus::Result<()>;
 }
 
 /// Bottom half of the STT pipeline: finish the capture, write the WAV,
@@ -274,24 +313,98 @@ async fn main() -> anyhow::Result<()> {
         )
         .init();
 
-    tracing::info!("Starting Jarvis Voice (V2: STT via whisper.cpp)");
+    tracing::info!("Starting Jarvis Voice (V4: STT + TTS + hotword)");
+
+    let (hotword_handle, mut hotword_events) = hotword::spawn();
 
     let service = VoiceService {
         state: Arc::new(AsyncMutex::new(State::Idle)),
         capture: capture::spawn(),
+        hotword: hotword_handle,
     };
 
-    let _conn = connection::Builder::session()?
+    let conn = connection::Builder::session()?
         .name("com.jarvis.Voice")?
         .serve_at("/com/jarvis/Voice", service)?
         .build()
         .await?;
 
+    // Bridge the hotword actor's event channel to the DBus signal.
+    // SignalContext::new ties the signal emission to the connection
+    // + the object path; the interface name comes from the #[zbus]
+    // attribute on the signal declaration.
+    let signal_ctx = SignalContext::new(&conn, "/com/jarvis/Voice")?;
+    tokio::spawn(async move {
+        while let Some(text) = hotword_events.recv().await {
+            if let Err(e) = VoiceService::hotword_detected(&signal_ctx, &text).await {
+                tracing::warn!("HotwordDetected emit failed: {e}");
+            }
+        }
+    });
+
     tracing::info!("Voice ready on com.jarvis.Voice");
+
+    // Auto-resume hotword if the user had it on last session. The
+    // setting is owned by com.jarvis.Settings which may not be up
+    // yet at the moment we ask — give it a few seconds of retries
+    // before giving up. If we can't reach it, leave hotword off.
+    // Self-call goes back through DBus rather than reaching into the
+    // handle directly so the same StartHotword path runs and any
+    // observers (shell's hotwordEnabled property) see the transition.
+    let conn_for_resume = conn.clone();
+    tokio::spawn(async move {
+        for attempt in 0..20 {
+            if let Some(true) = read_bool_setting(&conn_for_resume, "voice.hotword.enabled").await {
+                tracing::info!("Restoring hotword from settings");
+                let proxy = match zbus::Proxy::new(
+                    &conn_for_resume,
+                    "com.jarvis.Voice",
+                    "/com/jarvis/Voice",
+                    "com.jarvis.Voice",
+                )
+                .await
+                {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "hotword self-call proxy failed");
+                        return;
+                    }
+                };
+                if let Err(e) = proxy.call::<_, _, String>("StartHotword", &()).await {
+                    tracing::warn!(error = %e, "hotword auto-enable failed");
+                }
+                return;
+            }
+            if attempt == 0 {
+                tracing::info!("voice.hotword.enabled not set or false; staying off");
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        }
+    });
 
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
     }
+}
+
+/// Best-effort `Get` against the Settings daemon. Returns `None` when
+/// the daemon is unreachable, the key is missing, or the value isn't a
+/// bool — caller treats all three as "default false".
+async fn read_bool_setting(conn: &zbus::Connection, key: &str) -> Option<bool> {
+    let proxy = zbus::Proxy::new(
+        conn,
+        "com.jarvis.Settings",
+        "/com/jarvis/Settings",
+        "com.jarvis.Settings",
+    )
+    .await
+    .ok()?;
+    let response: String = proxy.call("Get", &(key,)).await.ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&response).ok()?;
+    if !parsed.get("found")?.as_bool()? {
+        return None;
+    }
+    parsed.get("value")?.as_bool()
 }
 
 #[cfg(test)]

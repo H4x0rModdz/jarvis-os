@@ -70,6 +70,36 @@ Rectangle {
             }
         }
 
+        // Hotword pipeline. When the daemon matches a wake-word the
+        // bridge splits the transcript into (wake-word, remainder).
+        // Remainder present  → dispatch straight to Lilith (one-shot
+        //                       "oi lilith abre o navegador").
+        // Remainder empty    → engage the mic so the user can speak
+        //                       the command body — same path as the
+        //                       MicButton click. The TranscriptionFinal
+        //                       handler in LilithBridge wires the
+        //                       second leg.
+        Connections {
+            target: VoiceBridge
+            function onWakeWordTriggered(fullTranscript, remainder) {
+                if (remainder.length > 0) {
+                    LilithBridge.send(remainder);
+                    root.lastUserText = remainder;
+                } else {
+                    VoiceBridge.toggle();
+                }
+            }
+            // Pipe push-to-talk transcripts into Lilith automatically
+            // when they originated from a hotword cycle. The original
+            // user-typed flow already runs through onAccepted above.
+            function onLastTranscriptChanged() {
+                const t = VoiceBridge.lastTranscript.trim();
+                if (t.length === 0) return;
+                LilithBridge.send(t);
+                root.lastUserText = t;
+            }
+        }
+
         StatusIndicator {
             Layout.alignment: Qt.AlignVCenter
             reachable: LilithBridge.reachable

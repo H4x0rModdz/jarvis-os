@@ -39,12 +39,18 @@ VoiceBridge::VoiceBridge(QObject* parent) : QObject(parent)
         QStringLiteral("TranscriptionFailed"),
         this,
         SLOT(onTranscriptionFailed(QString)));
+    const bool hotwordOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("HotwordDetected"),
+        this,
+        SLOT(onHotwordDetected(QString)));
 
-    if (!stateOk || !finalOk || !failedOk) {
+    if (!stateOk || !finalOk || !failedOk || !hotwordOk) {
         qCWarning(lcVoice) << "Subscription failed:"
                            << "state=" << stateOk
                            << "final=" << finalOk
-                           << "failed=" << failedOk;
+                           << "failed=" << failedOk
+                           << "hotword=" << hotwordOk;
     }
 
     // Probe reachability by asking for the current state. The voice daemon
@@ -118,9 +124,76 @@ void VoiceBridge::onTranscriptionFailed(const QString& reason)
     emit lastErrorChanged();
 }
 
+void VoiceBridge::onHotwordDetected(const QString& text)
+{
+    qCInfo(lcVoice) << "hotword detected:" << text;
+    // Strip everything up to and including the wake-word so QML sees
+    // just the user's command. Keep the matching loose — the daemon
+    // accepts several phrasings (oi/ei/olá/hey/ok lilith), and
+    // whichever fired here is the one to remove.
+    static const QStringList wakeWords = {
+        QStringLiteral("oi lilith"),
+        QStringLiteral("ei lilith"),
+        QStringLiteral("olá lilith"),
+        QStringLiteral("ola lilith"),
+        QStringLiteral("hey lilith"),
+        QStringLiteral("ok lilith"),
+    };
+    QString remainder;
+    const QString lower = text.toLower();
+    for (const auto& w : wakeWords) {
+        const int idx = lower.indexOf(w);
+        if (idx >= 0) {
+            remainder = text.mid(idx + w.size()).trimmed();
+            break;
+        }
+    }
+    // Drop a leading comma / punctuation the user might've spoken
+    // ("oi lilith, abre o navegador").
+    while (!remainder.isEmpty() &&
+           (remainder.front() == QChar(',') ||
+            remainder.front() == QChar('.') ||
+            remainder.front() == QChar(';'))) {
+        remainder.remove(0, 1);
+    }
+    remainder = remainder.trimmed();
+
+    emit wakeWordTriggered(text, remainder);
+}
+
+void VoiceBridge::setHotwordEnabled(bool enabled)
+{
+    if (!m_iface) return;
+    qCInfo(lcVoice) << "setHotwordEnabled" << enabled;
+    const QString method = enabled
+        ? QStringLiteral("StartHotword")
+        : QStringLiteral("StopHotword");
+    auto pending = m_iface->asyncCall(method);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, enabled, method](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                qCWarning(lcVoice) << method << "failed:" << reply.error().message();
+                m_lastError = reply.error().message();
+                emit lastErrorChanged();
+            } else {
+                setHotwordEnabledInternal(enabled);
+            }
+            w->deleteLater();
+        });
+}
+
 void VoiceBridge::setReachable(bool v)
 {
     if (m_reachable == v) return;
     m_reachable = v;
     emit reachableChanged();
+}
+
+void VoiceBridge::setHotwordEnabledInternal(bool v)
+{
+    if (m_hotwordEnabled == v) return;
+    m_hotwordEnabled = v;
+    emit hotwordEnabledChanged();
 }

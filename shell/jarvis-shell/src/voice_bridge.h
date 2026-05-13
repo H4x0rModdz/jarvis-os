@@ -25,6 +25,7 @@ class VoiceBridge : public QObject
     Q_PROPERTY(bool reachable READ reachable NOTIFY reachableChanged)
     Q_PROPERTY(QString lastTranscript READ lastTranscript NOTIFY lastTranscriptChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    Q_PROPERTY(bool hotwordEnabled READ hotwordEnabled NOTIFY hotwordEnabledChanged)
 
 public:
     explicit VoiceBridge(QObject* parent = nullptr);
@@ -33,6 +34,7 @@ public:
     bool reachable() const { return m_reachable; }
     QString lastTranscript() const { return m_lastTranscript; }
     QString lastError() const { return m_lastError; }
+    bool hotwordEnabled() const { return m_hotwordEnabled; }
 
     /// Toggle press-to-talk. When idle, sends StartListening; when listening,
     /// sends StopListening. Anything else (processing / speaking) is ignored.
@@ -44,23 +46,40 @@ public:
     /// briefly but plays no audio; V3 wires piper.
     Q_INVOKABLE void speak(const QString& text);
 
+    /// Engage / disengage the hotword listener on the daemon. Persisted
+    /// to com.jarvis.Settings under `voice.hotword.enabled` so the
+    /// preference survives across restarts; the daemon itself starts
+    /// disabled every boot for safety.
+    Q_INVOKABLE void setHotwordEnabled(bool enabled);
+
 signals:
     void stateChanged();
     void reachableChanged();
     void lastTranscriptChanged();
     void lastErrorChanged();
+    void hotwordEnabledChanged();
+
+    /// Emitted after the daemon's HotwordDetected signal lands.
+    /// `fullTranscript` is the Whisper output verbatim;
+    /// `remainder` is whatever follows the wake-word (empty when the
+    /// user said only "oi lilith"). The QML side decides whether to
+    /// dispatch to Lilith immediately or pop the mic into listening.
+    void wakeWordTriggered(const QString& fullTranscript, const QString& remainder);
 
 private slots:
     void onStateChanged(const QString& state);
     void onTranscriptionFinal(const QString& text);
     void onTranscriptionFailed(const QString& reason);
+    void onHotwordDetected(const QString& text);
 
 private:
     void setReachable(bool v);
+    void setHotwordEnabledInternal(bool v);
 
     QDBusInterface* m_iface = nullptr;
     QString m_state = QStringLiteral("idle");
     bool m_reachable = false;
     QString m_lastTranscript;
     QString m_lastError;
+    bool m_hotwordEnabled = false;
 };
