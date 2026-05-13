@@ -4,6 +4,9 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 
 namespace {
@@ -16,6 +19,12 @@ constexpr const char* kIface = "com.jarvis.Voice";
 
 VoiceBridge::VoiceBridge(QObject* parent) : QObject(parent)
 {
+    // $USER is the identity that com.jarvis.Voice and pam-jarvis
+    // both key voiceprints by. Falls back to "jarvis" so headless
+    // dev environments don't crash on a missing env var.
+    const QByteArray envUser = qgetenv("USER");
+    m_currentUser = envUser.isEmpty() ? QStringLiteral("jarvis") : QString::fromLocal8Bit(envUser);
+
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
         qCWarning(lcVoice) << "Session bus not connected";
@@ -196,4 +205,117 @@ void VoiceBridge::setHotwordEnabledInternal(bool v)
     if (m_hotwordEnabled == v) return;
     m_hotwordEnabled = v;
     emit hotwordEnabledChanged();
+}
+
+// ── Voiceprint enrollment surface ─────────────────────────────────
+
+void VoiceBridge::enrollVoiceprint(const QString& user, int seconds)
+{
+    if (!m_iface) return;
+    const quint32 clamped = static_cast<quint32>(qBound(1, seconds, 10));
+    m_lastEnrollMessage = QStringLiteral("Capturando %1s para %2…").arg(clamped).arg(user);
+    emit lastEnrollMessageChanged();
+
+    auto pending = m_iface->asyncCall(QStringLiteral("EnrollVoiceprint"), user, clamped);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, user](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                m_lastEnrollMessage = reply.error().message();
+                emit lastEnrollMessageChanged();
+                w->deleteLater();
+                return;
+            }
+            const auto doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            const auto obj = doc.object();
+            if (obj.value(QStringLiteral("ok")).toBool()) {
+                m_lastEnrollMessage = tr("Voz registrada para %1.").arg(user);
+                refreshEnrolledUsers();
+            } else {
+                m_lastEnrollMessage = obj.value(QStringLiteral("reason"))
+                    .toString(tr("Falha ao registrar voz."));
+            }
+            emit lastEnrollMessageChanged();
+            w->deleteLater();
+        });
+}
+
+void VoiceBridge::verifyVoiceprint(const QString& user)
+{
+    if (!m_iface) return;
+    m_lastEnrollMessage = QStringLiteral("Verificando %1…").arg(user);
+    emit lastEnrollMessageChanged();
+
+    auto pending = m_iface->asyncCall(QStringLiteral("VerifyVoiceprint"), user);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, user](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                m_lastEnrollMessage = reply.error().message();
+                emit lastEnrollMessageChanged();
+                w->deleteLater();
+                return;
+            }
+            const auto doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            const auto obj = doc.object();
+            const bool ok = obj.value(QStringLiteral("ok")).toBool();
+            const double score = obj.value(QStringLiteral("score")).toDouble();
+            if (ok) {
+                m_lastEnrollMessage = tr("Voz de %1 reconhecida (score %2).")
+                    .arg(user).arg(score, 0, 'f', 2);
+            } else {
+                const auto reason = obj.value(QStringLiteral("reason")).toString();
+                if (!reason.isEmpty()) {
+                    m_lastEnrollMessage = reason;
+                } else {
+                    m_lastEnrollMessage = tr("Voz não reconhecida (score %1).")
+                        .arg(score, 0, 'f', 2);
+                }
+            }
+            emit lastEnrollMessageChanged();
+            w->deleteLater();
+        });
+}
+
+void VoiceBridge::deleteVoiceprint(const QString& user)
+{
+    if (!m_iface) return;
+    auto pending = m_iface->asyncCall(QStringLiteral("DeleteVoiceprint"), user);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, user](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isError()) {
+                refreshEnrolledUsers();
+                m_lastEnrollMessage = tr("Registro de %1 removido.").arg(user);
+                emit lastEnrollMessageChanged();
+            }
+            w->deleteLater();
+        });
+}
+
+void VoiceBridge::refreshEnrolledUsers()
+{
+    if (!m_iface) return;
+    auto pending = m_iface->asyncCall(QStringLiteral("ListEnrolled"));
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                w->deleteLater();
+                return;
+            }
+            const auto doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            const auto arr = doc.object().value(QStringLiteral("users")).toArray();
+            QVariantList out;
+            for (const auto& v : arr) {
+                if (v.isObject()) out.append(v.toObject().toVariantMap());
+            }
+            m_enrolledUsers = out;
+            emit enrolledUsersChanged();
+            w->deleteLater();
+        });
 }

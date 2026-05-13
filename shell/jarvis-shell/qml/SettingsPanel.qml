@@ -25,6 +25,9 @@ Window {
             x = s.virtualX + Math.floor((s.width - width) / 2);
             y = s.virtualY + Math.floor((s.height - height) / 2);
         }
+        // Pull a fresh enrolled-users list — daemon state may have
+        // changed since the panel was last opened (CLI enroll, etc.).
+        VoiceBridge.refreshEnrolledUsers();
         visible = true;
         requestActivate();
     }
@@ -214,6 +217,160 @@ Window {
                             VoiceBridge.setHotwordEnabled(next);
                         }
                     }
+                }
+            }
+
+            // ── Row: Voiceprint biometric ────────────────────────────
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Text {
+                    text: qsTr("Reconhecimento de voz biométrico")
+                    color: Theme.text
+                    font.pixelSize: 14
+                }
+                Text {
+                    text: qsTr("Registre sua voz para desbloquear o sistema sem digitar a senha. MFCC + DTW; pode ser burlado por gravação. Sempre há fallback de senha.")
+                    color: Theme.textDim
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
+                // Enrolled list — one row per user.
+                Repeater {
+                    model: VoiceBridge.enrolledUsers
+                    delegate: RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        Rectangle {
+                            implicitWidth: 8
+                            implicitHeight: 8
+                            radius: 4
+                            color: Theme.success
+                        }
+                        Text {
+                            text: modelData.user
+                            color: Theme.text
+                            font.pixelSize: 13
+                            Layout.fillWidth: true
+                        }
+                        Text {
+                            text: qsTr("desde ") +
+                                  (modelData.enrolled_at || "").substring(0, 10)
+                            color: Theme.textDim
+                            font.pixelSize: 11
+                        }
+                        Text {
+                            text: "×"
+                            color: deleteArea.containsMouse ? Theme.danger : Theme.textDim
+                            font.pixelSize: 16
+                            font.weight: Font.Bold
+                            Layout.preferredWidth: 20
+                            horizontalAlignment: Text.AlignHCenter
+
+                            MouseArea {
+                                id: deleteArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: VoiceBridge.deleteVoiceprint(modelData.user)
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    visible: VoiceBridge.enrolledUsers.length === 0
+                    text: qsTr("Nenhuma voz registrada.")
+                    color: Theme.textDim
+                    font.pixelSize: 12
+                    font.italic: true
+                }
+
+                // Action row — enroll + verify the current user.
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 32
+                        radius: 16
+                        color: enrollArea.containsMouse
+                            ? Theme.accent
+                            : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.25)
+                        border.color: Theme.accent
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("REGISTRAR MINHA VOZ (3s)")
+                            color: Theme.text
+                            font.pixelSize: 11
+                            font.weight: Font.Bold
+                            font.letterSpacing: 1
+                        }
+                        MouseArea {
+                            id: enrollArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            // currentUser = $USER from the bridge —
+                            // same identity pam-jarvis will see during
+                            // a verify call on the lock screen.
+                            onClicked: VoiceBridge.enrollVoiceprint(
+                                VoiceBridge.currentUser, 3)
+                        }
+                    }
+                    Rectangle {
+                        Layout.preferredWidth: 100
+                        Layout.preferredHeight: 32
+                        radius: 16
+                        color: verifyArea.containsMouse
+                            ? Qt.rgba(1, 1, 1, 0.10)
+                            : Qt.rgba(1, 1, 1, 0.05)
+                        border.color: Theme.border
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("TESTAR")
+                            color: Theme.textDim
+                            font.pixelSize: 10
+                            font.weight: Font.Bold
+                            font.letterSpacing: 1
+                        }
+                        MouseArea {
+                            id: verifyArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                // Verify the first enrolled user; in
+                                // V1 the user is always the current
+                                // logged-in operator anyway.
+                                if (VoiceBridge.enrolledUsers.length > 0) {
+                                    VoiceBridge.verifyVoiceprint(
+                                        VoiceBridge.enrolledUsers[0].user);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Inline feedback line — last enroll/verify result.
+                Text {
+                    visible: VoiceBridge.lastEnrollMessage.length > 0
+                    text: VoiceBridge.lastEnrollMessage
+                    color: Theme.textDim
+                    font.pixelSize: 12
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
                 }
             }
 

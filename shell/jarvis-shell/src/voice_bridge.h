@@ -3,6 +3,7 @@
 #include <QDBusInterface>
 #include <QObject>
 #include <QString>
+#include <QVariantList>
 #include <qqmlintegration.h>
 
 /// Bridge between QML and `com.jarvis.Voice`.
@@ -26,6 +27,12 @@ class VoiceBridge : public QObject
     Q_PROPERTY(QString lastTranscript READ lastTranscript NOTIFY lastTranscriptChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
     Q_PROPERTY(bool hotwordEnabled READ hotwordEnabled NOTIFY hotwordEnabledChanged)
+    Q_PROPERTY(QVariantList enrolledUsers READ enrolledUsers NOTIFY enrolledUsersChanged)
+    Q_PROPERTY(QString lastEnrollMessage READ lastEnrollMessage NOTIFY lastEnrollMessageChanged)
+    /// `$USER` — same identity the PAM module sees during a verify
+    /// call. Settings panel enrolls/verifies against this so the
+    /// enrollment matches the lock-screen unlock target.
+    Q_PROPERTY(QString currentUser READ currentUser CONSTANT)
 
 public:
     explicit VoiceBridge(QObject* parent = nullptr);
@@ -35,6 +42,9 @@ public:
     QString lastTranscript() const { return m_lastTranscript; }
     QString lastError() const { return m_lastError; }
     bool hotwordEnabled() const { return m_hotwordEnabled; }
+    QVariantList enrolledUsers() const { return m_enrolledUsers; }
+    QString lastEnrollMessage() const { return m_lastEnrollMessage; }
+    QString currentUser() const { return m_currentUser; }
 
     /// Toggle press-to-talk. When idle, sends StartListening; when listening,
     /// sends StopListening. Anything else (processing / speaking) is ignored.
@@ -52,12 +62,32 @@ public:
     /// disabled every boot for safety.
     Q_INVOKABLE void setHotwordEnabled(bool enabled);
 
+    /// Capture `seconds` of audio and store a voiceprint for `user`.
+    /// Updates `enrolledUsers` + emits `lastEnrollMessageChanged`
+    /// when the DBus call returns.
+    Q_INVOKABLE void enrollVoiceprint(const QString& user, int seconds);
+
+    /// Capture ~2 s and compare against `user`'s stored voiceprint.
+    /// Updates `lastEnrollMessage` with the verdict + score so the
+    /// settings panel can render feedback.
+    Q_INVOKABLE void verifyVoiceprint(const QString& user);
+
+    /// Remove `user`'s enrolled voiceprint from the daemon's store.
+    /// Updates `enrolledUsers`.
+    Q_INVOKABLE void deleteVoiceprint(const QString& user);
+
+    /// Pull the current enrolled-users list out of the daemon. The
+    /// settings panel calls this on open + after every mutation.
+    Q_INVOKABLE void refreshEnrolledUsers();
+
 signals:
     void stateChanged();
     void reachableChanged();
     void lastTranscriptChanged();
     void lastErrorChanged();
     void hotwordEnabledChanged();
+    void enrolledUsersChanged();
+    void lastEnrollMessageChanged();
 
     /// Emitted after the daemon's HotwordDetected signal lands.
     /// `fullTranscript` is the Whisper output verbatim;
@@ -82,4 +112,7 @@ private:
     QString m_lastTranscript;
     QString m_lastError;
     bool m_hotwordEnabled = false;
+    QVariantList m_enrolledUsers;
+    QString m_lastEnrollMessage;
+    QString m_currentUser;
 };
