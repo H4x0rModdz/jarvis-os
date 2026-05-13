@@ -193,7 +193,52 @@ Window {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     enabled: LockClient.state !== "checking"
+                        && LockClient.state !== "listening"
                     onClicked: root.submit()
+                }
+            }
+
+            // Voice-unlock pill — calls the voice-only PAM stack via
+            // com.jarvis.Lock.VerifyVoice(). Visually subordinate to
+            // the typed-password path so users never feel forced into
+            // the voice route. Phase 8 fix to the latency trade-off
+            // Phase 7 introduced — see ADR 0020.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 36
+                radius: 18
+                color: voiceArea.containsMouse
+                    ? Qt.rgba(1, 1, 1, 0.10)
+                    : Qt.rgba(1, 1, 1, 0.04)
+                border.color: LockClient.state === "listening"
+                    ? Theme.accent
+                    : Theme.border
+                border.width: 1
+                opacity: LockClient.state === "checking" ? 0.4 : 1.0
+                Behavior on color { ColorAnimation { duration: Theme.animFast } }
+                Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: LockClient.state === "listening"
+                        ? qsTr("OUVINDO…")
+                        : qsTr("🎙  FALAR PARA DESBLOQUEAR")
+                    color: LockClient.state === "listening"
+                        ? Theme.accent
+                        : Theme.textDim
+                    font.pixelSize: 11
+                    font.weight: Font.Bold
+                    font.letterSpacing: 1
+                }
+
+                MouseArea {
+                    id: voiceArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    enabled: LockClient.state !== "checking"
+                        && LockClient.state !== "listening"
+                    onClicked: LockClient.verifyVoice()
                 }
             }
 

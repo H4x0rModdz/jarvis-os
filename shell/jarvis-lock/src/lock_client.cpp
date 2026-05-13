@@ -75,6 +75,41 @@ void LockClient::verify(const QString& password)
         });
 }
 
+void LockClient::verifyVoice()
+{
+    if (!m_iface) return;
+    setState(QStringLiteral("listening"));
+
+    auto pending = m_iface->asyncCall(QStringLiteral("VerifyVoice"));
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                setState(QStringLiteral("idle"), reply.error().message());
+                w->deleteLater();
+                return;
+            }
+            const auto doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            if (!doc.isObject()) {
+                setState(QStringLiteral("idle"), tr("Resposta inválida do daemon"));
+                w->deleteLater();
+                return;
+            }
+            const auto obj = doc.object();
+            if (obj.value(QStringLiteral("ok")).toBool()) {
+                // LockStateChanged(false) will quit us; same path as
+                // the password verifier.
+                setState(QStringLiteral("verified"));
+            } else {
+                const QString reason = obj.value(QStringLiteral("reason"))
+                                          .toString(tr("Voz não reconhecida"));
+                setState(QStringLiteral("idle"), reason);
+            }
+            w->deleteLater();
+        });
+}
+
 void LockClient::onLockStateChanged(bool locked)
 {
     qCInfo(lcLock) << "LockStateChanged:" << locked;

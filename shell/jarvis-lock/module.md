@@ -51,12 +51,24 @@ limitation. V2 plus `ext-session-lock-v1` closes that hole.
 DBus  com.jarvis.Lock  at  /com/jarvis/Lock   (session bus)
 
   Verify(password: string) -> string   // JSON { ok, reason? }
+       └─ routes through /etc/pam.d/jarvis-lock (password only).
+  VerifyVoice()           -> string    // JSON { ok, reason? }
+       └─ routes through /etc/pam.d/jarvis-lock-voice (voice only).
 ```
 
 On success the daemon kills this process, so we don't need a clean
 "exit on unlock" branch — we just let the QML show a "Verificando…"
 state until the kill arrives. On failure we parse the reason out of
 the JSON and flash an error message under the field.
+
+## UI states
+
+| State | Trigger | UX |
+|---|---|---|
+| `idle` | initial / after a failed attempt | Password field focused, voice pill says "🎙 FALAR PARA DESBLOQUEAR". |
+| `checking` | after submitting a password | Unlock button reads "VERIFICANDO…", both unlock + voice pill disabled. |
+| `listening` | after clicking the voice pill | Pill says "OUVINDO…" with the accent border; both unlock + voice pill disabled. |
+| `verified` | daemon ack'd success | Brief flash before `LockStateChanged(false)` kills the window. |
 
 ## Files
 

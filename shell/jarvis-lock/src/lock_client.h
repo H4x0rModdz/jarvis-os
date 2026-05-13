@@ -26,6 +26,13 @@ public:
 
     Q_INVOKABLE void verify(const QString& password);
 
+    /// Voice-path unlock. Calls com.jarvis.Lock.VerifyVoice() which
+    /// routes through the `jarvis-lock-voice` PAM service (voice
+    /// required, no password fallback). Daemon captures ~2 s, scores,
+    /// returns ok/reason. State cycles idle → listening → idle (or
+    /// → verified on success).
+    Q_INVOKABLE void verifyVoice();
+
 signals:
     void stateChanged();
 
