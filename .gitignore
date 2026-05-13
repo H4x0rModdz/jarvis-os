@@ -19,10 +19,13 @@ Thumbs.db
 *.so
 *.a
 *.d
-# `*.d` above was meant for Rust dep files but also swallows systemd
-# drop-in directories (foo.service.d/). Keep those tracked.
+# `*.d` above was meant for Rust dep files but also swallows config-
+# style directories (systemd drop-ins, /etc/pam.d/-shaped trees, etc.)
+# in iso assets. Keep those tracked.
 !**/*.service.d/
 !**/*.service.d/**
+!iso/assets/**/*.d/
+!iso/assets/**/*.d/**
 
 # Qt/CMake (shell/)
 shell/*/build/

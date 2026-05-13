@@ -54,13 +54,13 @@ which biometric to attempt; V1 ignores argv entirely.
 
 ## V1 vs V2 vs V3
 
-| Item | V1 | V2 (current) | V3 |
-|---|---|---|---|
-| `pam_sm_authenticate` | Always `PAM_IGNORE` | exec `jarvis-pam-helper verify <user>`; helper calls `com.jarvis.Voice.VerifyVoiceprint` | + `faceprint` argv branch against a face-id daemon |
-| Helper transport | n/a | session bus at `/run/user/<uid>/bus`, 3 s wall | + cached enrollment for pre-login services |
-| `pam_sm_setcred` | Always `PAM_SUCCESS` | unchanged | unchanged |
-| Enrollment | none | `com.jarvis.Voice.EnrollVoiceprint` + Settings UI | + face enrollment via the camera |
-| Service wiring | not wired into any live PAM config | not wired in V2 ISO (operator opt-in) | + jarvis-lock + jarvis-greeter shipped wiring |
+| Item | V1 | V2 | V3 (current) | V4 |
+|---|---|---|---|---|
+| `pam_sm_authenticate` | Always `PAM_IGNORE` | exec `jarvis-pam-helper verify <user>` (helper calls `com.jarvis.Voice.VerifyVoiceprint`) | unchanged | + `faceprint` argv branch against a face-id daemon |
+| Helper transport | n/a | session bus at `/run/user/<uid>/bus`, 3 s wall | unchanged | + cached enrollment for pre-login services |
+| `pam_sm_setcred` | Always `PAM_SUCCESS` | unchanged | unchanged | unchanged |
+| Enrollment | none | `EnrollVoiceprint` DBus | + `jarvis-voiceprint-ctl` CLI + Settings UI biometric section | + face enrollment via the camera |
+| Service wiring | not wired into any live PAM config | not wired (operator opt-in) | `/etc/pam.d/jarvis-lock` references `pam_jarvis.so sufficient` (ADR 0020); other services untouched | + greeter, sudo (after Phase 8 lock-window voice button) |
 
 ## Failure Modes
 

@@ -282,11 +282,15 @@ COPY --from=builder /out/bin/jarvis-compositor /usr/bin/jarvis-compositor
 
 # pam_jarvis.so — biometric PAM module. V2 (ADR 0019) shells out to
 # /usr/libexec/jarvis-pam-helper to keep the tokio/zbus stack out of
-# every sudo/login. The module is installed at the standard PAM
-# location; no PAM service file references it yet, so the safe-by-
-# default posture stays — operators opt in service-by-service.
+# every sudo/login.
 COPY --from=builder /out/pam/pam_jarvis.so        /usr/lib64/security/pam_jarvis.so
 COPY --from=builder /out/bin/jarvis-pam-helper    /usr/libexec/jarvis-pam-helper
+
+# /etc/pam.d/jarvis-lock — first shipping wiring of pam_jarvis.so.
+# Voiceprint sufficient + system-auth fallback (ADR 0020). The lock
+# daemon uses `pamtester jarvis-lock <user> authenticate` so a
+# voice match unlocks without typing the password.
+COPY iso/assets/pam.d/jarvis-lock                 /etc/pam.d/jarvis-lock
 
 # Example SDK app: ship its manifest under /usr/share/jarvis/apps/
 # so the Action Bus picks it up at startup. DBus auto-activation is

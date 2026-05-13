@@ -1,0 +1,23 @@
+#%PAM-1.0
+# Jarvis OS lock-screen authentication stack.
+#
+# Two-step auth: voiceprint first (sufficient → match ends the stack),
+# password fallback via the system-auth include if voice misses or is
+# unavailable. The user always has a working unlock path even when:
+#   - they haven't enrolled a voiceprint yet (helper exits PAM_IGNORE)
+#   - the voice daemon is offline (helper exits PAM_IGNORE)
+#   - their voice doesn't match (PAM_AUTH_ERR → next module tries)
+#
+# pam_jarvis.so + /usr/libexec/jarvis-pam-helper provide the voiceprint
+# verdict; see ADR 0019.
+#
+# Trade-off: a typed-password unlock now waits ~2.5 s for the voice
+# attempt to time out before the password path runs. ADR 0020 records
+# this and points at the lock-window V2 work that resolves it.
+
+auth        sufficient   pam_jarvis.so
+auth        include      system-auth
+
+account     include      system-auth
+password    include      system-auth
+session     include      system-auth

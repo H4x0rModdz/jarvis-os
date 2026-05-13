@@ -64,6 +64,30 @@ DBus  com.jarvis.Lock  at  /com/jarvis/Lock
 | Lock window crashes | Child wait completes with non-zero; daemon clears locked flag and emits `LockStateChanged(false)` — fail-open, matching the wider screen-locker convention (a locker that traps the user when it crashes is worse than no locker). |
 | `pamtester` missing | `Verify` returns `{ ok: false }` and logs at WARN. The lock window shows "Senha incorreta" — visible failure beats silent unlock. |
 
+## PAM stack
+
+The daemon authenticates via `pamtester jarvis-lock <user>
+authenticate`. The `jarvis-lock` PAM service is installed at
+`/etc/pam.d/jarvis-lock` and has the shape:
+
+```
+auth        sufficient   pam_jarvis.so
+auth        include      system-auth
+...
+```
+
+Voice match (when the user has enrolled and is reachable) ends the
+stack with `PAM_SUCCESS` — the screen unlocks without the user
+typing. Voice miss / no enrollment / daemon offline falls through to
+`system-auth` (pam_unix), which reads the password from stdin (the
+Qt lock window pipes it in) and authenticates the classical way.
+
+Known V1 trade-off: a typed-password unlock waits up to ~2.5 s for
+the voice attempt to time out before the password path runs. ADR
+0020 documents the rationale and the lock-window V2 fix (a dedicated
+voice button that opts into the voice path explicitly, leaving
+typed-password unlocks instant).
+
 ## Auto-lock on idle
 
 Driven by `swayidle`, supervised by the daemon. `idle_lock_supervisor`

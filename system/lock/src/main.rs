@@ -113,16 +113,20 @@ impl LockService {
     }
 }
 
-/// Authenticate `user` against the system PAM stack via the
+/// Authenticate `user` against the Jarvis lock PAM stack via the
 /// `pamtester` CLI. `pamtester <service> <user> authenticate` reads
 /// the password from stdin and exits 0 on success. We use the
-/// `login` PAM service — the same one greetd uses at boot.
+/// `jarvis-lock` service (installed at `/etc/pam.d/jarvis-lock`) so
+/// the voiceprint sufficient-rule gets its chance before the password
+/// path runs. See ADR 0020 for the trade-off (typed-password unlocks
+/// pay ~2.5 s of voice-attempt latency that lock-window V2 will fix
+/// with a dedicated voice button).
 async fn verify_with_pamtester(user: &str, password: &str) -> bool {
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
 
     let mut child = match tokio::process::Command::new("pamtester")
-        .args(["login", user, "authenticate"])
+        .args(["jarvis-lock", user, "authenticate"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
