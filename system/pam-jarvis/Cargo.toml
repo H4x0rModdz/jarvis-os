@@ -1,0 +1,12 @@
+[package]
+name = "pam-jarvis"
+version = "0.1.0"
+edition = "2021"
+description = "Biometric PAM module — voiceprint + faceprint hooks for Jarvis OS"
+
+[lib]
+name = "pam_jarvis"
+# The PAM stack dlopens auth modules; libpam expects a shared object
+# exporting `pam_sm_authenticate` + `pam_sm_setcred` symbols, so we
+# build a C-ABI dynamic library, not a Rust rlib.
+crate-type = ["cdylib"]

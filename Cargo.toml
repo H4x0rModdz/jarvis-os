@@ -9,6 +9,7 @@ members = [
     "system/notifications",
     "system/compat",
     "system/lock",
+    "system/pam-jarvis",
     "shell/compositor",
     "ai/lilith",
     "sdk/jarvis-sdk-types",

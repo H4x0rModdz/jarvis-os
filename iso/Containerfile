@@ -95,7 +95,8 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p sdk-hello \
         -p jarvis-compat \
         -p jarvis-lock \
-        -p jarvis-lock-ctl
+        -p jarvis-lock-ctl \
+        -p pam-jarvis
 
 # Qt shell — separate cmake build out-of-tree.
 RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
@@ -131,6 +132,8 @@ RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-compat        /out/bin/ \
     && cp /build/rust/release/jarvis-lock          /out/bin/ \
     && cp /build/rust/release/jarvis-lock-ctl      /out/bin/ \
+    && mkdir -p /out/pam \
+    && cp /build/rust/release/libpam_jarvis.so     /out/pam/pam_jarvis.so \
     && cp /build/lock/jarvis-lock-window           /out/bin/ \
     && cp /build/shell/jarvis-shell                /out/bin/ \
     && cp /build/greeter/jarvis-greeter            /out/bin/ \
@@ -225,6 +228,11 @@ COPY --from=builder /out/bin/jarvis-lock-ctl      /usr/bin/jarvis-lock-ctl
 COPY --from=builder /out/bin/jarvis-lock-window   /usr/bin/jarvis-lock-window
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
 COPY --from=builder /out/bin/jarvis-greeter       /usr/bin/jarvis-greeter
+
+# pam_jarvis.so — biometric PAM module. V1 is a PAM_IGNORE scaffold
+# (see ADR 0016); installed at the standard PAM location so V2 wiring
+# can flip on by editing /etc/pam.d/<service>, no further plumbing.
+COPY --from=builder /out/pam/pam_jarvis.so        /usr/lib64/security/pam_jarvis.so
 
 # Example SDK app: ship its manifest under /usr/share/jarvis/apps/
 # so the Action Bus picks it up at startup. DBus auto-activation is
