@@ -1,0 +1,15 @@
+[package]
+name = "jarvis-voiceprint-ctl"
+version = "0.1.0"
+edition = "2021"
+description = "CLI remote for com.jarvis.Voice voiceprint enrollment + verification"
+
+[[bin]]
+name = "jarvis-voiceprint-ctl"
+path = "src/main.rs"
+
+[dependencies]
+anyhow     = "1"
+serde_json = "1"
+tokio      = { version = "1", features = ["rt", "macros", "time"] }
+zbus       = { version = "4", features = ["tokio"] }

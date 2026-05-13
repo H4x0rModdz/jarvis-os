@@ -110,6 +110,7 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-compat \
         -p jarvis-lock \
         -p jarvis-lock-ctl \
+        -p jarvis-voiceprint-ctl \
         -p pam-jarvis
 
 # Optional: build the Jarvis Smithay compositor when BUILD_COMPOSITOR=1.
@@ -155,6 +156,7 @@ RUN mkdir -p /out/bin \
     && cp /build/rust/release/jarvis-compat        /out/bin/ \
     && cp /build/rust/release/jarvis-lock          /out/bin/ \
     && cp /build/rust/release/jarvis-lock-ctl      /out/bin/ \
+    && cp /build/rust/release/jarvis-voiceprint-ctl /out/bin/ \
     && mkdir -p /out/pam \
     && cp /build/rust/release/libpam_jarvis.so     /out/pam/pam_jarvis.so \
     && cp /build/rust/release/jarvis-pam-helper    /out/bin/ \
@@ -263,6 +265,7 @@ COPY --from=builder /out/bin/sdk-hello            /usr/bin/sdk-hello
 COPY --from=builder /out/bin/jarvis-compat        /usr/bin/jarvis-compat
 COPY --from=builder /out/bin/jarvis-lock          /usr/bin/jarvis-lock
 COPY --from=builder /out/bin/jarvis-lock-ctl      /usr/bin/jarvis-lock-ctl
+COPY --from=builder /out/bin/jarvis-voiceprint-ctl /usr/bin/jarvis-voiceprint-ctl
 COPY --from=builder /out/bin/jarvis-lock-window   /usr/bin/jarvis-lock-window
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
 COPY --from=builder /out/bin/jarvis-greeter       /usr/bin/jarvis-greeter

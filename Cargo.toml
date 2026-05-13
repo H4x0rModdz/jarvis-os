@@ -16,5 +16,6 @@ members = [
     "tools/voice-ctl",
     "tools/jarvis-app",
     "tools/lock-ctl",
+    "tools/voiceprint-ctl",
     "examples/sdk-hello",
 ]
