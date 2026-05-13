@@ -286,11 +286,14 @@ COPY --from=builder /out/bin/jarvis-compositor /usr/bin/jarvis-compositor
 COPY --from=builder /out/pam/pam_jarvis.so        /usr/lib64/security/pam_jarvis.so
 COPY --from=builder /out/bin/jarvis-pam-helper    /usr/libexec/jarvis-pam-helper
 
-# /etc/pam.d/jarvis-lock — first shipping wiring of pam_jarvis.so.
-# Voiceprint sufficient + system-auth fallback (ADR 0020). The lock
-# daemon uses `pamtester jarvis-lock <user> authenticate` so a
-# voice match unlocks without typing the password.
+# Dual PAM stacks for jarvis-lock (ADR 0020, Phase 8 split):
+#   /etc/pam.d/jarvis-lock        — password-only, fast path
+#   /etc/pam.d/jarvis-lock-voice  — voiceprint required, no password
+# Lock daemon routes by entry point (`Verify` → password file,
+# `VerifyVoice` → voice file) so typed unlocks are instant and the
+# voice path is opt-in per attempt.
 COPY iso/assets/pam.d/jarvis-lock                 /etc/pam.d/jarvis-lock
+COPY iso/assets/pam.d/jarvis-lock-voice           /etc/pam.d/jarvis-lock-voice
 
 # Example SDK app: ship its manifest under /usr/share/jarvis/apps/
 # so the Action Bus picks it up at startup. DBus auto-activation is

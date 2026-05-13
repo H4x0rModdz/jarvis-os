@@ -45,8 +45,15 @@ DBus  com.jarvis.Lock  at  /com/jarvis/Lock
        └─ Idempotent. Spawns jarvis-lock-window if not already locked.
 
   Verify(password)   -> string   // JSON { ok, reason? }
-       └─ Called by the lock window on submit. Success transitions
-          the daemon to unlocked and kills the lock window.
+       └─ Called by the lock window on submit. Routes through the
+          `jarvis-lock` PAM service (password-only). Success
+          transitions the daemon to unlocked and kills the lock
+          window.
+
+  VerifyVoice()      -> string   // JSON { ok, reason? }
+       └─ Called by the lock window's voice pill. Routes through
+          `jarvis-lock-voice` (pam_jarvis.so required, no password
+          fallback). Daemon captures 2 s, scores, returns verdict.
 
   IsLocked()         -> bool
 
@@ -64,29 +71,22 @@ DBus  com.jarvis.Lock  at  /com/jarvis/Lock
 | Lock window crashes | Child wait completes with non-zero; daemon clears locked flag and emits `LockStateChanged(false)` — fail-open, matching the wider screen-locker convention (a locker that traps the user when it crashes is worse than no locker). |
 | `pamtester` missing | `Verify` returns `{ ok: false }` and logs at WARN. The lock window shows "Senha incorreta" — visible failure beats silent unlock. |
 
-## PAM stack
+## PAM stacks (Phase 8 split)
 
-The daemon authenticates via `pamtester jarvis-lock <user>
-authenticate`. The `jarvis-lock` PAM service is installed at
-`/etc/pam.d/jarvis-lock` and has the shape:
+Two services, routed by entry point:
 
-```
-auth        sufficient   pam_jarvis.so
-auth        include      system-auth
-...
-```
+| Entry point | Service file | Auth body |
+|---|---|---|
+| `com.jarvis.Lock.Verify(password)` | `/etc/pam.d/jarvis-lock` | `auth include system-auth` (password only) |
+| `com.jarvis.Lock.VerifyVoice()` | `/etc/pam.d/jarvis-lock-voice` | `auth required pam_jarvis.so` (voice only) |
 
-Voice match (when the user has enrolled and is reachable) ends the
-stack with `PAM_SUCCESS` — the screen unlocks without the user
-typing. Voice miss / no enrollment / daemon offline falls through to
-`system-auth` (pam_unix), which reads the password from stdin (the
-Qt lock window pipes it in) and authenticates the classical way.
+Typed-password unlocks now go through `jarvis-lock` and never touch
+the voice helper — the ~2.5 s latency the Phase 7 wiring introduced
+is gone. The Qt lock window keeps the password field as the
+default focus and exposes a "🎙 Falar para desbloquear" pill that
+explicitly calls `VerifyVoice` when the user wants the voice path.
 
-Known V1 trade-off: a typed-password unlock waits up to ~2.5 s for
-the voice attempt to time out before the password path runs. ADR
-0020 documents the rationale and the lock-window V2 fix (a dedicated
-voice button that opts into the voice path explicitly, leaving
-typed-password unlocks instant).
+ADR 0020 (amended for Phase 8) records the split rationale.
 
 ## Auto-lock on idle
 

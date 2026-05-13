@@ -1,7 +1,39 @@
 # ADR 0020: First Shipping Wiring of `pam_jarvis.so` — `jarvis-lock`
 
 ## Status
-Accepted
+Accepted (amended Phase 8 — see "V2 update" below).
+
+## V2 update (Phase 8)
+
+V1 of this wiring put `pam_jarvis.so sufficient` at the top of
+`/etc/pam.d/jarvis-lock` so a voice match would short-circuit the
+password path. The downside was real: every typed-password unlock
+waited ~2.5 s for the voice attempt to time out before pam_unix ran.
+
+Phase 8 splits the stacks:
+
+- `/etc/pam.d/jarvis-lock` — password-only. `auth include
+  system-auth`, no `pam_jarvis.so`. Typed unlocks are instant again.
+- `/etc/pam.d/jarvis-lock-voice` — `auth required pam_jarvis.so`.
+  Voice-only; no password fallback on this path (the call carries no
+  password). Lock daemon's new `VerifyVoice()` method uses this
+  service.
+
+The lock daemon routes by entry point:
+
+```
+com.jarvis.Lock.Verify(password)      → pamtester jarvis-lock       (password)
+com.jarvis.Lock.VerifyVoice()          → pamtester jarvis-lock-voice (voice)
+```
+
+The Qt lock window keeps the password field as the front-and-center
+default and exposes a "🎙 Falar para desbloquear" pill below it. Voice
+is opt-in per unlock attempt; typed-password is one keystroke.
+
+The original V1 text below is preserved for history.
+
+---
+
 
 ## Context
 

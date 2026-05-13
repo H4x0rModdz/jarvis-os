@@ -1,0 +1,20 @@
+#%PAM-1.0
+# Jarvis OS lock-screen — voice-only path.
+#
+# Used by `com.jarvis.Lock.VerifyVoice()`. pam_jarvis.so is `required`
+# (not `sufficient`) so a voice miss or unavailable daemon fails the
+# stack — no silent fallthrough to a password prompt that has no
+# stdin behind it. The lock window UI shows the failure verbatim and
+# the user can fall back to the password field if they want; we never
+# pretend a misfire was a success.
+#
+# Why not sufficient + system-auth fallback? Because there's no
+# password on the wire for this call — the lock daemon's
+# VerifyVoice() doesn't pipe one in. A sufficient+fallback stack
+# would either block waiting for a non-existent prompt or always
+# fail at pam_unix, which is worse UX than a clean voice-verdict.
+
+auth        required     pam_jarvis.so
+account     include      system-auth
+password    include      system-auth
+session     include      system-auth

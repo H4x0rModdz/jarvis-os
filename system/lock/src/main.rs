@@ -63,17 +63,16 @@ impl LockService {
     }
 
     /// Verify a password attempt through PAM. Called by the Qt lock
-    /// window on submit. We shell out to `pamtester` rather than
-    /// linking libpam directly — same auth path (it uses the
-    /// system's PAM stack), but avoids the bindgen + libclang
-    /// cascade the Rust `pam` crate pulls in.
+    /// window on submit. Uses the `jarvis-lock` PAM service which is
+    /// password-only — no voice attempt, no added latency. Typed
+    /// unlocks return as fast as the system's PAM stack allows.
     async fn verify(
         &self,
         password: &str,
         #[zbus(signal_context)] ctx: SignalContext<'_>,
     ) -> String {
         let user = std::env::var("USER").unwrap_or_else(|_| "jarvis".to_string());
-        let ok = verify_with_pamtester(&user, password).await;
+        let ok = verify_with_pamtester("jarvis-lock", &user, Some(password)).await;
         if ok {
             tracing::info!("Password verified — unlocking");
             self.unlock_internal(&ctx).await;
@@ -81,6 +80,26 @@ impl LockService {
         } else {
             tracing::info!("Password rejected");
             json!({ "ok": false, "reason": "Senha incorreta" }).to_string()
+        }
+    }
+
+    /// Verify a voice attempt through the dedicated voice PAM stack.
+    /// Called by the Qt lock window's "Falar para desbloquear" pill.
+    /// Goes through `jarvis-lock-voice` (pam_jarvis.so required) so
+    /// the verdict is purely the voiceprint matcher's — the user
+    /// already opted in by clicking, no password fallback on this
+    /// path. Voice miss → returns ok:false; the lock window keeps
+    /// the password field visible so the user can still type.
+    async fn verify_voice(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
+        let user = std::env::var("USER").unwrap_or_else(|_| "jarvis".to_string());
+        let ok = verify_with_pamtester("jarvis-lock-voice", &user, None).await;
+        if ok {
+            tracing::info!("Voice verified — unlocking");
+            self.unlock_internal(&ctx).await;
+            json!({ "ok": true }).to_string()
+        } else {
+            tracing::info!("Voice rejected");
+            json!({ "ok": false, "reason": "Voz não reconhecida" }).to_string()
         }
     }
 
@@ -113,39 +132,48 @@ impl LockService {
     }
 }
 
-/// Authenticate `user` against the Jarvis lock PAM stack via the
-/// `pamtester` CLI. `pamtester <service> <user> authenticate` reads
-/// the password from stdin and exits 0 on success. We use the
-/// `jarvis-lock` service (installed at `/etc/pam.d/jarvis-lock`) so
-/// the voiceprint sufficient-rule gets its chance before the password
-/// path runs. See ADR 0020 for the trade-off (typed-password unlocks
-/// pay ~2.5 s of voice-attempt latency that lock-window V2 will fix
-/// with a dedicated voice button).
-async fn verify_with_pamtester(user: &str, password: &str) -> bool {
+/// Authenticate `user` against the given PAM `service` via the
+/// `pamtester` CLI. When `password` is `Some`, it's piped through
+/// stdin so the password-path service can read it via pam_unix.
+/// When `None`, no stdin is fed — the voice service doesn't expect
+/// any. Returns whether `pamtester` exited 0.
+///
+/// Two services in play:
+///   `jarvis-lock`       — password-only, fast path (no voice attempt)
+///   `jarvis-lock-voice` — voiceprint required, no password fallback
+///
+/// See ADR 0020 (amended for Phase 8) for the split rationale.
+async fn verify_with_pamtester(service: &str, user: &str, password: Option<&str>) -> bool {
     use std::process::Stdio;
     use tokio::io::AsyncWriteExt;
 
+    let stdin_kind = if password.is_some() {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    };
+
     let mut child = match tokio::process::Command::new("pamtester")
-        .args(["jarvis-lock", user, "authenticate"])
-        .stdin(Stdio::piped())
+        .args([service, user, "authenticate"])
+        .stdin(stdin_kind)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
     {
         Ok(c) => c,
         Err(e) => {
-            tracing::warn!(error = %e, "spawn pamtester failed");
+            tracing::warn!(error = %e, service, "spawn pamtester failed");
             return false;
         }
     };
-    if let Some(mut stdin) = child.stdin.take() {
-        let _ = stdin.write_all(password.as_bytes()).await;
+    if let (Some(pw), Some(mut stdin)) = (password, child.stdin.take()) {
+        let _ = stdin.write_all(pw.as_bytes()).await;
         let _ = stdin.write_all(b"\n").await;
     }
     match child.wait().await {
         Ok(status) => status.success(),
         Err(e) => {
-            tracing::warn!(error = %e, "wait pamtester failed");
+            tracing::warn!(error = %e, service, "wait pamtester failed");
             false
         }
     }
