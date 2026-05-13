@@ -1,18 +1,53 @@
-# jarvis-compositor (placeholder)
+# jarvis-compositor (scaffold)
 
-## Status: PHASE 3 PLACEHOLDER
+## Status: PHASE 4 SCAFFOLD (opt-in build)
 
-This crate is a skeleton kept in the workspace so the architecture is
-visible at a glance, but **it is not built into the ISO** and does not
-ship in any release. Production Jarvis OS images use [labwc][1] as the
-Wayland compositor while this module gets fleshed out. See ADR 0006.
+The crate has been a workspace member from Phase 1 onward as an
+architectural placeholder. Phase 4 promotes it to a real build
+target: compiles in CI when `--build-arg BUILD_COMPOSITOR=1` is
+passed to the Containerfile, ships at `/usr/bin/jarvis-compositor`,
+and is available as an alternative greetd session for manual
+testing.
 
-`iso/Containerfile`'s builder stage compiles `jarvis-action-bus`,
-`jarvis-permission`, `jarvis-lilith`, `jarvis-updater` and skips this
-crate explicitly with per-package `-p` flags rather than
-`--workspace` — Smithay's transitive dependency on `libseat-sys`
-otherwise pulls a long tail of Wayland build deps into the image we
-don't want to pay for yet.
+Production ISOs still use [labwc][1] as the default compositor — the
+Smithay scaffold doesn't yet render or accept input the way labwc
+does, so flipping the default would regress every working desktop
+feature. The point of the V1 scaffold isn't "replace labwc"; it's
+"have a buildable, executable artifact at the right path so the
+next phase of work isn't 'set up the toolchain again from scratch'."
+
+Default builds skip it:
+
+```bash
+bash tools/build-iso.sh                  # labwc only, ~unchanged
+```
+
+To include the experimental compositor binary (also pulls libseat /
+libinput / mesa-libgbm runtime libs into the final image, +~30 MB):
+
+```bash
+podman build --build-arg BUILD_COMPOSITOR=1 ...
+```
+
+When `BUILD_COMPOSITOR=0`, `/usr/bin/jarvis-compositor` is a stub
+shell script that exits 127 with a clear message — better than a
+missing path that breaks every `which jarvis-compositor` script.
+
+## Switching the session to it (manual, for testing)
+
+Edit `/etc/greetd/config.toml` post-install:
+
+```toml
+[default_session]
+command = "/usr/libexec/jarvis-session-launch jarvis-compositor"
+user    = "jarvis"
+```
+
+Restart greetd. Expect rough edges: no rendering on most setups
+yet, input handling incomplete, no working window stack. The
+scaffold builds and boots far enough to prove the architecture; it
+doesn't yet replace labwc end-to-end. That's the multi-week arc
+the scaffold exists to make tractable.
 
 [1]: https://labwc.github.io/
 

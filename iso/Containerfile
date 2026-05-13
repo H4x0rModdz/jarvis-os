@@ -16,6 +16,14 @@
 # ──────────────────────────── Stage 1: builder ────────────────────────────
 FROM registry.fedoraproject.org/fedora:42 AS builder
 
+# Toggle to pull `jarvis-compositor` into the build. Off by default
+# because Smithay drags libseat-devel, libinput-devel, mesa-libgbm-devel,
+# libdrm-devel and a long tail of Wayland headers we don't need for
+# the labwc-based default image. Set to 1 to ship the experimental
+# Jarvis compositor binary alongside labwc. See ADR 0006 + the
+# shell/compositor/module.md hand-off contract.
+ARG BUILD_COMPOSITOR=0
+
 RUN dnf -y install \
         rust cargo \
         cmake ninja-build clang gcc-c++ make \
@@ -27,6 +35,12 @@ RUN dnf -y install \
         wayland-devel libxkbcommon-devel \
         alsa-lib-devel \
         git curl \
+    && if [ "$BUILD_COMPOSITOR" = "1" ]; then \
+           dnf -y install \
+               libseat-devel libinput-devel \
+               mesa-libgbm-devel mesa-libEGL-devel \
+               libdrm-devel systemd-devel; \
+       fi \
     && dnf clean all
 
 # whisper.cpp — built from source in the builder stage so we only ship the
@@ -98,6 +112,15 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-lock-ctl \
         -p pam-jarvis
 
+# Optional: build the Jarvis Smithay compositor when BUILD_COMPOSITOR=1.
+# Kept as a separate RUN so the cargo cache from above is reused and so
+# the much-longer Smithay link step doesn't poison non-compositor
+# rebuilds.
+RUN if [ "$BUILD_COMPOSITOR" = "1" ]; then \
+        CARGO_TARGET_DIR=/build/rust cargo build --release \
+            -p jarvis-compositor; \
+    fi
+
 # Qt shell — separate cmake build out-of-tree.
 RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -137,12 +160,26 @@ RUN mkdir -p /out/bin \
     && cp /build/lock/jarvis-lock-window           /out/bin/ \
     && cp /build/shell/jarvis-shell                /out/bin/ \
     && cp /build/greeter/jarvis-greeter            /out/bin/ \
-    && strip /out/bin/*
+    && strip /out/bin/* \
+    # Always materialise /out/bin/jarvis-compositor so the COPY in
+    # stage 2 succeeds regardless of BUILD_COMPOSITOR. When the build
+    # was skipped, the stub prints a clear message and exits 127.
+    && if [ "$BUILD_COMPOSITOR" = "1" ] \
+            && [ -f /build/rust/release/jarvis-compositor ]; then \
+           cp /build/rust/release/jarvis-compositor /out/bin/ \
+           && strip /out/bin/jarvis-compositor; \
+       else \
+           printf '#!/bin/sh\necho "jarvis-compositor was not built into this image (BUILD_COMPOSITOR=0). See shell/compositor/module.md." >&2\nexit 127\n' \
+               > /out/bin/jarvis-compositor \
+           && chmod +x /out/bin/jarvis-compositor; \
+       fi
 
 # ──────────────────────────── Stage 2: final  ────────────────────────────
 FROM quay.io/fedora/fedora-bootc:42
 
 ARG JARVIS_VERSION=0.0.1
+# Repeat from stage 1 — Containerfile ARGs don't cross stages.
+ARG BUILD_COMPOSITOR=0
 LABEL org.opencontainers.image.title="Jarvis OS"
 LABEL org.opencontainers.image.description="AI-native desktop OS, built on Fedora Atomic + labwc"
 LABEL org.opencontainers.image.version="${JARVIS_VERSION}"
@@ -228,6 +265,16 @@ COPY --from=builder /out/bin/jarvis-lock-ctl      /usr/bin/jarvis-lock-ctl
 COPY --from=builder /out/bin/jarvis-lock-window   /usr/bin/jarvis-lock-window
 COPY --from=builder /out/bin/jarvis-shell         /usr/bin/jarvis-shell
 COPY --from=builder /out/bin/jarvis-greeter       /usr/bin/jarvis-greeter
+
+# Optional Jarvis compositor binary. The stub-or-real selection is
+# done in stage 1; here we always install runtime libs when
+# BUILD_COMPOSITOR=1 so the real binary has what it needs, then COPY
+# the file regardless (stub if not built — see stage 1 fallback).
+RUN if [ "$BUILD_COMPOSITOR" = "1" ]; then \
+        dnf -y install libseat libinput mesa-libgbm mesa-libEGL libdrm \
+        && dnf clean all; \
+    fi
+COPY --from=builder /out/bin/jarvis-compositor /usr/bin/jarvis-compositor
 
 # pam_jarvis.so — biometric PAM module. V1 is a PAM_IGNORE scaffold
 # (see ADR 0016); installed at the standard PAM location so V2 wiring
