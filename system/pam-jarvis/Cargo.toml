@@ -1,6 +1,6 @@
 [package]
 name = "pam-jarvis"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Biometric PAM module — voiceprint + faceprint hooks for Jarvis OS"
 
@@ -10,3 +10,17 @@ name = "pam_jarvis"
 # exporting `pam_sm_authenticate` + `pam_sm_setcred` symbols, so we
 # build a C-ABI dynamic library, not a Rust rlib.
 crate-type = ["cdylib"]
+
+# The PAM module itself stays tiny — it shells out to this helper
+# binary to do the heavy DBus call. Keeps tokio / zbus out of every
+# sudo invocation's address space; failure modes are also cleaner
+# (helper exit codes vs. partially-initialised PAM stack).
+[[bin]]
+name = "jarvis-pam-helper"
+path = "src/bin/helper.rs"
+
+[dependencies]
+libc      = "0.2"
+serde_json = "1"
+zbus      = { version = "4", features = ["tokio"] }
+tokio     = { version = "1", features = ["rt", "macros", "time"] }

@@ -9,10 +9,15 @@ PAM stack on Linux; one module wires biometric into all of them.
 
 ## Status
 
-**V1 — scaffold only.** The module builds, installs, and is safe to
-include in a service's auth stack (it returns `PAM_IGNORE` for every
-call, which means "defer to the next module"). The wiring exists; the
-biometric checks land in V2.
+**V2 — wired through to `com.jarvis.Voice`.** The PAM module reads
+`PAM_USER` via `pam_get_user`, `fork`/`exec`s
+`/usr/libexec/jarvis-pam-helper`, and translates exit codes into
+the standard `PAM_SUCCESS` / `PAM_AUTH_ERR` / `PAM_IGNORE` returns.
+The helper does the heavy DBus call so the PAM `.so` stays small —
+ADR 0019 explains the helper-binary architecture.
+
+No `/etc/pam.d/<service>` file in the V2 ISO references the module
+yet. Operators opt in service-by-service; safe-by-default until then.
 
 ## Boundaries
 
@@ -49,12 +54,13 @@ which biometric to attempt; V1 ignores argv entirely.
 
 ## V1 vs V2 vs V3
 
-| Item | V1 (current) | V2 | V3 |
+| Item | V1 | V2 (current) | V3 |
 |---|---|---|---|
-| `pam_sm_authenticate` | Always `PAM_IGNORE` | `voiceprint` arg → DBus call to `com.jarvis.Voice.VerifyVoiceprint(user)`; `faceprint` arg → same against a face-id daemon | + multimodal fusion (voice + face combined score) |
+| `pam_sm_authenticate` | Always `PAM_IGNORE` | exec `jarvis-pam-helper verify <user>`; helper calls `com.jarvis.Voice.VerifyVoiceprint` | + `faceprint` argv branch against a face-id daemon |
+| Helper transport | n/a | session bus at `/run/user/<uid>/bus`, 3 s wall | + cached enrollment for pre-login services |
 | `pam_sm_setcred` | Always `PAM_SUCCESS` | unchanged | unchanged |
-| Enrollment | none | `jarvis-voiceprint-ctl enroll` CLI + a Settings panel section | + face enrollment via the laptop camera |
-| Service wiring | not wired into any live PAM config | `jarvis-lock` + `jarvis-greeter` opt in via `sufficient` | + `sudo`, `login`, `gdm` parity |
+| Enrollment | none | `com.jarvis.Voice.EnrollVoiceprint` + Settings UI | + face enrollment via the camera |
+| Service wiring | not wired into any live PAM config | not wired in V2 ISO (operator opt-in) | + jarvis-lock + jarvis-greeter shipped wiring |
 
 ## Failure Modes
 
