@@ -1,7 +1,37 @@
 # ADR 0018: Voiceprint V1 — Temporal Envelope, Naive Matcher
 
 ## Status
-Accepted (scaffold; production matcher deferred to Phase 6)
+Accepted (V1 scaffold superseded by V2 — see "V2 update" below).
+
+## V2 update (Phase 6)
+
+V2 landed: MFCC + DTW matcher in `voiceprint.rs`. The wire contract
+held (`EnrollVoiceprint`, `VerifyVoiceprint`, `score` field,
+`threshold` field) — only the body of `extract_features` and
+`similarity` moved. V1 rows in the SQLite store are detected at
+fetch time and rejected (re-enrollment prompt), so the absence of
+a database migration is acceptable: V1 rows were scaffold prints by
+definition and never trusted by a shipping service.
+
+The V2 matcher uses:
+- 25 ms windows / 10 ms hop, pre-emphasis 0.97
+- 26-band mel filterbank (0 — 8 kHz Nyquist)
+- 13 MFCC coefficients per frame (DCT-II)
+- Unconstrained DTW for sequence alignment
+- Similarity = `1 / (1 + dist/30)`; threshold 0.6
+
+The classical MFCC+DTW pipeline discriminates speakers well in the
+closed-set, low-noise case. It is **beatable by replay attacks**
+(an attacker holding a recording of the enrolled user). Phase 7 may
+swap to x-vector / d-vector embeddings via ONNX for proper
+anti-spoofing — `pam-jarvis` V2 wiring should treat the score as
+useful but not absolutely trusted, mirroring how face-unlock is
+typically configured.
+
+The text below was the original V1 ADR. Kept as-is for history.
+
+---
+
 
 ## Context
 

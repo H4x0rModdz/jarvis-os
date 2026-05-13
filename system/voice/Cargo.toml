@@ -30,3 +30,8 @@ hound              = "3"
 # sqlite3 static lib; same configuration as system/settings.
 rusqlite           = { version = "0.32", features = ["bundled"] }
 dirs               = "5"
+
+# V5 — real MFCC matcher. realfft is the real-valued wrapper around
+# rustfft (saves us writing the conjugate-symmetric optimisation for
+# half-spectrum bins ourselves). Pure-Rust dep, no system libs.
+realfft            = "3"

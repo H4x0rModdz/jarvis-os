@@ -123,8 +123,9 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 | V1 | — | `Unavailable` | `Unavailable` | — | — |
 | V2 | cpal | whisper.cpp subprocess | `Unavailable` | — | — |
 | V3 | cpal | whisper.cpp subprocess | piper subprocess + paplay | — | — |
-| V4 (current) | cpal | whisper.cpp subprocess | piper subprocess + paplay | sliding-window Whisper, separate cpal stream | log-RMS temporal envelope + cosine similarity (scaffold; ADR 0018) |
-| V5 (Phase 6) | unchanged | unchanged | unchanged | openWakeWord (lower CPU, <300ms latency) | MFCC + DTW or x-vector embeddings (real biometric strength) |
+| V4 | cpal | whisper.cpp subprocess | piper subprocess + paplay | sliding-window Whisper, separate cpal stream | log-RMS temporal envelope + cosine (scaffold; ADR 0018) |
+| V5 (current) | unchanged | unchanged | unchanged | sliding-window Whisper | MFCC + DTW (classical biometric pipeline; ADR 0018 amended) |
+| V6 (next) | unchanged | unchanged | unchanged | openWakeWord ONNX (<300 ms latency, ~5% CPU) | x-vector / d-vector embeddings (anti-spoofing strength) |
 
 ## Failure Modes
 
