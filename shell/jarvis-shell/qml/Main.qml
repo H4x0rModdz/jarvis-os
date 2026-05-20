@@ -276,4 +276,9 @@ Window {
 
     // History drawer — opens when the user clicks the bell on the bar.
     NotificationDrawer { id: notificationDrawer }
+
+    // Conversation popup above the bar — auto-opens when Lilith goes
+    // busy, fades out 8 s after the reply lands. Renders history +
+    // live streaming text + chain-step pills.
+    LilithPopup { id: lilithPopup }
 }

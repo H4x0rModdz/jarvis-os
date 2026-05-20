@@ -1,0 +1,334 @@
+import QtQuick
+import QtQuick.Layouts
+import QtQuick.Window
+import Jarvis.Shell
+
+/// Floating conversation panel that auto-shows above the bar whenever
+/// Lilith is processing a command. Renders the conversation history
+/// from LilithBridge.conversation plus the live streaming text + chain
+/// step pills for the in-flight command.
+///
+/// Lifecycle:
+///   - Bridge.busy goes true (send() fired) → window shows.
+///   - While busy or streaming, stays visible and scrolls to the bottom
+///     so the latest tokens are always in view.
+///   - After busy turns false, the fade timer starts; once it fires the
+///     window hides.
+///   - Click outside the window (active = false) hides immediately —
+///     same convention as the launcher and notification drawer.
+///   - The "limpar" button calls Bridge.resetConversation() to wipe
+///     both the local list and the daemon's session memory.
+Window {
+    id: root
+    visible: false
+    width: 480
+    height: 380
+    color: "transparent"
+    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    title: qsTr("Lilith")
+
+    /// Height of the bar so we can sit just above it without overlap.
+    /// Default matches Theme.barHeight + a small gap; caller can
+    /// override if the bar is custom-sized.
+    property int barHeight: Theme.barHeight + 12
+
+    function requestOpen() {
+        if (Qt.application.screens.length > 0) {
+            const s = Qt.application.screens[0];
+            x = s.virtualX + Math.floor((s.width - width) / 2);
+            y = s.virtualY + s.height - height - barHeight;
+        }
+        visible = true;
+        // Don't requestActivate — the bar's input field should keep
+        // keyboard focus while the popup observes. activeChanged
+        // would otherwise yank focus away from the user typing.
+    }
+
+    function hideNow() {
+        visible = false;
+        fadeTimer.stop();
+    }
+
+    // ── Auto-show / auto-fade lifecycle ─────────────────────────────
+    Connections {
+        target: LilithBridge
+        function onBusyChanged() {
+            if (LilithBridge.busy) {
+                root.requestOpen();
+                fadeTimer.stop();
+            } else if (root.visible) {
+                // Reply landed. Give the user time to read before we
+                // fade — 8 s is the same window Phase 8's lock toast
+                // settled on. Streaming may still be flushing when
+                // busy flips, so start the timer here, not when text
+                // stops growing.
+                fadeTimer.restart();
+            }
+        }
+    }
+
+    // ESC closes immediately when the popup itself has focus.
+    Shortcut {
+        sequence: "Escape"
+        onActivated: root.hideNow()
+    }
+
+    Timer {
+        id: fadeTimer
+        interval: 8000
+        repeat: false
+        onTriggered: root.hideNow()
+    }
+
+    GlassPanel {
+        anchors.fill: parent
+        anchors.margins: 8
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 8
+
+            // ── Header ─────────────────────────────────────────────
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: qsTr("LILITH")
+                    color: Theme.accent
+                    font.pixelSize: 11
+                    font.weight: Font.Bold
+                    font.letterSpacing: 2
+                    Layout.fillWidth: true
+                }
+
+                Item {
+                    implicitWidth: clearLabel.implicitWidth + 16
+                    implicitHeight: 22
+                    visible: LilithBridge.conversation.length > 0
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 11
+                        color: clearArea.containsMouse
+                            ? Qt.rgba(1, 1, 1, 0.08)
+                            : Qt.rgba(1, 1, 1, 0.04)
+                        border.color: Theme.border
+                        border.width: 1
+                    }
+                    Text {
+                        id: clearLabel
+                        anchors.centerIn: parent
+                        text: qsTr("LIMPAR")
+                        color: Theme.textDim
+                        font.pixelSize: 9
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1
+                    }
+                    MouseArea {
+                        id: clearArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: LilithBridge.resetConversation()
+                    }
+                }
+
+                Text {
+                    text: "×"
+                    color: closeArea.containsMouse ? Theme.text : Theme.textDim
+                    font.pixelSize: 18
+                    font.weight: Font.Bold
+                    Layout.preferredWidth: 22
+                    horizontalAlignment: Text.AlignHCenter
+
+                    MouseArea {
+                        id: closeArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.hideNow()
+                    }
+                }
+            }
+
+            // ── Conversation list ──────────────────────────────────
+            ListView {
+                id: convoList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 8
+                model: LilithBridge.conversation
+                // Scroll to the bottom whenever the model grows so
+                // the latest entry is always visible.
+                onCountChanged: positionViewAtEnd()
+                Component.onCompleted: positionViewAtEnd()
+
+                delegate: Item {
+                    width: ListView.view.width
+                    implicitHeight: bubble.implicitHeight
+
+                    Rectangle {
+                        id: bubble
+                        anchors.left: modelData.role === "user" ? undefined : parent.left
+                        anchors.right: modelData.role === "user" ? parent.right : undefined
+                        implicitWidth: Math.min(parent.width * 0.85, contentCol.implicitWidth + 24)
+                        implicitHeight: contentCol.implicitHeight + 16
+                        radius: 12
+                        color: modelData.role === "user"
+                            ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                            : Qt.rgba(1, 1, 1, 0.05)
+                        border.color: modelData.role === "user"
+                            ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.40)
+                            : Theme.border
+                        border.width: 1
+
+                        ColumnLayout {
+                            id: contentCol
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: parent.top
+                            anchors.margins: 10
+                            spacing: 4
+
+                            Text {
+                                text: modelData.role === "user" ? qsTr("VOCÊ") : qsTr("LILITH")
+                                color: modelData.role === "user" ? Theme.accent : Theme.textDim
+                                font.pixelSize: 9
+                                font.weight: Font.Bold
+                                font.letterSpacing: 1
+                            }
+
+                            Text {
+                                text: modelData.text || ""
+                                color: Theme.text
+                                font.pixelSize: 13
+                                wrapMode: Text.WordWrap
+                                Layout.fillWidth: true
+                            }
+
+                            // Chain-step badges — one pill per tool
+                            // call that ran while Lilith composed
+                            // this reply.
+                            Flow {
+                                Layout.fillWidth: true
+                                spacing: 4
+                                visible: modelData.role === "lilith"
+                                    && modelData.chainSteps !== undefined
+                                    && modelData.chainSteps.length > 0
+
+                                Repeater {
+                                    model: modelData.chainSteps || []
+                                    delegate: Rectangle {
+                                        implicitWidth: stepLabel.implicitWidth + 14
+                                        implicitHeight: 18
+                                        radius: 9
+                                        color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                                        border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.40)
+                                        border.width: 1
+
+                                        Text {
+                                            id: stepLabel
+                                            anchors.centerIn: parent
+                                            text: "→ " + (modelData.action || "")
+                                            color: Theme.text
+                                            font.pixelSize: 9
+                                            font.weight: Font.Bold
+                                            font.letterSpacing: 0.5
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Live in-flight strip ──────────────────────────────
+            // While Lilith is mid-command (busy or streaming text
+            // arriving) we render an extra "live" row below the
+            // committed history. Disappears when the reply lands
+            // and the entry joins the conversation list above.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: liveCol.implicitHeight + 16
+                visible: LilithBridge.busy || LilithBridge.streamingText.length > 0
+                radius: 12
+                color: Qt.rgba(1, 1, 1, 0.03)
+                border.color: Theme.accent
+                border.width: 1
+
+                ColumnLayout {
+                    id: liveCol
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: 10
+                    spacing: 4
+
+                    RowLayout {
+                        spacing: 6
+                        Text {
+                            text: qsTr("LILITH")
+                            color: Theme.accent
+                            font.pixelSize: 9
+                            font.weight: Font.Bold
+                            font.letterSpacing: 1
+                        }
+                        // Tiny breathing dot to signal "alive, working".
+                        Rectangle {
+                            implicitWidth: 6
+                            implicitHeight: 6
+                            radius: 3
+                            color: Theme.accent
+                            SequentialAnimation on opacity {
+                                loops: Animation.Infinite
+                                running: LilithBridge.busy
+                                NumberAnimation { to: 0.3; duration: 600; easing.type: Easing.InOutSine }
+                                NumberAnimation { to: 1.0; duration: 600; easing.type: Easing.InOutSine }
+                            }
+                        }
+                    }
+
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        visible: LilithBridge.chainSteps.length > 0
+
+                        Repeater {
+                            model: LilithBridge.chainSteps
+                            delegate: Rectangle {
+                                implicitWidth: liveStepLabel.implicitWidth + 14
+                                implicitHeight: 18
+                                radius: 9
+                                color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                                border.color: Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.40)
+                                border.width: 1
+                                Text {
+                                    id: liveStepLabel
+                                    anchors.centerIn: parent
+                                    text: "→ " + (modelData.action || "")
+                                    color: Theme.text
+                                    font.pixelSize: 9
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 0.5
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        visible: LilithBridge.streamingText.length > 0
+                        text: LilithBridge.streamingText
+                        color: Theme.text
+                        font.pixelSize: 13
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+            }
+        }
+    }
+}

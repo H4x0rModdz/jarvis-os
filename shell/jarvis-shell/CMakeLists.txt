@@ -81,6 +81,7 @@ qt_add_qml_module(jarvis-shell
         qml/NotificationDrawer.qml
         qml/BarBellButton.qml
         qml/GlassPanel.qml
+        qml/LilithPopup.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE
