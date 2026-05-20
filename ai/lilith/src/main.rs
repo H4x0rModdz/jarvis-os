@@ -11,7 +11,7 @@ mod tools;
 use audit::AuditLog;
 use bus_client::BusClient;
 use memory::{SessionMemory, Turn};
-use ollama::OllamaClient;
+use ollama::{append_tool_step, build_initial_messages, OllamaClient};
 use persistent::FactStore;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -85,48 +85,114 @@ impl LilithService {
             return self.dispatch_and_record(text, call).await;
         }
 
-        // 2. Fall back to Ollama for natural language. Feed the last
-        // 8 turns so follow-up phrasing ("e o Gmail também", "agora
-        // fecha tudo") resolves against real context instead of
-        // running headfirst into a stateless LLM call.
+        // 2. Ollama path — multi-step tool chain. Each iteration:
+        // ask Ollama, if it picks a tool we dispatch and feed the
+        // result back, repeat until it returns a plain text response
+        // or we hit the step cap. The history+chain loop is the
+        // assistant pattern that makes "tira um screenshot e abre no
+        // editor" actually work end-to-end.
         const HISTORY_TURNS: usize = 8;
+        const MAX_STEPS: usize = 4;
+
         let history = self.memory.recent(HISTORY_TURNS);
-        match self.ollama.chat(text, &history, &all_tools()).await {
-            Ok(reply) => {
-                if let Some(first) = reply.tool_calls.into_iter().next() {
-                    tracing::info!(action = %first.action, "Ollama selected tool");
-                    self.dispatch_and_record(text, first).await
-                } else {
-                    // Plain chat response — no tool needed.
-                    let reply_text = if reply.text.trim().is_empty() {
-                        "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'.".to_string()
-                    } else {
-                        reply.text
-                    };
-                    self.audit.write(text, None, None, &reply_text).await;
+        let mut messages = build_initial_messages(text, &history);
+
+        // Per-step state we update as the loop progresses; final reply
+        // pulls from these when we exit either with a text answer or
+        // by hitting the step cap.
+        let mut last_call: Option<ToolCall> = None;
+        let mut last_response: Option<Value> = None;
+        let mut last_step_reply = String::new();
+
+        for step in 0..MAX_STEPS {
+            let reply = match self.ollama.chat_messages(&messages, &all_tools()).await {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!(step, "Ollama unreachable: {e}");
+                    let fallback = "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'.";
+                    self.audit.write(text, None, None, fallback).await;
                     self.memory.record(Turn {
                         user_text: text.into(),
                         tool_call: None,
                         action_response: None,
-                        reply_text: reply_text.clone(),
+                        reply_text: fallback.into(),
                     });
-                    json!({ "reply": reply_text, "action": null, "result": null })
+                    return json!({ "reply": fallback, "action": null, "result": null });
                 }
-            }
-            Err(e) => {
-                tracing::warn!("Ollama unreachable: {e}");
-                let reply =
-                    "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'.";
-                self.audit.write(text, None, None, reply).await;
+            };
+
+            if reply.tool_calls.is_empty() {
+                // Final answer. If empty, fall back to the last tool's
+                // reply (the model decided the chain itself was the
+                // answer); otherwise its text wins.
+                let final_text = if !reply.text.trim().is_empty() {
+                    reply.text
+                } else if !last_step_reply.is_empty() {
+                    last_step_reply.clone()
+                } else {
+                    "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'.".into()
+                };
+                self.audit
+                    .write(
+                        text,
+                        last_call.as_ref().map(|c| c.action.as_str()),
+                        last_response.as_ref(),
+                        &final_text,
+                    )
+                    .await;
                 self.memory.record(Turn {
                     user_text: text.into(),
-                    tool_call: None,
-                    action_response: None,
-                    reply_text: reply.into(),
+                    tool_call: last_call.clone(),
+                    action_response: last_response.clone(),
+                    reply_text: final_text.clone(),
                 });
-                json!({ "reply": reply, "action": null, "result": null })
+                return json!({
+                    "reply": final_text,
+                    "action": last_call.as_ref().map(|c| c.action.clone()),
+                    "result": last_response,
+                });
             }
+
+            // Take the first tool call per step. Extras are rare
+            // (qwen3 usually emits one) and the model gets to re-emit
+            // them on the next round if it really wants both.
+            let mut calls = reply.tool_calls;
+            let extras = calls.len().saturating_sub(1);
+            let call = calls.remove(0);
+            if extras > 0 {
+                tracing::info!(extras, "discarded extra tool_calls");
+            }
+            tracing::info!(step, action = %call.action, "Ollama selected tool");
+
+            // Dispatch via the same helper that records per-step turns,
+            // so cross-turn history (task #116) sees each step too.
+            let step_value = self.dispatch_and_record(text, call.clone()).await;
+
+            // Pull the per-step reply + response off the value we just
+            // returned so we can both feed it back to Ollama and roll
+            // it into the final return.
+            last_call = Some(call.clone());
+            last_response = step_value
+                .get("result")
+                .cloned()
+                .filter(|v| !v.is_null());
+            last_step_reply = step_value
+                .get("reply")
+                .and_then(|r| r.as_str())
+                .unwrap_or_default()
+                .to_string();
+
+            append_tool_step(&mut messages, &call, last_response.as_ref());
         }
+
+        // Hit the step cap. Most chains finish in 1–3 steps; if we got
+        // here the model is probably loop-thrashing. Surface it.
+        tracing::warn!(steps = MAX_STEPS, "step cap reached");
+        json!({
+            "reply": format!("(parei após {MAX_STEPS} passos) {last_step_reply}"),
+            "action": last_call.as_ref().map(|c| c.action.clone()),
+            "result": last_response,
+        })
     }
 
     async fn dispatch_and_record(&self, user_text: &str, call: ToolCall) -> Value {

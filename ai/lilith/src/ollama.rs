@@ -42,31 +42,16 @@ impl OllamaClient {
         &self.model
     }
 
-    /// Send a user message with conversation history + the available
-    /// tools, parse the model's response.
-    ///
-    /// `history` is the recent session turns (oldest first). They're
-    /// flattened into user/assistant message pairs so the model can
-    /// resolve pronouns and follow-ups ("abre o gmail também" → uses
-    /// the previous "abrir o navegador" as context).
-    pub async fn chat(
+    /// Primary API. Caller hands us a pre-built messages list (so the
+    /// tool-chain loop can grow `messages` step by step without us
+    /// re-injecting history each round). Returns the next assistant
+    /// step — either a text response or one-or-more tool calls.
+    pub async fn chat_messages(
         &self,
-        user_text: &str,
-        history: &[Turn],
+        messages: &[Value],
         tools: &[Tool],
     ) -> Result<OllamaReply, LilithError> {
         let url = format!("{}/api/chat", self.host);
-        let mut messages: Vec<Value> = Vec::with_capacity(2 + history.len() * 2);
-        messages.push(json!({ "role": "system", "content": SYSTEM_PROMPT }));
-        for turn in history {
-            messages.push(json!({ "role": "user", "content": turn.user_text }));
-            messages.push(json!({
-                "role": "assistant",
-                "content": assistant_message_for(turn),
-            }));
-        }
-        messages.push(json!({ "role": "user", "content": user_text }));
-
         let body = json!({
             "model": self.model,
             "messages": messages,
@@ -95,6 +80,61 @@ impl OllamaClient {
 
         Ok(OllamaReply::from(parsed))
     }
+
+    /// Wrapper around `chat_messages` for the single-shot case: takes
+    /// a user line + history, builds the messages list once, returns
+    /// the assistant's response. Used by callers that don't need the
+    /// step-by-step loop.
+    pub async fn chat(
+        &self,
+        user_text: &str,
+        history: &[Turn],
+        tools: &[Tool],
+    ) -> Result<OllamaReply, LilithError> {
+        let messages = build_initial_messages(user_text, history);
+        self.chat_messages(&messages, tools).await
+    }
+}
+
+/// Build the messages list for the first call of a turn: system prompt
+/// + flattened history + current user text. The tool-chain loop in
+/// `main.rs` extends this list with assistant/tool entries as it goes.
+pub fn build_initial_messages(user_text: &str, history: &[Turn]) -> Vec<Value> {
+    let mut messages: Vec<Value> = Vec::with_capacity(2 + history.len() * 2);
+    messages.push(json!({ "role": "system", "content": SYSTEM_PROMPT }));
+    for turn in history {
+        messages.push(json!({ "role": "user", "content": turn.user_text }));
+        messages.push(json!({
+            "role": "assistant",
+            "content": assistant_message_for(turn),
+        }));
+    }
+    messages.push(json!({ "role": "user", "content": user_text }));
+    messages
+}
+
+/// Append an assistant-with-tool-call message + the matching tool
+/// message to an in-flight messages list. Used by the tool-chain loop
+/// to feed each step's result back to the model.
+pub fn append_tool_step(messages: &mut Vec<Value>, call: &ToolCall, response: Option<&Value>) {
+    messages.push(json!({
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+            "function": {
+                "name": call.action,
+                "arguments": call.params,
+            }
+        }]
+    }));
+    let content = match response {
+        Some(v) => serde_json::to_string(v).unwrap_or_else(|_| "{}".into()),
+        None => "{\"status\":\"error\",\"error\":\"no response\"}".to_string(),
+    };
+    messages.push(json!({
+        "role": "tool",
+        "content": content,
+    }));
 }
 
 /// Synthesise the assistant message for one historical Turn. When the

@@ -38,17 +38,27 @@ DBus  com.jarvis.ActionBus.Dispatch          // tool execution
 ```
 text input
   ├─→ rule parser (intent.rs, regex)             ← always tried first
-  │     └─ on match → ToolCall { action, params }
-  └─→ Ollama /api/chat with tools=[...]          ← fallback when rules miss
-        └─ on tool_calls → ToolCall(s)
+  │     └─ on match → single ToolCall, one-shot
+  └─→ Ollama /api/chat                            ← natural language path
+        loop (max 4 steps):
+          chat(messages, tools)
+            ├─ tool_call(s) → dispatch first → append result → loop
+            └─ text only    → final answer
 
 ToolCall → Action Bus Dispatch
         ↓
    memory.* tools handled in-process (no bus round trip)
    everything else → DBus call to com.jarvis.ActionBus
 
-response → audit log (~/.jarvis/logs/lilith.log) → reply to caller
+response → audit log per step (~/.jarvis/logs/lilith.log) → reply to caller
 ```
+
+The chain lets Lilith handle compound requests in one turn — e.g.
+"tira um screenshot e abre no editor" issues `screenshot.capture`,
+gets back the saved path in the tool result, then issues
+`app.open` against that path. Each step gets its own audit entry +
+its own session-memory Turn so cross-turn follow-ups still see the
+sub-steps.
 
 ## Tools
 
