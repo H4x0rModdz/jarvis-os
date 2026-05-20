@@ -16,7 +16,8 @@ thiserror          = "1"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
-reqwest            = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest            = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+futures-util       = "0.3"
 zbus               = { version = "4", features = ["tokio"] }
 uuid               = { version = "1", features = ["v4", "serde"] }
 chrono             = { version = "0.4", features = ["serde"] }

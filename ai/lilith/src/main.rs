@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tools::{all_tools, ToolCall};
 
-use zbus::{connection, interface};
+use zbus::{connection, interface, SignalContext};
 
 struct LilithService {
     bus: Arc<BusClient>,
@@ -32,8 +32,17 @@ struct LilithService {
 impl LilithService {
     /// Process a natural-language command. Returns a JSON string:
     ///   { "reply": string, "action": string|null, "result": object|null }
-    async fn command(&self, text: &str) -> String {
-        let response = self.process(text).await;
+    ///
+    /// While the command runs, the daemon emits `PartialReply` signals
+    /// carrying each token batch as it streams in from Ollama. The
+    /// final return value carries the assembled text — clients that
+    /// don't subscribe to the signal still see the full response.
+    async fn command(
+        &self,
+        text: &str,
+        #[zbus(signal_context)] ctx: SignalContext<'_>,
+    ) -> String {
+        let response = self.process(text, &ctx).await;
         serde_json::to_string(&response).unwrap_or_else(|_| "{}".into())
     }
 
@@ -75,11 +84,26 @@ impl LilithService {
             Err(e) => json!({ "error": e.to_string() }).to_string(),
         }
     }
+
+    /// Token batches as they stream in from Ollama. Multiple signals
+    /// fire per Command() call; subscribers concatenate `chunk`
+    /// values until the Command's return value lands. `step` is the
+    /// 0-indexed chain step the chunk belongs to so multi-step
+    /// chains (Phase 9) stay legible: text from step 0 vs. step 1
+    /// can be rendered separately.
+    #[zbus(signal)]
+    async fn partial_reply(
+        ctx: &SignalContext<'_>,
+        step: u32,
+        chunk: &str,
+    ) -> zbus::Result<()>;
 }
 
 impl LilithService {
-    async fn process(&self, text: &str) -> Value {
+    async fn process(&self, text: &str, ctx: &SignalContext<'_>) -> Value {
         // 1. Rule-based intent parser — fast path, deterministic.
+        // No Ollama call → no streaming chunks. Subscribers that wait
+        // for PartialReply still see the final Command() return.
         if let Some(call) = intent::parse(text) {
             tracing::info!(action = %call.action, "Rule matched");
             return self.dispatch_and_record(text, call).await;
@@ -105,7 +129,39 @@ impl LilithService {
         let mut last_step_reply = String::new();
 
         for step in 0..MAX_STEPS {
-            let reply = match self.ollama.chat_messages(&messages, &all_tools()).await {
+            // Per-step chunk channel: ollama writes tokens, the
+            // forwarder task re-emits them as PartialReply signals
+            // tagged with this step's index. Dropping the sender at
+            // end of chat_messages closes the channel and the
+            // forwarder finishes cleanly.
+            let (chunk_tx, mut chunk_rx) =
+                tokio::sync::mpsc::unbounded_channel::<String>();
+            let ctx_for_forwarder = ctx.to_owned();
+            let step_idx = step as u32;
+            let forwarder = tokio::spawn(async move {
+                while let Some(chunk) = chunk_rx.recv().await {
+                    if let Err(e) = LilithService::partial_reply(
+                        &ctx_for_forwarder,
+                        step_idx,
+                        &chunk,
+                    )
+                    .await
+                    {
+                        tracing::warn!(error = %e, "PartialReply emit failed");
+                    }
+                }
+            });
+
+            let reply_result = self
+                .ollama
+                .chat_messages(&messages, &all_tools(), Some(chunk_tx))
+                .await;
+            // Drain anything still in flight before we look at the
+            // result; chunk_tx is already dropped by chat_messages
+            // returning, so the forwarder's recv loop will hit None.
+            let _ = forwarder.await;
+
+            let reply = match reply_result {
                 Ok(r) => r,
                 Err(e) => {
                     tracing::warn!(step, "Ollama unreachable: {e}");

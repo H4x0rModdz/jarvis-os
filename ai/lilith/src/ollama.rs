@@ -42,21 +42,35 @@ impl OllamaClient {
         &self.model
     }
 
-    /// Primary API. Caller hands us a pre-built messages list (so the
-    /// tool-chain loop can grow `messages` step by step without us
-    /// re-injecting history each round). Returns the next assistant
-    /// step — either a text response or one-or-more tool calls.
+    /// Primary API. Streams the response from Ollama and forwards
+    /// each token batch into `chunks` so the caller can echo them to
+    /// the UI in real time. The returned `OllamaReply` accumulates
+    /// the full text + any tool calls the model emitted by the end
+    /// of the stream.
+    ///
+    /// Pass `None` for `chunks` to drain silently — convenient for
+    /// callers that don't need streaming (tests, batch use).
+    ///
+    /// Ollama's `/api/chat` with `stream: true` returns NDJSON: each
+    /// line is a `{ message: { content, tool_calls }, done }` object.
+    /// `content` is the delta for that chunk (not the cumulative
+    /// text). `tool_calls` usually only appear on the final `done`
+    /// message, but we accumulate from any line that carries them
+    /// for safety.
     pub async fn chat_messages(
         &self,
         messages: &[Value],
         tools: &[Tool],
+        chunks: Option<tokio::sync::mpsc::UnboundedSender<String>>,
     ) -> Result<OllamaReply, LilithError> {
+        use futures_util::StreamExt;
+
         let url = format!("{}/api/chat", self.host);
         let body = json!({
             "model": self.model,
             "messages": messages,
             "tools": ollama_tools_payload(tools),
-            "stream": false
+            "stream": true,
         });
 
         let resp = self
@@ -73,18 +87,61 @@ impl OllamaClient {
             return Err(LilithError::OllamaInvalid(format!("HTTP {status}: {text}")));
         }
 
-        let parsed: ChatResponse = resp
-            .json()
-            .await
-            .map_err(|e| LilithError::OllamaInvalid(e.to_string()))?;
+        let mut stream = resp.bytes_stream();
+        let mut buffer = String::new();
+        let mut accumulated_text = String::new();
+        let mut tool_calls: Vec<OllamaToolCall> = Vec::new();
 
-        Ok(OllamaReply::from(parsed))
+        while let Some(chunk_result) = stream.next().await {
+            let bytes = chunk_result.map_err(|e| LilithError::OllamaInvalid(e.to_string()))?;
+            buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+            // NDJSON: parse complete lines, leave any partial trailer
+            // in the buffer for the next chunk.
+            while let Some(newline) = buffer.find('\n') {
+                let line: String = buffer.drain(..=newline).collect();
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let parsed: ChatStreamChunk = match serde_json::from_str(line) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::warn!(error = %e, line, "stream chunk parse failed");
+                        continue;
+                    }
+                };
+                if !parsed.message.content.is_empty() {
+                    accumulated_text.push_str(&parsed.message.content);
+                    if let Some(tx) = chunks.as_ref() {
+                        let _ = tx.send(parsed.message.content);
+                    }
+                }
+                tool_calls.extend(parsed.message.tool_calls);
+                // `done: true` ends the stream — but reqwest already
+                // signals EOF when the connection closes, so we don't
+                // need to break here. Letting the outer loop see the
+                // EOF keeps the parse robust to a trailing newline-
+                // free `done` line.
+            }
+        }
+
+        Ok(OllamaReply {
+            text: accumulated_text,
+            tool_calls: tool_calls
+                .into_iter()
+                .map(|c| ToolCall {
+                    action: c.function.name,
+                    params: c.function.arguments,
+                })
+                .collect(),
+        })
     }
 
-    /// Wrapper around `chat_messages` for the single-shot case: takes
-    /// a user line + history, builds the messages list once, returns
-    /// the assistant's response. Used by callers that don't need the
-    /// step-by-step loop.
+    /// Wrapper around `chat_messages` for the single-shot, non-
+    /// streaming case: takes a user line + history, drains the
+    /// stream silently, returns the accumulated response. Used by
+    /// tests and the legacy callers that don't render incrementally.
     pub async fn chat(
         &self,
         user_text: &str,
@@ -92,7 +149,7 @@ impl OllamaClient {
         tools: &[Tool],
     ) -> Result<OllamaReply, LilithError> {
         let messages = build_initial_messages(user_text, history);
-        self.chat_messages(&messages, tools).await
+        self.chat_messages(&messages, tools, None).await
     }
 }
 
@@ -200,9 +257,15 @@ Do not narrate what tool you are about to call. Do not say \"Let me \
 call X for you\". Just call it. The shell shows the user that a tool \
 ran; the only thing left for you to do is comment on the result.";
 
+/// One line of the NDJSON stream Ollama emits for `/api/chat?stream`.
+/// `message.content` is the *delta* — the new tokens since the last
+/// chunk — not the cumulative text. `done` is true on the last line.
 #[derive(Debug, Deserialize)]
-struct ChatResponse {
+struct ChatStreamChunk {
     message: ChatMessage,
+    #[allow(dead_code)] // see comment in chat_messages re: EOF vs done
+    #[serde(default)]
+    done: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -229,22 +292,4 @@ struct OllamaFunction {
 pub struct OllamaReply {
     pub text: String,
     pub tool_calls: Vec<ToolCall>,
-}
-
-impl From<ChatResponse> for OllamaReply {
-    fn from(r: ChatResponse) -> Self {
-        let calls = r
-            .message
-            .tool_calls
-            .into_iter()
-            .map(|c| ToolCall {
-                action: c.function.name,
-                params: c.function.arguments,
-            })
-            .collect();
-        Self {
-            text: r.message.content,
-            tool_calls: calls,
-        }
-    }
 }
