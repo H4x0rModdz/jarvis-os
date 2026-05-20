@@ -27,6 +27,7 @@ Rectangle {
     signal settingsRequested()
     signal notificationsRequested()
     signal networksRequested()
+    signal bluetoothRequested()
     /// Fired when the LilithInput gains focus — Main.qml routes this
     /// to the LilithPopup so the empty-state suggestions get a chance
     /// to be seen.
@@ -115,6 +116,11 @@ Rectangle {
         BarWifiButton {
             Layout.alignment: Qt.AlignVCenter
             onClicked: root.networksRequested()
+        }
+
+        BarBluetoothButton {
+            Layout.alignment: Qt.AlignVCenter
+            onClicked: root.bluetoothRequested()
         }
 
         BarBatteryIndicator {
