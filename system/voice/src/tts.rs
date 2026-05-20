@@ -13,6 +13,7 @@
 //!   JARVIS_VOICE_TTS_PLAYER   playback binary (default `paplay`)
 
 use anyhow::{anyhow, Context, Result};
+use async_trait::async_trait;
 use std::path::PathBuf;
 use std::process::Stdio;
 use tokio::io::AsyncWriteExt;
@@ -22,9 +23,33 @@ pub const DEFAULT_BINARY: &str = "/usr/bin/piper";
 pub const DEFAULT_MODEL: &str = "/usr/share/piper-voices/pt_BR-faber-medium.onnx";
 pub const DEFAULT_PLAYER: &str = "paplay";
 
+/// Text-to-speech abstraction. The DBus `speak` method spawns a task
+/// that holds an `Arc<dyn Tts>`; the production build wires
+/// `PiperTts` while tests use the `MockTts` in `main.rs`.
+///
+/// Empty input is a no-op (returns Ok) — that contract is part of
+/// the trait so callers don't have to guard.
+#[async_trait]
+pub trait Tts: Send + Sync {
+    async fn speak(&self, text: &str) -> Result<()>;
+}
+
+/// Production TTS: shells out to piper for synthesis + paplay for
+/// playback. Same behaviour the free `speak()` function had —
+/// wrapping it in an `Arc<dyn Tts>` is the testability gain.
+pub struct PiperTts;
+
+#[async_trait]
+impl Tts for PiperTts {
+    async fn speak(&self, text: &str) -> Result<()> {
+        speak(text).await
+    }
+}
+
 /// Synthesize `text` and play it. Blocks until playback finishes — the
 /// caller wraps this in `tokio::spawn` so the DBus method returns
-/// quickly.
+/// quickly. Kept as a free function for the existing unit tests +
+/// any consumer that doesn't need the trait indirection.
 pub async fn speak(text: &str) -> Result<()> {
     if text.trim().is_empty() {
         return Ok(());
