@@ -375,6 +375,60 @@ pub fn all_tools() -> Vec<Tool> {
                           metadata (initialised, created_at, last_used_at).",
             schema: json!({ "type": "object", "properties": {} }),
         },
+        Tool {
+            action: "compat.run_proton",
+            description: "Run a Windows .exe under Proton-GE in a named prefix (lives at \
+                          ~/.jarvis/proton-data/<prefix>/). Use this for games and apps that \
+                          need DXVK/VKD3D. Returns a clear 'proton not installed' error if \
+                          the user hasn't installed Proton-GE yet — chain compat.install_proton \
+                          first when that happens.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "prefix": {
+                        "type": "string",
+                        "description": "Prefix name (same naming rules as run_exe_in)"
+                    },
+                    "path": { "type": "string", "description": "Absolute path to the .exe" },
+                    "args": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                    }
+                },
+                "required": ["prefix", "path"]
+            }),
+        },
+        Tool {
+            action: "compat.install_proton",
+            description: "Download + extract Proton-GE (~310 MB) to ~/.jarvis/proton-ge/. \
+                          Idempotent — returns immediately if it's already installed. Streams \
+                          progress through a notification toast. Call this when compat.run_proton \
+                          fails with 'proton not installed'.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "compat.list_running",
+            description: "Snapshot of every Wine / Proton child the daemon is currently tracking. \
+                          Returns [{ pid, prefix, engine, exe, started_at }]. Useful before \
+                          terminating something — picks the right pid by name.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "compat.terminate",
+            description: "SIGTERM a tracked Wine / Proton process by pid. Use compat.list_running \
+                          first to find the pid. Refuses pids the daemon isn't tracking (avoids \
+                          accidentally killing unrelated processes).",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "pid": {
+                        "type": "integer",
+                        "description": "PID returned by a previous compat.run_exe / run_proton call"
+                    }
+                },
+                "required": ["pid"]
+            }),
+        },
         // ── updater ─────────────────────────────────────────────────────
         Tool {
             action: "updater.check",
