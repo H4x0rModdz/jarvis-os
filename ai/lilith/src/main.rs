@@ -8,6 +8,29 @@ mod persistent;
 mod settings;
 mod tools;
 
+/// Hardcoded reply for `is_help_query`. Lists the namespaces of the
+/// Action Bus catalogue, not every action — the user wants a tour,
+/// not a man page. Phrased so the user can immediately copy a line
+/// into the bar input.
+const HELP_REPLY: &str = "\
+Posso fazer isso aqui pra você:
+
+• abrir / fechar apps   — \"abrir o navegador\", \"fechar o firefox\"
+• instalar / remover    — \"instalar o gimp\" (via Flatpak)
+• arquivos              — \"mover X para Y\", \"deletar X\"
+• janelas               — focar / minimizar / maximizar / fechar / snap left|right
+• áudio                 — \"volume 50\", \"mudo\", \"aumentar volume\"
+• clipboard             — \"copiar X\", \"o que tem no clipboard\"
+• screenshot            — \"tirar print\"
+• navegador             — \"abrir https://…\"
+• Wine / Proton         — \"rodar C:\\…\\app.exe\" (default ou prefix nomeado)
+• notificações          — \"notifique X\"
+• lembrar               — \"lembra que minha senha do roteador é 1234\" → memory.remember
+• atualizar             — \"checar atualizações\", \"atualizar o sistema\"
+
+Pergunte em português ou inglês — eu encadeio várias ações quando faz \
+sentido (\"tira um print e abre no editor\").";
+
 use audit::AuditLog;
 use bus_client::BusClient;
 use memory::{SessionMemory, Turn};
@@ -112,6 +135,14 @@ impl LilithService {
 
 impl LilithService {
     async fn process(&self, text: &str, ctx: &SignalContext<'_>) -> Value {
+        // 0. Capability discovery — short-circuits before the rule
+        // path or the LLM. The response is a hardcoded listing of
+        // what Lilith owns, in pt-BR. No Action Bus dispatch.
+        if intent::is_help_query(text) {
+            tracing::info!("Help intent matched");
+            return self.respond_with_help(text).await;
+        }
+
         // 1. Rule-based intent parser — fast path, deterministic.
         // No Ollama call → no streaming chunks. Subscribers that wait
         // for PartialReply still see the final Command() return.
@@ -353,6 +384,22 @@ impl LilithService {
             "action": action_name,
             "result": response_json,
         })
+    }
+
+    /// Build the hardcoded capability listing returned to "/help",
+    /// "ajuda", and "o que você sabe fazer". Records as a regular
+    /// chat-style turn (no tool call) so the popup conversation
+    /// view treats it like any other Lilith reply.
+    async fn respond_with_help(&self, user_text: &str) -> Value {
+        let reply = HELP_REPLY.to_string();
+        self.audit.write(user_text, None, None, &reply).await;
+        self.memory.record(Turn {
+            user_text: user_text.into(),
+            tool_call: None,
+            action_response: None,
+            reply_text: reply.clone(),
+        });
+        json!({ "reply": reply, "action": null, "result": null })
     }
 
     /// Execute a `memory.*` tool against the local fact store. Returns a value

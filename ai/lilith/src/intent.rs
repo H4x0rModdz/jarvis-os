@@ -20,6 +20,39 @@ pub fn parse(text: &str) -> Option<ToolCall> {
     None
 }
 
+/// Returns true when `text` is asking what Lilith can do. Handled
+/// outside the regular rule path because the response is a hardcoded
+/// capability listing, not an Action Bus dispatch.
+///
+/// Match-anywhere on a normalized prompt — phrasings like
+/// "diga o que você sabe fazer" should hit too. Kept loose
+/// because the cost of a false positive ("ajuda dela com isso")
+/// is just a more verbose reply.
+pub fn is_help_query(text: &str) -> bool {
+    let t = text.trim().to_lowercase();
+    if t == "/help" || t == "/ajuda" {
+        return true;
+    }
+    const NEEDLES: &[&str] = &[
+        "o que voce sabe fazer",
+        "o que você sabe fazer",
+        "o que voce pode fazer",
+        "o que você pode fazer",
+        "what can you do",
+        "what do you know",
+        "como posso te usar",
+        "como te usar",
+        "lista de comandos",
+        "list of commands",
+    ];
+    NEEDLES.iter().any(|n| t.contains(n))
+        // Standalone "ajuda" / "help" hits too, but we don't want to
+        // match "preciso de ajuda para X" — that's the user asking for
+        // help on a task, not for our capabilities. Require it to be
+        // the whole input.
+        || matches!(t.as_str(), "ajuda" | "help")
+}
+
 struct Rule {
     pattern: Regex,
     build: fn(&regex::Captures) -> ToolCall,
