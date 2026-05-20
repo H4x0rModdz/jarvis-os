@@ -275,7 +275,14 @@ Window {
     UpdaterSplash {}
 
     // Preferences panel — opens when the user clicks the gear on the bar.
-    SettingsPanel { id: settingsPanel }
+    SettingsPanel {
+        id: settingsPanel
+        onDisplayRequested: displayPanel.requestOpen()
+    }
+
+    // Display panel — opens from the SettingsPanel "Monitores"
+    // button. Single-shot wlr-randr query on open; no polling.
+    DisplayPanel { id: displayPanel }
 
     // Toast for incoming notifications. Bound to NotificationsBridge —
     // bottom-right of the primary output, 5s auto-hide, click to

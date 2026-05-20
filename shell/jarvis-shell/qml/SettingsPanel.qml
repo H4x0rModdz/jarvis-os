@@ -32,6 +32,14 @@ Window {
         requestActivate();
     }
 
+    /// Signal up to Main.qml, which owns the DisplayPanel instance.
+    /// Kept as a signal rather than reaching across the QML tree
+    /// because SettingsPanel is itself a Window — direct lookups
+    /// would couple unrelated trees.
+    signal displayRequested()
+
+    function openDisplay() { displayRequested(); }
+
     Shortcut {
         sequence: "Escape"
         onActivated: root.visible = false
@@ -490,6 +498,54 @@ Window {
                             enabled: !modelData.isDefault
                             onClicked: AudioBridge.setDefaultSink(modelData.name)
                         }
+                    }
+                }
+            }
+
+            // ── Row: Display config opener ────────────────────────────
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: qsTr("Monitores")
+                        color: Theme.text
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        text: qsTr("Resolução, escala, ligar/desligar saídas externas.")
+                        color: Theme.textDim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+                Rectangle {
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 92
+                    implicitHeight: 28
+                    radius: 14
+                    color: dispArea.containsMouse
+                        ? Qt.rgba(1, 1, 1, 0.10)
+                        : Qt.rgba(1, 1, 1, 0.04)
+                    border.color: Theme.border
+                    border.width: 1
+                    Text {
+                        anchors.centerIn: parent
+                        text: qsTr("CONFIGURAR")
+                        color: Theme.text
+                        font.pixelSize: 9
+                        font.weight: Font.Bold
+                        font.letterSpacing: 1
+                    }
+                    MouseArea {
+                        id: dispArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.openDisplay()
                     }
                 }
             }

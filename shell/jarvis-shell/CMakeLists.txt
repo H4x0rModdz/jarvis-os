@@ -95,6 +95,7 @@ qt_add_qml_module(jarvis-shell
         qml/BarBatteryIndicator.qml
         qml/BluetoothPanel.qml
         qml/ConnectivityPanel.qml
+        qml/DisplayPanel.qml
         qml/FirstBootWizard.qml
         qml/GlassPanel.qml
         qml/LilithPopup.qml
