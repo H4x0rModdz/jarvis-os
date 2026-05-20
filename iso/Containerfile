@@ -207,6 +207,7 @@ RUN dnf -y install \
         brightnessctl \
         playerctl \
         upower \
+        bluez \
         alsa-lib \
         wine \
         flatpak \
