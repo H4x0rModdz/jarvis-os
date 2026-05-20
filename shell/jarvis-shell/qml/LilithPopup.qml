@@ -153,11 +153,91 @@ Window {
                 }
             }
 
+            // ── Empty-state suggestions ────────────────────────────
+            // First-run onboarding without a tutorial: when the
+            // conversation is empty (fresh boot, after LIMPAR, etc.)
+            // we surface four clickable prompts so the user sees
+            // what Lilith can do without trial-and-error.
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 10
+                visible: LilithBridge.conversation.length === 0
+                    && !LilithBridge.busy
+                    && LilithBridge.streamingText.length === 0
+
+                Text {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 24
+                    text: qsTr("Diga algo para começar.")
+                    color: Theme.textDim
+                    font.pixelSize: 13
+                }
+
+                GridLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    columns: 2
+                    rowSpacing: 8
+                    columnSpacing: 8
+
+                    Repeater {
+                        // The list reflects the four most-used action
+                        // namespaces. Order matters: install → see →
+                        // capture → reach-the-web parallels the
+                        // typical "set up my desktop" flow.
+                        model: [
+                            { label: qsTr("Abrir o navegador"),    prompt: "abrir o navegador" },
+                            { label: qsTr("Tirar um screenshot"),  prompt: "tirar um screenshot" },
+                            { label: qsTr("Instalar o GIMP"),      prompt: "instalar o gimp" },
+                            { label: qsTr("O que você sabe fazer?"), prompt: "o que você sabe fazer" },
+                        ]
+                        delegate: Rectangle {
+                            implicitWidth: 196
+                            implicitHeight: 56
+                            radius: 10
+                            color: suggestionArea.containsMouse
+                                ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                                : Qt.rgba(1, 1, 1, 0.04)
+                            border.color: suggestionArea.containsMouse
+                                ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.50)
+                                : Theme.border
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: Theme.animFast } }
+                            Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+
+                            Text {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                text: modelData.label
+                                color: Theme.text
+                                font.pixelSize: 12
+                                wrapMode: Text.WordWrap
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            MouseArea {
+                                id: suggestionArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: LilithBridge.send(modelData.prompt)
+                            }
+                        }
+                    }
+                }
+
+                Item { Layout.fillHeight: true } // pushes grid up
+            }
+
             // ── Conversation list ──────────────────────────────────
             ListView {
                 id: convoList
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                visible: LilithBridge.conversation.length > 0
+                    || LilithBridge.busy
+                    || LilithBridge.streamingText.length > 0
                 clip: true
                 spacing: 8
                 model: LilithBridge.conversation

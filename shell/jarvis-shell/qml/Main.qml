@@ -203,6 +203,12 @@ Window {
         onLauncherRequested: launcher.visible ? launcher.close() : launcher.open()
         onSettingsRequested: settingsPanel.requestOpen()
         onNotificationsRequested: notificationDrawer.requestOpen()
+        // On bar-input focus, open the Lilith popup if not already
+        // showing — gives the empty-state suggestions a chance to be
+        // seen by users who haven't issued a command yet.
+        onLilithFocused: {
+            if (!lilithPopup.visible) lilithPopup.requestOpen();
+        }
     }
 
     Launcher {

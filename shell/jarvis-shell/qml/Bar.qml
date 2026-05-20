@@ -26,6 +26,10 @@ Rectangle {
     signal launcherRequested()
     signal settingsRequested()
     signal notificationsRequested()
+    /// Fired when the LilithInput gains focus — Main.qml routes this
+    /// to the LilithPopup so the empty-state suggestions get a chance
+    /// to be seen.
+    signal lilithFocused()
 
     function focusInput() {
         input.focusInput();
@@ -68,6 +72,7 @@ Rectangle {
                 LilithBridge.send(text);
                 root.lastUserText = text;
             }
+            onInputFocused: root.lilithFocused()
         }
 
         // Hotword pipeline. When the daemon matches a wake-word the

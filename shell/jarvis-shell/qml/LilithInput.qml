@@ -41,6 +41,10 @@ Item {
         return qsTr("Diga algo para a Lilith...");
     }
     signal accepted(string text)
+    /// Emitted whenever the input field gains focus, so the parent
+    /// can open the Lilith popup with its empty-state suggestions
+    /// (Phase 12). Bar.qml wires this to lilithPopup.requestOpen().
+    signal inputFocused()
 
     function focusInput() {
         input.forceActiveFocus();
@@ -72,6 +76,10 @@ Item {
 
         enabled: !LilithBridge.busy
         opacity: enabled ? 1.0 : 0.55
+
+        onActiveFocusChanged: {
+            if (activeFocus) root.inputFocused();
+        }
 
         Behavior on opacity {
             NumberAnimation { duration: Theme.animFast }
