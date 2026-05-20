@@ -152,10 +152,16 @@ directly with mock everything.
 
 State-machine coverage today: start when idle, start when busy,
 cancel from listening, stop_listening when not listening, speak
-empty / busy. Spawned-task paths (the STT loop after stop_listening
-fires, the TTS spawn from speak) are still not asserted because
-the TTS subprocess (piper) isn't abstracted yet — the natural
-follow-up trait.
+empty / busy, **speak happy path + TTS error** (Phase 26). The
+Tts trait closes the last gap — `MockTts` records calls + can
+script an error; `await_state_idle` lets the test wait on the
+spawned task without flaky sleeps.
+
+Bridge trait-completeness matches Lilith now:
+  cpal capture  → AudioCapture trait + MockCapture
+  whisper STT   → Stt trait + MockStt
+  piper TTS     → Tts trait + MockTts
+  signals       → VoiceSignalSink trait + RecordingVoiceSink
 
 ## Failure Modes
 

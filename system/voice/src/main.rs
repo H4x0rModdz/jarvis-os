@@ -1006,6 +1006,133 @@ mod tests {
         assert!(sink.events().is_empty());
     }
 
+    // ── Tts trait + speak spawned-task ─────────────────────────────
+
+    /// MockTts records every speak call and can be scripted to
+    /// return an error. A `tokio::sync::Notify` fires after each
+    /// call so the test can `await` task completion without a
+    /// polling loop.
+    struct MockTts {
+        calls: StdMutex<Vec<String>>,
+        fail_with: Option<String>,
+        notify: tokio::sync::Notify,
+    }
+
+    impl MockTts {
+        fn ok() -> Self {
+            Self {
+                calls: StdMutex::new(Vec::new()),
+                fail_with: None,
+                notify: tokio::sync::Notify::new(),
+            }
+        }
+        fn failing(reason: &str) -> Self {
+            Self {
+                calls: StdMutex::new(Vec::new()),
+                fail_with: Some(reason.into()),
+                notify: tokio::sync::Notify::new(),
+            }
+        }
+        fn calls(&self) -> Vec<String> {
+            self.calls.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl tts::Tts for MockTts {
+        async fn speak(&self, text: &str) -> anyhow::Result<()> {
+            self.calls.lock().unwrap().push(text.to_string());
+            let result = match &self.fail_with {
+                Some(reason) => Err(anyhow::anyhow!(reason.clone())),
+                None => Ok(()),
+            };
+            // Fire the notification AFTER recording the call so the
+            // test sees `calls()` populated when it wakes.
+            self.notify.notify_one();
+            result
+        }
+    }
+
+    /// Wait for the spawned task to settle by watching the state
+    /// machine — `speak_impl` flips it to Idle on the last line.
+    /// Plus a 1-second cap so a regression doesn't hang CI forever.
+    async fn await_state_idle(service: &VoiceService) {
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            async {
+                loop {
+                    if *service.state.lock().await == State::Idle {
+                        return;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn speak_happy_path_emits_speaking_then_idle() {
+        let capture: Arc<dyn AudioCapture> =
+            Arc::new(MockCapture::with_samples(vec![]));
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let mock_tts = Arc::new(MockTts::ok());
+        let tts: Arc<dyn tts::Tts> = mock_tts.clone();
+        let service = build_service_with_tts(capture, stt, tts);
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.speak_impl("oi lilith", sink_dyn).await;
+        assert!(resp.contains("\"spoken\":true"));
+
+        await_state_idle(&service).await;
+
+        // MockTts saw exactly one call with the right text.
+        assert_eq!(mock_tts.calls(), vec!["oi lilith".to_string()]);
+        // Signal sequence: state→speaking on the sync body, then
+        // state→idle from the spawned task once TTS returned.
+        let events = sink.events();
+        assert_eq!(
+            events,
+            vec![
+                ("state".to_string(), "speaking".to_string()),
+                ("state".to_string(), "idle".to_string()),
+            ]
+        );
+        // State machine landed back on idle.
+        assert_eq!(*service.state.lock().await, State::Idle);
+    }
+
+    #[tokio::test]
+    async fn speak_tts_error_emits_transcription_failed() {
+        let capture: Arc<dyn AudioCapture> =
+            Arc::new(MockCapture::with_samples(vec![]));
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let mock_tts = Arc::new(MockTts::failing("piper exploded"));
+        let tts: Arc<dyn tts::Tts> = mock_tts.clone();
+        let service = build_service_with_tts(capture, stt, tts);
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.speak_impl("oi", sink_dyn).await;
+        assert!(resp.contains("\"spoken\":true"));
+
+        await_state_idle(&service).await;
+
+        let events = sink.events();
+        // Expect: state→speaking, then failed(reason), then state→idle.
+        assert_eq!(events.len(), 3);
+        assert_eq!(events[0], ("state".into(), "speaking".into()));
+        assert_eq!(events[1].0, "failed");
+        assert!(
+            events[1].1.contains("piper exploded"),
+            "expected the failure reason in the toast; got {:?}",
+            events[1].1
+        );
+        assert_eq!(events[2], ("state".into(), "idle".into()));
+        assert_eq!(*service.state.lock().await, State::Idle);
+    }
+
     #[test]
     fn state_transitions_are_exhaustive() {
         // Round-trip every variant through the state → &str → match.
