@@ -1,0 +1,23 @@
+# Jarvis OS system-wide MIME defaults.
+# Installed at /etc/xdg/mimeapps.list — applies to every user
+# unless they shadow it with ~/.config/mimeapps.list.
+#
+# Each line is `<mime-type>=<comma-separated .desktop ids>`.
+# xdg-open walks the list and uses the first .desktop file that
+# exists in any of the XDG_DATA_DIRS application dirs. Our
+# Flatpak-shipped apps end up at /var/lib/flatpak/exports/share/
+# applications/<id>.desktop (already on XDG_DATA_DIRS via
+# iso/assets/launchers/jarvis-session-launch).
+
+[Default Applications]
+# Folders / directories — every "open the parent folder" / browser
+# "show in folder" / Lilith "abrir downloads" lands in Dolphin.
+inode/directory=org.kde.dolphin.desktop
+x-directory/normal=org.kde.dolphin.desktop
+
+# Web pages — Firefox is the pre-installed default; without this
+# the FreeDesktop preference order would pick whatever .desktop
+# happens to claim text/html first.
+text/html=org.mozilla.firefox.desktop
+x-scheme-handler/http=org.mozilla.firefox.desktop
+x-scheme-handler/https=org.mozilla.firefox.desktop
