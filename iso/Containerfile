@@ -206,6 +206,7 @@ RUN dnf -y install \
         pulseaudio-utils \
         brightnessctl \
         playerctl \
+        upower \
         alsa-lib \
         wine \
         flatpak \
@@ -336,6 +337,14 @@ RUN systemctl --global enable jarvis-session.target
 # feedback. labwc rc.xml binds the XF86 keysyms to them.
 COPY iso/assets/keys/ /usr/libexec/jarvis-keys/
 RUN chmod 0755 /usr/libexec/jarvis-keys/*
+
+# logind policy: suspend on lid close even when on AC (default lets
+# the laptop keep running plugged in, which conflicts with the
+# "close it and walk away" expectation). Idle-action is left to
+# swayidle + the lock daemon (Phase 5) so we don't get a duplicate
+# suspend stack.
+COPY iso/assets/systemd/logind.conf.d/jarvis.conf \
+     /etc/systemd/logind.conf.d/jarvis.conf
 
 # Session launcher: a 30-line shell script that probes the host and
 # picks WLR_RENDERER before exec'ing whatever it's wrapping. Real GPUs
