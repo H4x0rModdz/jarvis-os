@@ -7,6 +7,7 @@ mod ollama;
 mod persistent;
 mod proactive;
 mod proactive_rules;
+mod proactive_system;
 mod settings;
 mod signals;
 mod summarizer;

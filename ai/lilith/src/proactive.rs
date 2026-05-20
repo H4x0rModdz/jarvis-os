@@ -34,6 +34,41 @@ pub struct Signals {
     pub battery_percent: Option<f64>,
     pub battery_state: Option<BatteryState>,
     pub idle_seconds: Option<u64>,
+    /// Free % of the root filesystem (0..100). None if statvfs failed.
+    pub disk_root_free_pct: Option<f64>,
+    /// Free % of system memory (MemAvailable / MemTotal). 0..100.
+    pub mem_free_pct: Option<f64>,
+    /// Used % of swap ((SwapTotal-SwapFree)/SwapTotal). 0..100.
+    /// None when the host has no swap configured.
+    pub swap_used_pct: Option<f64>,
+}
+
+impl Signals {
+    /// Merge `other` into `self` — non-None fields on `other` win.
+    /// Used by `CompositeProbe` to fold per-source snapshots into
+    /// one. The order of merge calls determines tie-breaking when
+    /// two probes claim the same field; in practice probes never
+    /// overlap (UPower owns battery, SystemProbe owns disk/mem).
+    pub fn merge(&mut self, other: Signals) {
+        if other.battery_percent.is_some() {
+            self.battery_percent = other.battery_percent;
+        }
+        if other.battery_state.is_some() {
+            self.battery_state = other.battery_state;
+        }
+        if other.idle_seconds.is_some() {
+            self.idle_seconds = other.idle_seconds;
+        }
+        if other.disk_root_free_pct.is_some() {
+            self.disk_root_free_pct = other.disk_root_free_pct;
+        }
+        if other.mem_free_pct.is_some() {
+            self.mem_free_pct = other.mem_free_pct;
+        }
+        if other.swap_used_pct.is_some() {
+            self.swap_used_pct = other.swap_used_pct;
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +132,32 @@ pub struct NullProbe;
 impl Probe for NullProbe {
     async fn snapshot(&self) -> Signals {
         Signals::default()
+    }
+}
+
+/// Fans out to multiple probes and merges their Signals. Each
+/// probe owns a different set of fields; the merge picks non-None
+/// values from each. Failing probes return `Signals::default()`
+/// (their `snapshot` impls swallow errors), so a broken probe just
+/// leaves its fields unset on the composite output.
+pub struct CompositeProbe {
+    probes: Vec<std::sync::Arc<dyn Probe>>,
+}
+
+impl CompositeProbe {
+    pub fn new(probes: Vec<std::sync::Arc<dyn Probe>>) -> Self {
+        Self { probes }
+    }
+}
+
+#[async_trait]
+impl Probe for CompositeProbe {
+    async fn snapshot(&self) -> Signals {
+        let mut combined = Signals::default();
+        for p in &self.probes {
+            combined.merge(p.snapshot().await);
+        }
+        combined
     }
 }
 
