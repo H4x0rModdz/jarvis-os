@@ -26,6 +26,7 @@ Rectangle {
     signal launcherRequested()
     signal settingsRequested()
     signal notificationsRequested()
+    signal networksRequested()
     /// Fired when the LilithInput gains focus — Main.qml routes this
     /// to the LilithPopup so the empty-state suggestions get a chance
     /// to be seen.
@@ -109,6 +110,11 @@ Rectangle {
             Layout.alignment: Qt.AlignVCenter
             reachable: LilithBridge.reachable
             busy: LilithBridge.busy
+        }
+
+        BarWifiButton {
+            Layout.alignment: Qt.AlignVCenter
+            onClicked: root.networksRequested()
         }
 
         BarBellButton {
