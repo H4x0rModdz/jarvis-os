@@ -89,6 +89,21 @@ RUN mkdir -p /out/piper /out/piper-voices \
     && curl -fsSL -o /out/piper-voices/${PIPER_VOICE}.onnx.json \
         https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/pt/pt_BR/faber/medium/${PIPER_VOICE}.onnx.json
 
+# numbat-cli — Lilith's calculator backend. Built from crates.io
+# rather than dnf because Fedora doesn't ship it (yet) and the
+# upstream build is plain cargo install. The resulting binary is
+# ~5 MB; --locked pins the lockfile from the published crate so a
+# transitive dep refresh can't surprise us at build time.
+#
+# Pinned to a known-good version — bump deliberately, the same way
+# we pin WHISPER_VERSION above.
+ARG NUMBAT_VERSION=1.16.0
+RUN CARGO_TARGET_DIR=/build/numbat cargo install \
+        --root /out/numbat \
+        --locked \
+        --version ${NUMBAT_VERSION} \
+        numbat-cli
+
 WORKDIR /src
 COPY . .
 
@@ -268,6 +283,11 @@ RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \
 # here. Replacement / upgrade flows are an updater Phase 2 concern.
 COPY --from=builder /out/whisper/whisper-cli           /usr/bin/whisper-cli
 COPY --from=builder /out/whisper-models/ggml-base.bin  /usr/share/whisper-models/ggml-base.bin
+
+# numbat — Lilith's calculator backend (see #159). No .desktop —
+# this is a tool the assistant reaches for, not an app the user
+# opens directly. Built from crates.io in the builder stage.
+COPY --from=builder /out/numbat/bin/numbat              /usr/bin/numbat
 
 # piper (TTS) lives under /opt because the upstream tarball bundles its
 # own libonnxruntime and espeak-ng-data alongside the binary — keeping
