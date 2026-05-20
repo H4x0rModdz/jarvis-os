@@ -203,6 +203,7 @@ RUN dnf -y install \
         mesa-dri-drivers \
         wl-clipboard grim slurp \
         swayidle \
+        wlr-randr \
         pulseaudio-utils \
         brightnessctl \
         playerctl \

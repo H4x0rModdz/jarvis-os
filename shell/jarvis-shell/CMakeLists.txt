@@ -55,6 +55,8 @@ qt_add_executable(jarvis-shell
     src/bluetooth_bridge.h
     src/audio_bridge.cpp
     src/audio_bridge.h
+    src/display_bridge.cpp
+    src/display_bridge.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
