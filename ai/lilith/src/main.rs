@@ -565,7 +565,18 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Ollama configured (model = {})", ollama_concrete.model());
     let ollama: Arc<dyn Ollama> = Arc::new(ollama_concrete);
 
-    let memory = Arc::new(SessionMemory::new(32));
+    // Turn store sits next to the fact store. Same dir + WAL
+    // settings; SessionMemory loads the most recent slice into
+    // the cache at boot so a restart doesn't lose conversational
+    // context.
+    let turns_path = facts_path
+        .parent()
+        .map(|p| p.join("lilith.db"))
+        .unwrap_or_else(|| std::path::PathBuf::from("./lilith.db"));
+    tracing::info!("Turn store: {}", turns_path.display());
+    let turn_store = Arc::new(turn_store::TurnStore::open(&turns_path)?);
+
+    let memory = Arc::new(SessionMemory::with_store(32, turn_store.clone()));
     let facts = Arc::new(FactStore::open(&facts_path)?);
     let audit = Arc::new(AuditLog::new(audit_path));
 
