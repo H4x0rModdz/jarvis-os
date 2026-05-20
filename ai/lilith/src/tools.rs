@@ -318,6 +318,28 @@ pub fn all_tools() -> Vec<Tool> {
                 }
             }),
         },
+        Tool {
+            action: "audio.list_sinks",
+            description: "List every available audio output sink + which one is currently the \
+                          default. Use when the user asks 'que saídas tem' / 'lista as saídas \
+                          de áudio' / 'que saídas tô usando'.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "audio.set_default_sink",
+            description: "Switch the system's default audio output and migrate any currently \
+                          playing streams to follow. Pass the sink's `name` (not the description); \
+                          to get the right name, call audio.list_sinks first if you don't \
+                          already have it. Use for 'trocar saída pro fone' / 'manda o som pro \
+                          headset' / 'volta pro alto-falante'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "sink": { "type": "string", "description": "Sink name from audio.list_sinks (e.g. alsa_output.pci-0000_00_1f.3.analog-stereo)." }
+                },
+                "required": ["sink"]
+            }),
+        },
         // ── network (Wi-Fi) ─────────────────────────────────────────────
         Tool {
             action: "network.scan",
