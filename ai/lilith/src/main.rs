@@ -6,6 +6,7 @@ mod memory;
 mod ollama;
 mod persistent;
 mod settings;
+mod signals;
 mod tools;
 
 /// Hardcoded reply for `is_help_query`. Lists the namespaces of the
@@ -31,12 +32,14 @@ Posso fazer isso aqui pra você:
 Pergunte em português ou inglês — eu encadeio várias ações quando faz \
 sentido (\"tira um print e abre no editor\").";
 
+use async_trait::async_trait;
 use audit::AuditLog;
 use bus_client::{BusClient, BusDispatcher};
 use memory::{SessionMemory, Turn};
 use ollama::{append_tool_step, build_initial_messages, Ollama, OllamaClient};
 use persistent::FactStore;
 use serde_json::{json, Value};
+use signals::SignalSink;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tools::{all_tools, ToolCall};
@@ -65,7 +68,13 @@ impl LilithService {
         text: &str,
         #[zbus(signal_context)] ctx: SignalContext<'_>,
     ) -> String {
-        let response = self.process(text, &ctx).await;
+        // Wrap the zbus-injected signal context in a SignalSink so
+        // process()'s loop can be tested without a live connection
+        // (see signals.rs + the #[cfg(test)] module below).
+        let sink: Arc<dyn SignalSink> = Arc::new(DbusSignalSink {
+            ctx: ctx.to_owned(),
+        });
+        let response = self.process(text, sink).await;
         serde_json::to_string(&response).unwrap_or_else(|_| "{}".into())
     }
 
@@ -133,8 +142,30 @@ impl LilithService {
     ) -> zbus::Result<()>;
 }
 
+/// Production SignalSink that forwards through zbus to the
+/// `com.jarvis.Lilith` signals. Defined here (not in signals.rs) so
+/// it can reference `LilithService`'s `#[zbus(signal)]` methods.
+struct DbusSignalSink {
+    ctx: SignalContext<'static>,
+}
+
+#[async_trait]
+impl SignalSink for DbusSignalSink {
+    async fn partial_reply(&self, step: u32, chunk: &str) {
+        if let Err(e) = LilithService::partial_reply(&self.ctx, step, chunk).await {
+            tracing::warn!(error = %e, "PartialReply emit failed");
+        }
+    }
+
+    async fn chain_step(&self, step: u32, action: &str) {
+        if let Err(e) = LilithService::chain_step(&self.ctx, step, action).await {
+            tracing::warn!(error = %e, "ChainStep emit failed");
+        }
+    }
+}
+
 impl LilithService {
-    async fn process(&self, text: &str, ctx: &SignalContext<'_>) -> Value {
+    async fn process(&self, text: &str, signals: Arc<dyn SignalSink>) -> Value {
         // 0. Capability discovery — short-circuits before the rule
         // path or the LLM. The response is a hardcoded listing of
         // what Lilith owns, in pt-BR. No Action Bus dispatch.
@@ -172,25 +203,17 @@ impl LilithService {
 
         for step in 0..MAX_STEPS {
             // Per-step chunk channel: ollama writes tokens, the
-            // forwarder task re-emits them as PartialReply signals
+            // forwarder task re-emits them through the SignalSink
             // tagged with this step's index. Dropping the sender at
             // end of chat_messages closes the channel and the
             // forwarder finishes cleanly.
             let (chunk_tx, mut chunk_rx) =
                 tokio::sync::mpsc::unbounded_channel::<String>();
-            let ctx_for_forwarder = ctx.to_owned();
+            let sink_for_forwarder = signals.clone();
             let step_idx = step as u32;
             let forwarder = tokio::spawn(async move {
                 while let Some(chunk) = chunk_rx.recv().await {
-                    if let Err(e) = LilithService::partial_reply(
-                        &ctx_for_forwarder,
-                        step_idx,
-                        &chunk,
-                    )
-                    .await
-                    {
-                        tracing::warn!(error = %e, "PartialReply emit failed");
-                    }
+                    sink_for_forwarder.partial_reply(step_idx, &chunk).await;
                 }
             });
 
@@ -265,9 +288,7 @@ impl LilithService {
             // Tell subscribers a tool is about to run before the
             // potentially-slow Action Bus call so the UI can render
             // "Capturando print…" before the result lands.
-            if let Err(e) = Self::chain_step(ctx, step as u32, &call.action).await {
-                tracing::warn!(error = %e, "ChainStep emit failed");
-            }
+            signals.chain_step(step as u32, &call.action).await;
 
             // Dispatch via the same helper that records per-step turns,
             // so cross-turn history (task #116) sees each step too.
