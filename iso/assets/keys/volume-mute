@@ -1,0 +1,22 @@
+#!/bin/sh
+# Toggle mute on the default sink. PulseAudio's `set-sink-mute toggle`
+# does exactly that.
+set -eu
+
+pactl set-sink-mute @DEFAULT_SINK@ toggle 2>/dev/null || exit 0
+
+state=$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null \
+    | grep -oE 'yes|no' | head -1 || echo "no")
+
+if [ "$state" = "yes" ]; then
+    notify-send --replace-id=1001 --expire-time=1500 \
+        --icon=audio-volume-muted \
+        "Volume" "Mudo"
+else
+    level=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null \
+        | grep -oE '[0-9]+%' | head -1 || echo "?")
+    notify-send --replace-id=1001 --expire-time=1500 \
+        --hint=int:value:"${level%\%}" \
+        --icon=audio-volume-high \
+        "Volume" "${level}"
+fi

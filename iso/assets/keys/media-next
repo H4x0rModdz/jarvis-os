@@ -1,0 +1,3 @@
+#!/bin/sh
+set -eu
+playerctl next 2>/dev/null || exit 0

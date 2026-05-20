@@ -1,0 +1,13 @@
+#!/bin/sh
+# Lower the primary backlight by 5%. min-value=1 protects against
+# accidental full-blackout (see brightness-up).
+set -eu
+
+brightnessctl --min-value=1 set 5%- 2>/dev/null || exit 0
+
+level=$(brightnessctl -m 2>/dev/null | awk -F, '{print $4}' | tr -d '%' || echo "?")
+
+notify-send --replace-id=1003 --expire-time=1500 \
+    --hint=int:value:"$level" \
+    --icon=display-brightness-low \
+    "Brilho" "${level}%"

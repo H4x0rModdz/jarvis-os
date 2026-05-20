@@ -1,0 +1,14 @@
+#!/bin/sh
+# Lower the default sink volume by 5%. PulseAudio refuses to go
+# negative — no extra guarding needed.
+set -eu
+
+pactl set-sink-volume @DEFAULT_SINK@ -5% 2>/dev/null || exit 0
+
+level=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null \
+    | grep -oE '[0-9]+%' | head -1 || echo "?")
+
+notify-send --replace-id=1001 --expire-time=1500 \
+    --hint=int:value:"${level%\%}" \
+    --icon=audio-volume-low \
+    "Volume" "${level}"

@@ -1,0 +1,18 @@
+#!/bin/sh
+# Raise the primary backlight by 5%. brightnessctl picks the first
+# /sys/class/backlight/* device automatically; works on most laptop
+# panels without us needing to enumerate.
+#
+# `--min-value=1` keeps the screen from going fully dark on a key
+# press loop — labwc keybinds repeat on hold, and a 0% press is a
+# bad accident to recover from without sight.
+set -eu
+
+brightnessctl --min-value=1 set 5%+ 2>/dev/null || exit 0
+
+level=$(brightnessctl -m 2>/dev/null | awk -F, '{print $4}' | tr -d '%' || echo "?")
+
+notify-send --replace-id=1003 --expire-time=1500 \
+    --hint=int:value:"$level" \
+    --icon=display-brightness-high \
+    "Brilho" "${level}%"

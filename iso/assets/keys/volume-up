@@ -1,0 +1,21 @@
+#!/bin/sh
+# Raise the default sink volume by 5% (capped at 150% — pulseaudio's
+# default ceiling) and post a notification with the new level so the
+# user gets OSD-style feedback without us shipping a separate OSD.
+set -eu
+
+pactl set-sink-volume @DEFAULT_SINK@ +5% 2>/dev/null || exit 0
+# Unmute on a volume-up press — most laptop volume keys imply "I
+# want to hear something", so dropping the mute is the right default.
+pactl set-sink-mute @DEFAULT_SINK@ 0 2>/dev/null || true
+
+level=$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null \
+    | grep -oE '[0-9]+%' | head -1 || echo "?")
+
+# replaces_id=1001 so successive volume key presses overwrite one
+# toast in place instead of stacking — matches the convention the
+# install_proton flow uses.
+notify-send --replace-id=1001 --expire-time=1500 \
+    --hint=int:value:"${level%\%}" \
+    --icon=audio-volume-high \
+    "Volume" "${level}"

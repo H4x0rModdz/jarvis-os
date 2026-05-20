@@ -204,6 +204,8 @@ RUN dnf -y install \
         wl-clipboard grim slurp \
         swayidle \
         pulseaudio-utils \
+        brightnessctl \
+        playerctl \
         alsa-lib \
         wine \
         flatpak \
@@ -327,6 +329,13 @@ COPY iso/assets/systemd/jarvis-compat.service        /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-lock.service          /etc/systemd/user/
 COPY iso/assets/systemd/jarvis-session.target        /etc/systemd/user/
 RUN systemctl --global enable jarvis-session.target
+
+# Hardware-key handlers — small shell scripts under
+# /usr/libexec/jarvis-keys/ that wrap pactl / brightnessctl /
+# playerctl + post a replaces_id notification for OSD-style
+# feedback. labwc rc.xml binds the XF86 keysyms to them.
+COPY iso/assets/keys/ /usr/libexec/jarvis-keys/
+RUN chmod 0755 /usr/libexec/jarvis-keys/*
 
 # Session launcher: a 30-line shell script that probes the host and
 # picks WLR_RENDERER before exec'ing whatever it's wrapping. Real GPUs

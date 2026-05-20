@@ -1,0 +1,20 @@
+#!/bin/sh
+# Toggle mute on the default source (microphone). Matches the
+# laptop-key convention where the dedicated mic-mute LED tracks
+# the source-mute state, not the sink.
+set -eu
+
+pactl set-source-mute @DEFAULT_SOURCE@ toggle 2>/dev/null || exit 0
+
+state=$(pactl get-source-mute @DEFAULT_SOURCE@ 2>/dev/null \
+    | grep -oE 'yes|no' | head -1 || echo "no")
+
+if [ "$state" = "yes" ]; then
+    notify-send --replace-id=1002 --expire-time=1500 \
+        --icon=microphone-sensitivity-muted \
+        "Microfone" "Mudo"
+else
+    notify-send --replace-id=1002 --expire-time=1500 \
+        --icon=microphone-sensitivity-high \
+        "Microfone" "Ligado"
+fi
