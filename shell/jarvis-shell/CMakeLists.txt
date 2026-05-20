@@ -47,6 +47,8 @@ qt_add_executable(jarvis-shell
     src/settings_bridge.h
     src/notifications_bridge.cpp
     src/notifications_bridge.h
+    src/network_bridge.cpp
+    src/network_bridge.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
