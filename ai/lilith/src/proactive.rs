@@ -290,4 +290,73 @@ mod tests {
         assert!(s.battery_state.is_none());
         assert!(s.idle_seconds.is_none());
     }
+
+    #[tokio::test]
+    async fn composite_probe_merges_fields_from_multiple_probes() {
+        // Two probes, each filling disjoint fields. CompositeProbe
+        // should return a Signals with both populated.
+        struct BatteryOnly;
+        #[async_trait]
+        impl Probe for BatteryOnly {
+            async fn snapshot(&self) -> Signals {
+                Signals {
+                    battery_percent: Some(42.0),
+                    battery_state: Some(BatteryState::Discharging),
+                    ..Default::default()
+                }
+            }
+        }
+        struct DiskOnly;
+        #[async_trait]
+        impl Probe for DiskOnly {
+            async fn snapshot(&self) -> Signals {
+                Signals {
+                    disk_root_free_pct: Some(33.0),
+                    mem_free_pct: Some(50.0),
+                    ..Default::default()
+                }
+            }
+        }
+
+        let composite = CompositeProbe::new(vec![
+            std::sync::Arc::new(BatteryOnly),
+            std::sync::Arc::new(DiskOnly),
+        ]);
+        let s = composite.snapshot().await;
+        assert_eq!(s.battery_percent, Some(42.0));
+        assert_eq!(s.battery_state, Some(BatteryState::Discharging));
+        assert_eq!(s.disk_root_free_pct, Some(33.0));
+        assert_eq!(s.mem_free_pct, Some(50.0));
+    }
+
+    #[tokio::test]
+    async fn composite_probe_later_probe_overrides_earlier() {
+        // When two probes write the same field, last one wins per
+        // the merge contract.
+        struct First;
+        #[async_trait]
+        impl Probe for First {
+            async fn snapshot(&self) -> Signals {
+                Signals {
+                    mem_free_pct: Some(10.0),
+                    ..Default::default()
+                }
+            }
+        }
+        struct Second;
+        #[async_trait]
+        impl Probe for Second {
+            async fn snapshot(&self) -> Signals {
+                Signals {
+                    mem_free_pct: Some(90.0),
+                    ..Default::default()
+                }
+            }
+        }
+
+        let composite =
+            CompositeProbe::new(vec![std::sync::Arc::new(First), std::sync::Arc::new(Second)]);
+        let s = composite.snapshot().await;
+        assert_eq!(s.mem_free_pct, Some(90.0), "later probe should win");
+    }
 }

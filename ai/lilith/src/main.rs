@@ -720,8 +720,9 @@ async fn main() -> anyhow::Result<()> {
 /// way out is daemon shutdown (the spawn handle is dropped + the
 /// runtime collects it).
 fn spawn_proactive_loop(conn: zbus::Connection) {
-    use proactive::{Probe, ProactiveEngine};
-    use proactive_rules::{battery_rules, UPowerProbe};
+    use proactive::{CompositeProbe, Probe, ProactiveEngine};
+    use proactive_rules::{battery_rules, system_rules, UPowerProbe};
+    use proactive_system::SystemProbe;
 
     tokio::spawn(async move {
         // SignalContext is what `proactive_nudge` needs to emit.
@@ -734,8 +735,19 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
                 return;
             }
         };
-        let probe: std::sync::Arc<dyn Probe> = std::sync::Arc::new(UPowerProbe);
-        let mut engine = ProactiveEngine::new(battery_rules());
+        // Composite probe fans out to UPower (battery) + the
+        // /proc-backed SystemProbe (disk/mem/swap). Each owns
+        // different Signals fields; the merge picks non-None
+        // values so a failing probe just leaves its slice unset.
+        let upower: std::sync::Arc<dyn Probe> = std::sync::Arc::new(UPowerProbe);
+        let system: std::sync::Arc<dyn Probe> = std::sync::Arc::new(SystemProbe);
+        let probe: std::sync::Arc<dyn Probe> =
+            std::sync::Arc::new(CompositeProbe::new(vec![upower, system]));
+        // Concat the rule sets — engine treats them uniformly,
+        // each with its own cooldown stamp.
+        let mut rules = battery_rules();
+        rules.extend(system_rules());
+        let mut engine = ProactiveEngine::new(rules);
 
         // 30 s tick. Tight enough that a 100% → 5% drop triggers
         // within half a minute; loose enough that the daemon spends
