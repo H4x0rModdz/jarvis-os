@@ -128,6 +128,20 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 | V6 (current) | unchanged | unchanged | unchanged | 1.5 s window, 1.5 s tick, RMS+ZCR VAD (~½ V5 CPU, ~1.5 s latency) | unchanged from V5 |
 | V7 (next) | unchanged | unchanged | unchanged | openWakeWord ONNX (<300 ms latency, ~5 % CPU) | x-vector / d-vector embeddings (anti-spoofing strength) |
 
+## Test harness
+
+Phase 14 extracted the `Stt` trait (real impl: `stt::WhisperCli`)
+so tests can swap in a scripted `MockStt`. `run_stt` is split
+into a capture-bound front half and a `transcribe_samples` back
+half — the latter writes the WAV, calls the trait, and is the
+piece tests cover.
+
+Coverage today: WAV write + Stt dispatch happy path, empty-samples
+short-circuit, error propagation, state-enum round-trip,
+voiceprint pure-function tests (Phase 5/6). The capture + hotword
+actors stay un-mocked — they need their own `AudioCapture` trait,
+which is the natural next refactor.
+
 ## Failure Modes
 
 | Failure | Behavior |

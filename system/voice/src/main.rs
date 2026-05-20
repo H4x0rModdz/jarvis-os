@@ -401,11 +401,20 @@ impl VoiceService {
     }
 }
 
-/// Bottom half of the STT pipeline: finish the capture, write the WAV,
-/// invoke the Stt impl. Trait makes the call testable without a real
-/// whisper-cli on PATH.
+/// Bottom half of the STT pipeline: finish the capture, hand the
+/// samples to `transcribe_samples`. Splitting capture-stop from the
+/// rest lets tests exercise the WAV write + Stt call without a real
+/// cpal stream.
 async fn run_stt(capture: CaptureHandle, stt: &dyn Stt) -> anyhow::Result<String> {
     let samples = capture.stop().await?;
+    transcribe_samples(samples, stt).await
+}
+
+/// Write the captured samples to a temp WAV, transcribe via the Stt
+/// impl, clean up. Empty samples short-circuit to an empty string —
+/// the daemon turns that into a TranscriptionFailed("no speech
+/// detected") for the caller.
+async fn transcribe_samples(samples: Vec<i16>, stt: &dyn Stt) -> anyhow::Result<String> {
     if samples.is_empty() {
         return Ok(String::new());
     }
@@ -565,6 +574,9 @@ async fn read_bool_setting(conn: &zbus::Connection, key: &str) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use std::path::Path;
+    use std::sync::Mutex as StdMutex;
 
     #[test]
     fn state_str_round_trips() {
@@ -580,5 +592,95 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(5));
         let b = wav_temp_path();
         assert_ne!(a, b);
+    }
+
+    // ── Stt trait + state-machine helpers ────────────────────────────
+
+    /// Scripted Stt — returns the next reply each time `transcribe`
+    /// is called; records the wav paths so tests can assert the
+    /// pipeline wrote a real file before the call.
+    struct MockStt {
+        replies: StdMutex<Vec<anyhow::Result<String>>>,
+        seen_paths: StdMutex<Vec<std::path::PathBuf>>,
+    }
+
+    impl MockStt {
+        fn new(replies: Vec<anyhow::Result<String>>) -> Self {
+            Self {
+                replies: StdMutex::new(replies),
+                seen_paths: StdMutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<std::path::PathBuf> {
+            self.seen_paths.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl Stt for MockStt {
+        async fn transcribe(&self, wav_path: &Path) -> anyhow::Result<String> {
+            self.seen_paths.lock().unwrap().push(wav_path.to_path_buf());
+            let mut replies = self.replies.lock().unwrap();
+            if replies.is_empty() {
+                anyhow::bail!("MockStt: no scripted replies left");
+            }
+            replies.remove(0)
+        }
+    }
+
+    #[tokio::test]
+    async fn transcribe_samples_empty_returns_empty() {
+        let stt = MockStt::new(vec![]);
+        let out = transcribe_samples(Vec::new(), &stt).await.unwrap();
+        assert_eq!(out, "");
+        // Mock was never called — the empty-samples branch short-
+        // circuits before the WAV write + Stt dispatch.
+        assert!(stt.calls().is_empty());
+    }
+
+    #[tokio::test]
+    async fn transcribe_samples_writes_wav_and_calls_stt() {
+        let stt = MockStt::new(vec![Ok("oi lilith".into())]);
+        // 16 kHz × 0.1 s of silence — enough for a real WAV header
+        // plus a payload `write_wav` can flush.
+        let samples: Vec<i16> = vec![0; 1600];
+        let out = transcribe_samples(samples, &stt).await.unwrap();
+        assert_eq!(out, "oi lilith");
+        // The mock saw a path; it should be cleaned up by the
+        // helper but its name is checkable while the cleanup is
+        // best-effort.
+        let paths = stt.calls();
+        assert_eq!(paths.len(), 1);
+        assert!(paths[0].to_string_lossy().contains("jarvis-voice-"));
+    }
+
+    #[tokio::test]
+    async fn transcribe_samples_propagates_stt_errors() {
+        let stt = MockStt::new(vec![Err(anyhow::anyhow!("model not found"))]);
+        let samples: Vec<i16> = vec![0; 1600];
+        let err = transcribe_samples(samples, &stt).await.unwrap_err();
+        assert!(err.to_string().contains("model not found"));
+    }
+
+    #[test]
+    fn state_transitions_are_exhaustive() {
+        // Round-trip every variant through the state → &str → match.
+        for state in [
+            State::Idle,
+            State::Listening,
+            State::Processing,
+            State::Speaking,
+        ] {
+            let s = state.as_str();
+            let parsed = match s {
+                "idle" => State::Idle,
+                "listening" => State::Listening,
+                "processing" => State::Processing,
+                "speaking" => State::Speaking,
+                other => panic!("unknown state: {other}"),
+            };
+            assert_eq!(parsed, state);
+        }
     }
 }
