@@ -100,106 +100,17 @@ impl VoiceService {
     /// Begin capturing from the default microphone.
     /// Returns immediately; transcription happens after `StopListening`.
     async fn start_listening(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
-        let mut state = self.state.lock().await;
-        if *state != State::Idle {
-            return json!({
-                "started": false,
-                "reason": format!("busy ({})", state.as_str())
-            })
-            .to_string();
-        }
-
-        if let Err(e) = self.capture.start().await {
-            tracing::warn!(error = %e, "CaptureHandle::start failed");
-            return json!({
-                "started": false,
-                "reason": format!("audio capture failed: {e}")
-            })
-            .to_string();
-        }
-
-        *state = State::Listening;
-        let new_state = *state;
-        drop(state);
-
-        if let Err(e) = Self::state_changed(&ctx, new_state.as_str()).await {
-            tracing::warn!("StateChanged emit failed: {e}");
-        }
-
-        tracing::info!("StartListening");
-        json!({ "started": true }).to_string()
+        self.start_listening_impl(dbus_sink(ctx)).await
     }
 
     /// Stop the in-flight recording and run STT.
     async fn stop_listening(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
-        let mut state = self.state.lock().await;
-        if *state != State::Listening {
-            return json!({
-                "stopped": false,
-                "reason": format!("not listening ({})", state.as_str())
-            })
-            .to_string();
-        }
-        *state = State::Processing;
-        let processing = *state;
-        drop(state);
-
-        if let Err(e) = Self::state_changed(&ctx, processing.as_str()).await {
-            tracing::warn!("StateChanged emit failed: {e}");
-        }
-
-        let capture = self.capture.clone();
-        let stt = self.stt.clone();
-        let ctx_owned = ctx.to_owned();
-        let state_handle = self.state.clone();
-
-        tokio::spawn(async move {
-            let outcome = run_stt(capture, stt.as_ref()).await;
-            match outcome {
-                Ok(text) if !text.is_empty() => {
-                    if let Err(e) = VoiceService::transcription_final(&ctx_owned, &text).await {
-                        tracing::warn!("TranscriptionFinal emit failed: {e}");
-                    }
-                }
-                Ok(_) => {
-                    if let Err(e) =
-                        VoiceService::transcription_failed(&ctx_owned, "no speech detected").await
-                    {
-                        tracing::warn!("TranscriptionFailed emit failed: {e}");
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "STT failed");
-                    if let Err(e2) =
-                        VoiceService::transcription_failed(&ctx_owned, &e.to_string()).await
-                    {
-                        tracing::warn!("TranscriptionFailed emit failed: {e2}");
-                    }
-                }
-            }
-            let mut s = state_handle.lock().await;
-            *s = State::Idle;
-            if let Err(e) = VoiceService::state_changed(&ctx_owned, s.as_str()).await {
-                tracing::warn!("StateChanged emit failed: {e}");
-            }
-        });
-
-        json!({ "stopped": true }).to_string()
+        self.stop_listening_impl(dbus_sink(ctx)).await
     }
 
     /// Abort whatever is in flight.
     async fn cancel(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
-        self.capture.cancel().await;
-        let mut state = self.state.lock().await;
-        let was = *state;
-        *state = State::Idle;
-        drop(state);
-
-        if let Err(e) = Self::state_changed(&ctx, State::Idle.as_str()).await {
-            tracing::warn!("StateChanged emit failed: {e}");
-        }
-        tracing::info!(previous = %was.as_str(), "Cancel");
-        json!({ "cancelled": true, "previous": was.as_str() }).to_string()
+        self.cancel_impl(dbus_sink(ctx)).await
     }
 
     /// Speak `text` through the default audio sink.
@@ -211,44 +122,7 @@ impl VoiceService {
     /// task emits a TranscriptionFailed signal (reused as a "voice
     /// pipeline error" channel) so the shell surfaces it.
     async fn speak(&self, text: &str, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
-        if text.trim().is_empty() {
-            return json!({ "spoken": false, "reason": "empty text" }).to_string();
-        }
-
-        let mut state = self.state.lock().await;
-        if *state != State::Idle {
-            return json!({
-                "spoken": false,
-                "reason": format!("busy ({})", state.as_str())
-            })
-            .to_string();
-        }
-        *state = State::Speaking;
-        drop(state);
-        if let Err(e) = Self::state_changed(&ctx, State::Speaking.as_str()).await {
-            tracing::warn!("StateChanged emit failed: {e}");
-        }
-
-        let text_owned = text.to_string();
-        let ctx_owned = ctx.to_owned();
-        let state_handle = self.state.clone();
-        tokio::spawn(async move {
-            if let Err(e) = tts::speak(&text_owned).await {
-                tracing::warn!(error = %e, "TTS speak failed");
-                if let Err(e2) =
-                    VoiceService::transcription_failed(&ctx_owned, &e.to_string()).await
-                {
-                    tracing::warn!("TranscriptionFailed emit failed: {e2}");
-                }
-            }
-            let mut s = state_handle.lock().await;
-            *s = State::Idle;
-            if let Err(e) = Self::state_changed(&ctx_owned, s.as_str()).await {
-                tracing::warn!("StateChanged emit failed: {e}");
-            }
-        });
-
-        json!({ "spoken": true }).to_string()
+        self.speak_impl(text, dbus_sink(ctx)).await
     }
 
     async fn get_state(&self) -> String {
@@ -297,7 +171,8 @@ impl VoiceService {
         #[zbus(signal_context)] ctx: SignalContext<'_>,
     ) -> String {
         let seconds = seconds.clamp(1, 10) as u64;
-        match self.capture_seconds(seconds, &ctx).await {
+        let sink = dbus_sink(ctx);
+        match self.capture_seconds(seconds, sink.as_ref()).await {
             Ok(samples) => {
                 let features = voiceprint::extract_features(&samples);
                 if features.is_empty() {
@@ -342,7 +217,8 @@ impl VoiceService {
         };
         // 2 s is long enough for "oi lilith" plus a beat, short enough
         // that the user doesn't wait forever to be let in.
-        let samples = match self.capture_seconds(2, &ctx).await {
+        let sink = dbus_sink(ctx);
+        let samples = match self.capture_seconds(2, sink.as_ref()).await {
             Ok(s) => s,
             Err(e) => return json!({ "ok": false, "reason": e.to_string() }).to_string(),
         };
@@ -414,7 +290,7 @@ impl VoiceService {
     async fn capture_seconds(
         &self,
         seconds: u64,
-        ctx: &SignalContext<'_>,
+        signals: &dyn VoiceSignalSink,
     ) -> anyhow::Result<Vec<i16>> {
         // Acquire the state guard up front so we fail fast if another
         // operation is already in flight — keeps the cpal stream
@@ -424,7 +300,7 @@ impl VoiceService {
             anyhow::bail!("voice daemon busy ({})", state.as_str());
         }
         *state = State::Listening;
-        let _ = Self::state_changed(ctx, State::Listening.as_str()).await;
+        signals.state_changed(State::Listening.as_str()).await;
         drop(state);
 
         self.capture.start().await?;
@@ -433,8 +309,135 @@ impl VoiceService {
 
         let mut state = self.state.lock().await;
         *state = State::Idle;
-        let _ = Self::state_changed(ctx, State::Idle.as_str()).await;
+        signals.state_changed(State::Idle.as_str()).await;
         Ok(samples)
+    }
+
+    /// Sync body of `start_listening`. Public-in-crate so tests can
+    /// drive it with a mock sink + mock capture.
+    async fn start_listening_impl(&self, signals: Arc<dyn VoiceSignalSink>) -> String {
+        let mut state = self.state.lock().await;
+        if *state != State::Idle {
+            return json!({
+                "started": false,
+                "reason": format!("busy ({})", state.as_str())
+            })
+            .to_string();
+        }
+
+        if let Err(e) = self.capture.start().await {
+            tracing::warn!(error = %e, "CaptureHandle::start failed");
+            return json!({
+                "started": false,
+                "reason": format!("audio capture failed: {e}")
+            })
+            .to_string();
+        }
+
+        *state = State::Listening;
+        let new_state = *state;
+        drop(state);
+
+        signals.state_changed(new_state.as_str()).await;
+
+        tracing::info!("StartListening");
+        json!({ "started": true }).to_string()
+    }
+
+    /// Body of `stop_listening`. The spawned STT task owns its own
+    /// clone of the sink so emission keeps working after the
+    /// returning method drops its reference.
+    async fn stop_listening_impl(&self, signals: Arc<dyn VoiceSignalSink>) -> String {
+        let mut state = self.state.lock().await;
+        if *state != State::Listening {
+            return json!({
+                "stopped": false,
+                "reason": format!("not listening ({})", state.as_str())
+            })
+            .to_string();
+        }
+        *state = State::Processing;
+        let processing = *state;
+        drop(state);
+
+        signals.state_changed(processing.as_str()).await;
+
+        let capture = self.capture.clone();
+        let stt = self.stt.clone();
+        let state_handle = self.state.clone();
+        let signals_for_task = signals.clone();
+
+        tokio::spawn(async move {
+            let outcome = run_stt(capture, stt.as_ref()).await;
+            match outcome {
+                Ok(text) if !text.is_empty() => {
+                    signals_for_task.transcription_final(&text).await;
+                }
+                Ok(_) => {
+                    signals_for_task
+                        .transcription_failed("no speech detected")
+                        .await;
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "STT failed");
+                    signals_for_task.transcription_failed(&e.to_string()).await;
+                }
+            }
+            let mut s = state_handle.lock().await;
+            *s = State::Idle;
+            signals_for_task.state_changed(s.as_str()).await;
+        });
+
+        json!({ "stopped": true }).to_string()
+    }
+
+    /// Body of `speak`. TTS work lives in a spawned task; the sink
+    /// is cloned into it so emission keeps working after the
+    /// returning method drops its handle.
+    async fn speak_impl(&self, text: &str, signals: Arc<dyn VoiceSignalSink>) -> String {
+        if text.trim().is_empty() {
+            return json!({ "spoken": false, "reason": "empty text" }).to_string();
+        }
+
+        let mut state = self.state.lock().await;
+        if *state != State::Idle {
+            return json!({
+                "spoken": false,
+                "reason": format!("busy ({})", state.as_str())
+            })
+            .to_string();
+        }
+        *state = State::Speaking;
+        drop(state);
+        signals.state_changed(State::Speaking.as_str()).await;
+
+        let text_owned = text.to_string();
+        let state_handle = self.state.clone();
+        let signals_for_task = signals.clone();
+        tokio::spawn(async move {
+            if let Err(e) = tts::speak(&text_owned).await {
+                tracing::warn!(error = %e, "TTS speak failed");
+                signals_for_task.transcription_failed(&e.to_string()).await;
+            }
+            let mut s = state_handle.lock().await;
+            *s = State::Idle;
+            signals_for_task.state_changed(s.as_str()).await;
+        });
+
+        json!({ "spoken": true }).to_string()
+    }
+
+    /// Body of `cancel`. Pure state + signal logic; no spawned task.
+    async fn cancel_impl(&self, signals: Arc<dyn VoiceSignalSink>) -> String {
+        self.capture.cancel().await;
+        let mut state = self.state.lock().await;
+        let was = *state;
+        *state = State::Idle;
+        drop(state);
+
+        signals.state_changed(State::Idle.as_str()).await;
+        tracing::info!(previous = %was.as_str(), "Cancel");
+        json!({ "cancelled": true, "previous": was.as_str() }).to_string()
     }
 }
 
