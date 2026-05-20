@@ -1,18 +1,28 @@
 #pragma once
 
+#include <QDBusInterface>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
-#include <QDBusInterface>
+#include <QVariantList>
 #include <qqmlintegration.h>
 
 /// QObject bridge between QML and com.jarvis.Lilith.
 ///
 /// Exposes:
 ///   - `reachable` (read-only Q_PROPERTY): true when the daemon answers a ping
+///   - `busy` (read-only): true between send() and replyReceived
+///   - `streamingText`: the accumulated partial-reply text for the current
+///     command — chunks land via the daemon's PartialReply signal
+///   - `chainSteps`: per-step action names for the current command —
+///     entries land via the daemon's ChainStep signal
 ///   - `send(text)` Q_INVOKABLE: dispatch a natural-language command async
 ///   - `replyReceived(reply, action, result)` signal: fired when Lilith answers
 ///   - `errorOccurred(message)` signal: fired on DBus / network failure
+///
+/// Streaming state resets each time `send()` is called so the UI shows
+/// the current command in flight, not the previous one's residue.
 class LilithBridge : public QObject
 {
     Q_OBJECT
@@ -20,30 +30,41 @@ class LilithBridge : public QObject
     QML_SINGLETON
     Q_PROPERTY(bool reachable READ reachable NOTIFY reachableChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    Q_PROPERTY(QString streamingText READ streamingText NOTIFY streamingTextChanged)
+    Q_PROPERTY(QVariantList chainSteps READ chainSteps NOTIFY chainStepsChanged)
 
 public:
     explicit LilithBridge(QObject* parent = nullptr);
 
     bool reachable() const { return m_reachable; }
     bool busy() const { return m_busy; }
+    QString streamingText() const { return m_streamingText; }
+    QVariantList chainSteps() const { return m_chainSteps; }
 
     Q_INVOKABLE void send(const QString& text);
 
 signals:
     void reachableChanged();
     void busyChanged();
+    void streamingTextChanged();
+    void chainStepsChanged();
     void replyReceived(const QString& reply, const QString& action, const QString& resultJson);
     void errorOccurred(const QString& message);
 
 private slots:
     void ping();
+    void onPartialReply(uint step, const QString& chunk);
+    void onChainStep(uint step, const QString& action);
 
 private:
     void setReachable(bool v);
     void setBusy(bool v);
+    void resetStreamingState();
 
     QDBusInterface* m_iface = nullptr;
     QTimer m_pingTimer;
     bool m_reachable = false;
     bool m_busy = false;
+    QString m_streamingText;
+    QVariantList m_chainSteps; // [{ step: int, action: string }, …]
 };

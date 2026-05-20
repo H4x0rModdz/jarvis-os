@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QVariantMap>
 
 namespace {
 Q_LOGGING_CATEGORY(lcLilith, "jarvis.shell.lilith")
@@ -29,6 +30,24 @@ LilithBridge::LilithBridge(QObject* parent) : QObject(parent)
 
     m_iface = new QDBusInterface(kService, kPath, kIface, bus, this);
     m_iface->setTimeout(kCommandTimeoutMs);
+
+    // Streaming signals from the daemon — PartialReply ferries Ollama
+    // tokens, ChainStep ferries tool-dispatch transitions.
+    const bool partialOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("PartialReply"),
+        this,
+        SLOT(onPartialReply(uint, QString)));
+    const bool chainOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("ChainStep"),
+        this,
+        SLOT(onChainStep(uint, QString)));
+    if (!partialOk || !chainOk) {
+        qCWarning(lcLilith) << "Streaming subscriptions failed:"
+                            << "partial=" << partialOk
+                            << "chain=" << chainOk;
+    }
 
     // Probe reachability immediately, then on a slow heartbeat.
     QObject::connect(&m_pingTimer, &QTimer::timeout, this, &LilithBridge::ping);
@@ -62,6 +81,9 @@ void LilithBridge::send(const QString& text)
         return;
     }
 
+    // Clear streaming state so the UI shows the current command in
+    // flight, not residue from the previous one.
+    resetStreamingState();
     setBusy(true);
     auto pending = m_iface->asyncCall(QStringLiteral("Command"), text);
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
@@ -109,4 +131,40 @@ void LilithBridge::setBusy(bool v)
     if (m_busy == v) return;
     m_busy = v;
     emit busyChanged();
+}
+
+void LilithBridge::onPartialReply(uint step, const QString& chunk)
+{
+    // Append to the current streaming buffer. Step boundaries are
+    // already tracked via ChainStep; partial chunks just accumulate
+    // text. The bar's input swaps to streamingText while busy.
+    Q_UNUSED(step);
+    if (chunk.isEmpty()) return;
+    m_streamingText += chunk;
+    emit streamingTextChanged();
+}
+
+void LilithBridge::onChainStep(uint step, const QString& action)
+{
+    QVariantMap entry;
+    entry.insert(QStringLiteral("step"), static_cast<int>(step));
+    entry.insert(QStringLiteral("action"), action);
+    m_chainSteps.append(entry);
+    emit chainStepsChanged();
+}
+
+void LilithBridge::resetStreamingState()
+{
+    bool changed = false;
+    if (!m_streamingText.isEmpty()) {
+        m_streamingText.clear();
+        emit streamingTextChanged();
+        changed = true;
+    }
+    if (!m_chainSteps.isEmpty()) {
+        m_chainSteps.clear();
+        emit chainStepsChanged();
+        changed = true;
+    }
+    Q_UNUSED(changed);
 }

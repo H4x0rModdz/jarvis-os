@@ -15,11 +15,27 @@ Item {
     // Placeholder reflects what Lilith is doing right now. The user always
     // knows whether they can type and, if not, why not — instead of staring
     // at a disabled-looking input with no explanation.
+    // The streaming/chain state from Phase 10 makes the "Lilith pensando"
+    // case far more informative: instead of a wall of text after a long
+    // pause, the user sees what tool is running and the assistant's
+    // tokens as they arrive.
     property string placeholder: {
         if (LilithBridge.busy && PermissionBridge.hasPending) {
             return qsTr("Aguardando sua aprovação...");
         }
         if (LilithBridge.busy) {
+            const steps = LilithBridge.chainSteps;
+            if (steps.length > 0) {
+                const last = steps[steps.length - 1];
+                return qsTr("Lilith → %1…").arg(last.action);
+            }
+            if (LilithBridge.streamingText.length > 0) {
+                // Show the latest characters Lilith has streamed so far.
+                // Truncate from the left so the most recent tokens stay
+                // visible in a single line of placeholder text.
+                const t = LilithBridge.streamingText;
+                return t.length > 60 ? "…" + t.substring(t.length - 60) : t;
+            }
             return qsTr("Lilith pensando...");
         }
         return qsTr("Diga algo para a Lilith...");

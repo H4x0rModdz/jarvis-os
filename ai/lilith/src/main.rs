@@ -97,6 +97,17 @@ impl LilithService {
         step: u32,
         chunk: &str,
     ) -> zbus::Result<()>;
+
+    /// Fired when the chain loop is about to dispatch a tool — lets
+    /// the UI render "Capturando print…" / "Abrindo no editor…"
+    /// inline before the tool actually finishes. `step` matches the
+    /// step index on partial_reply so the shell can correlate.
+    #[zbus(signal)]
+    async fn chain_step(
+        ctx: &SignalContext<'_>,
+        step: u32,
+        action: &str,
+    ) -> zbus::Result<()>;
 }
 
 impl LilithService {
@@ -219,6 +230,13 @@ impl LilithService {
                 tracing::info!(extras, "discarded extra tool_calls");
             }
             tracing::info!(step, action = %call.action, "Ollama selected tool");
+
+            // Tell subscribers a tool is about to run before the
+            // potentially-slow Action Bus call so the UI can render
+            // "Capturando print…" before the result lands.
+            if let Err(e) = Self::chain_step(ctx, step as u32, &call.action).await {
+                tracing::warn!(error = %e, "ChainStep emit failed");
+            }
 
             // Dispatch via the same helper that records per-step turns,
             // so cross-turn history (task #116) sees each step too.
