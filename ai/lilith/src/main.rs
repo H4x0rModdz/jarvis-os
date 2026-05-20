@@ -12,6 +12,7 @@ mod signals;
 mod summarizer;
 mod tools;
 mod turn_store;
+mod voice_client;
 
 use async_trait::async_trait;
 use audit::AuditLog;
