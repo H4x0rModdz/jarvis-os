@@ -53,6 +53,36 @@ pub fn is_help_query(text: &str) -> bool {
         || matches!(t.as_str(), "ajuda" | "help")
 }
 
+/// If the user's text is a math / unit-conversion question,
+/// returns the bare expression to feed to `numbat`. None means
+/// "not a calc query" and the regular rule/LLM path runs.
+///
+/// Detected forms (case-insensitive, accent-tolerant):
+///   - "quanto é <expr>"   / "quanto eh <expr>"
+///   - "quanto vale <expr>"
+///   - "calcular <expr>"   / "calcula <expr>"   / "calc <expr>"
+///   - "converter <expr>"  / "convert <expr>"
+///   - "what is <expr>"    / "what's <expr>"
+///
+/// We strip a leading "?" / "." / trailing punctuation from the
+/// captured expression so "quanto é 2 + 2?" doesn't reach numbat
+/// as "2 + 2?" (which numbat would refuse).
+pub fn extract_calc_expression(text: &str) -> Option<String> {
+    static RE: Lazy<Regex> = Lazy::new(|| {
+        Regex::new(
+            r"(?i)^(?:quanto\s+(?:é|eh|vale)|calcul(?:ar|a)|calc|convert(?:er)?|what(?:\s+is|'s))\s+(?P<expr>.+?)[?.!]?$",
+        )
+        .unwrap()
+    });
+    let t = text.trim();
+    let caps = RE.captures(t)?;
+    let expr = caps.name("expr")?.as_str().trim().to_string();
+    if expr.is_empty() {
+        return None;
+    }
+    Some(expr)
+}
+
 struct Rule {
     pattern: Regex,
     build: fn(&regex::Captures) -> ToolCall,
@@ -384,6 +414,30 @@ mod tests {
 
         let call = parse("abrir vídeos").unwrap();
         assert!(call.params["app"].as_str().unwrap_or("").ends_with("/Videos"));
+    }
+
+    #[test]
+    fn calc_extracts_expression() {
+        assert_eq!(extract_calc_expression("quanto é 2 + 2"),
+                   Some("2 + 2".into()));
+        assert_eq!(extract_calc_expression("quanto é 3 metros + 4 pés"),
+                   Some("3 metros + 4 pés".into()));
+        // Trailing punctuation should be stripped.
+        assert_eq!(extract_calc_expression("quanto é 5 * 5?"),
+                   Some("5 * 5".into()));
+        assert_eq!(extract_calc_expression("calcular 2^10"),
+                   Some("2^10".into()));
+        assert_eq!(extract_calc_expression("calc 1+1"),
+                   Some("1+1".into()));
+        assert_eq!(extract_calc_expression("converter 50 milhas para km"),
+                   Some("50 milhas para km".into()));
+        assert_eq!(extract_calc_expression("what is 1024 / 16"),
+                   Some("1024 / 16".into()));
+        // Empty body → None (the regex requires non-empty expr).
+        assert_eq!(extract_calc_expression("calcular"), None);
+        // Non-calc questions → None.
+        assert_eq!(extract_calc_expression("abrir firefox"), None);
+        assert_eq!(extract_calc_expression("o que você sabe fazer"), None);
     }
 
     #[test]

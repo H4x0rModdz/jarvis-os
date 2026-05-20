@@ -151,6 +151,14 @@ impl LilithService {
             return self.respond_with_help(text).await;
         }
 
+        // 0b. Math / unit conversion — shell out to numbat (Phase
+        // 23.5). Keeps fast queries off the LLM path; numbat is a
+        // pinned dependency so the result is deterministic.
+        if let Some(expr) = intent::extract_calc_expression(text) {
+            tracing::info!(%expr, "Calc intent matched");
+            return self.respond_with_calc(text, &expr).await;
+        }
+
         // 1. Rule-based intent parser — fast path, deterministic.
         // No Ollama call → no streaming chunks. Subscribers that wait
         // for PartialReply still see the final Command() return.
@@ -391,6 +399,53 @@ impl LilithService {
     /// popup conversation view treats it like any other Lilith reply.
     async fn respond_with_help(&self, user_text: &str) -> Value {
         let reply = tools::help_text();
+        self.audit.write(user_text, None, None, &reply).await;
+        self.memory.record(Turn {
+            user_text: user_text.into(),
+            tool_call: None,
+            action_response: None,
+            reply_text: reply.clone(),
+        });
+        json!({ "reply": reply, "action": null, "result": null })
+    }
+
+    /// Shell out to `numbat -e "<expr>"` and return the trimmed
+    /// result. Records as a regular chat turn so the popup history
+    /// keeps the question + answer pair. No Action Bus dispatch —
+    /// pure local query, same shape as `respond_with_help`.
+    ///
+    /// numbat exits 0 on success with the value on stdout, non-zero
+    /// with a diagnostic on stderr; we surface either as the reply
+    /// so the user sees the error verbatim instead of a generic
+    /// "não entendi".
+    async fn respond_with_calc(&self, user_text: &str, expr: &str) -> Value {
+        let reply = match tokio::process::Command::new("numbat")
+            .args(["-e", expr])
+            .output()
+            .await
+        {
+            Ok(out) if out.status.success() => {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if s.is_empty() {
+                    format!("(sem resultado de numbat para `{expr}`)")
+                } else {
+                    s
+                }
+            }
+            Ok(out) => {
+                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                if err.is_empty() {
+                    format!("Não consegui calcular `{expr}`.")
+                } else {
+                    format!("Erro: {err}")
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "numbat spawn failed");
+                format!("Numbat indisponível: {e}")
+            }
+        };
+
         self.audit.write(user_text, None, None, &reply).await;
         self.memory.record(Turn {
             user_text: user_text.into(),
