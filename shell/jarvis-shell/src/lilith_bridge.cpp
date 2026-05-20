@@ -4,6 +4,7 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -43,10 +44,16 @@ LilithBridge::LilithBridge(QObject* parent) : QObject(parent)
         QStringLiteral("ChainStep"),
         this,
         SLOT(onChainStep(uint, QString)));
-    if (!partialOk || !chainOk) {
+    const bool nudgeOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("ProactiveNudge"),
+        this,
+        SLOT(onProactiveNudge(QString, QString, QString)));
+    if (!partialOk || !chainOk || !nudgeOk) {
         qCWarning(lcLilith) << "Streaming subscriptions failed:"
                             << "partial=" << partialOk
-                            << "chain=" << chainOk;
+                            << "chain=" << chainOk
+                            << "nudge=" << nudgeOk;
     }
 
     // Probe reachability immediately, then on a slow heartbeat.
@@ -205,6 +212,30 @@ void LilithBridge::onChainStep(uint step, const QString& action)
     entry.insert(QStringLiteral("action"), action);
     m_chainSteps.append(entry);
     emit chainStepsChanged();
+}
+
+void LilithBridge::onProactiveNudge(const QString& rule,
+                                    const QString& text,
+                                    const QString& urgency)
+{
+    m_proactiveNudgeRule = rule;
+    m_proactiveNudgeText = text;
+    m_proactiveNudgeUrgency = urgency;
+    m_proactiveNudgeReceivedAt =
+        QDateTime::currentMSecsSinceEpoch();
+    emit proactiveNudgeChanged();
+    emit proactiveNudgeReceived(rule, text, urgency);
+}
+
+void LilithBridge::dismissProactiveNudge()
+{
+    if (m_proactiveNudgeText.isEmpty()) return;
+    m_proactiveNudgeText.clear();
+    m_proactiveNudgeUrgency.clear();
+    m_proactiveNudgeRule.clear();
+    // Keep ReceivedAt so the UI can still display "há 3 min" history
+    // if it wants; rendering hides on empty text anyway.
+    emit proactiveNudgeChanged();
 }
 
 void LilithBridge::resetStreamingState()
