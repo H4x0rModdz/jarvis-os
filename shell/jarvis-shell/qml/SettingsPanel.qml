@@ -419,6 +419,81 @@ Window {
                 }
             }
 
+            // ── Row: Audio output ─────────────────────────────────────
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                visible: AudioBridge.sinks.length > 0
+
+                Text {
+                    text: qsTr("Saída de áudio")
+                    color: Theme.text
+                    font.pixelSize: 14
+                }
+                Text {
+                    text: qsTr("Onde o som sai. Trocar move todos os streams ativos pra nova saída.")
+                    color: Theme.textDim
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
+                Repeater {
+                    model: AudioBridge.sinks
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 32
+                        radius: 8
+                        color: modelData.isDefault
+                            ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                            : (sinkArea.containsMouse
+                                ? Qt.rgba(1, 1, 1, 0.05)
+                                : Qt.rgba(1, 1, 1, 0.02))
+                        border.color: modelData.isDefault ? Theme.accent : Theme.border
+                        border.width: 1
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.leftMargin: 10
+                            anchors.rightMargin: 10
+                            spacing: 8
+
+                            // Bullet — filled when default.
+                            Rectangle {
+                                width: 8
+                                height: 8
+                                radius: 4
+                                color: modelData.isDefault ? Theme.accent : "transparent"
+                                border.color: modelData.isDefault ? Theme.accent : Theme.textDim
+                                border.width: 1
+                            }
+                            Text {
+                                text: modelData.description || modelData.name
+                                color: Theme.text
+                                font.pixelSize: 12
+                                font.weight: modelData.isDefault ? Font.Bold : Font.Normal
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                text: modelData.volume + "%"
+                                color: Theme.textDim
+                                font.pixelSize: 10
+                            }
+                        }
+
+                        MouseArea {
+                            id: sinkArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: !modelData.isDefault
+                            onClicked: AudioBridge.setDefaultSink(modelData.name)
+                        }
+                    }
+                }
+            }
+
             // ── Row: STT language ─────────────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
