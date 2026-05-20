@@ -755,6 +755,8 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
                 continue;
             }
             let signals = probe.snapshot().await;
+            let speaks_enabled =
+                settings::read_bool("lilith.proactive_speaks", true).await;
             for nudge in engine.evaluate(&signals) {
                 tracing::info!(
                     rule = %nudge.rule,
@@ -770,6 +772,20 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
                 .await
                 {
                     tracing::warn!(error = %e, "proactive: signal emit failed");
+                }
+                // Speak Critical-urgency nudges out loud. Info /
+                // Warning stay banner-only — TTS for every "bateria
+                // em 15%" would be obnoxious. Spawn so the Speak
+                // round-trip doesn't delay the next iteration of
+                // the rule loop (multiple critical rules in one
+                // tick all fire their own spawns).
+                if speaks_enabled
+                    && nudge.urgency == proactive::Urgency::Critical
+                {
+                    let text = nudge.text.clone();
+                    tokio::spawn(async move {
+                        voice_client::speak(&text).await;
+                    });
                 }
             }
         }
