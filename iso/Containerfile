@@ -244,6 +244,14 @@ RUN flatpak install --system --noninteractive --no-related -y \
 RUN flatpak install --system --noninteractive --no-related -y \
         flathub org.kde.dolphin
 
+# Pre-install Zed (Rust-based code editor). Reuses the Freedesktop
+# runtime Firefox already pulled, so marginal cost is ~150 MB. Same
+# ecosystem (Rust) as our own daemons — keeps the "code editor"
+# slot coherent with the rest of the stack instead of dragging in
+# yet another runtime for a single app.
+RUN flatpak install --system --noninteractive --no-related -y \
+        flathub dev.zed.Zed
+
 # System-wide MIME defaults — folders open in Dolphin, http(s)/html
 # in Firefox. Drops into /etc/xdg/ so every user inherits without
 # needing to maintain a per-user mimeapps.list.
