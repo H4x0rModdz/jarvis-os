@@ -19,6 +19,96 @@ use async_trait::async_trait;
 use std::time::Duration;
 use zbus::Connection;
 
+/// Disk + memory rules. Same shape as `battery_rules` —
+/// pure-function checks against `Signals`, per-rule cooldowns
+/// sized so the user isn't pestered.
+pub fn system_rules() -> Vec<Rule> {
+    vec![
+        Rule {
+            name: "disk_critical",
+            cooldown: Duration::from_secs(30 * 60),
+            check: |s| {
+                let pct = s.disk_root_free_pct?;
+                if pct <= 5.0 {
+                    Some(Nudge {
+                        rule: "disk_critical",
+                        text: format!(
+                            "Disco quase cheio: só {pct:.0}% livre em /. \
+                             Libere espaço antes que algo trave."
+                        ),
+                        urgency: Urgency::Critical,
+                    })
+                } else {
+                    None
+                }
+            },
+        },
+        Rule {
+            name: "disk_low",
+            cooldown: Duration::from_secs(60 * 60),
+            check: |s| {
+                let pct = s.disk_root_free_pct?;
+                if pct > 5.0 && pct <= 15.0 {
+                    Some(Nudge {
+                        rule: "disk_low",
+                        text: format!(
+                            "Disco com {pct:.0}% livre em /. \
+                             Considere uma faxina."
+                        ),
+                        urgency: Urgency::Warning,
+                    })
+                } else {
+                    None
+                }
+            },
+        },
+        Rule {
+            name: "memory_critical",
+            cooldown: Duration::from_secs(10 * 60),
+            check: |s| {
+                let mem_free = s.mem_free_pct?;
+                // Swap is optional — when None we still warn on
+                // pure RAM pressure to catch desktops without swap.
+                let swap_used = s.swap_used_pct.unwrap_or(0.0);
+                if mem_free < 5.0 && (s.swap_used_pct.is_none() || swap_used > 75.0) {
+                    Some(Nudge {
+                        rule: "memory_critical",
+                        text: format!(
+                            "Memória crítica: {mem_free:.0}% de RAM livre, \
+                             swap em {swap_used:.0}%. Algum app pode ser \
+                             morto a qualquer momento."
+                        ),
+                        urgency: Urgency::Critical,
+                    })
+                } else {
+                    None
+                }
+            },
+        },
+        Rule {
+            name: "memory_low",
+            cooldown: Duration::from_secs(30 * 60),
+            check: |s| {
+                let mem_free = s.mem_free_pct?;
+                // memory_critical also matches at <5%; carve memory_low
+                // to (5%, 10%] so they don't both fire.
+                if mem_free >= 5.0 && mem_free < 10.0 {
+                    Some(Nudge {
+                        rule: "memory_low",
+                        text: format!(
+                            "RAM apertada: {mem_free:.0}% livre. \
+                             Fechar algumas abas do navegador ajuda."
+                        ),
+                        urgency: Urgency::Warning,
+                    })
+                } else {
+                    None
+                }
+            },
+        },
+    ]
+}
+
 /// The two battery rules. `static` because Rule has function-pointer
 /// `check` fields; building the Vec once at boot is enough.
 pub fn battery_rules() -> Vec<Rule> {
@@ -202,6 +292,102 @@ mod tests {
     fn healthy_charge_no_nudge() {
         let mut eng = ProactiveEngine::new(battery_rules());
         let nudges = eng.evaluate(&signals(80.0, BatteryState::Discharging));
+        assert!(nudges.is_empty());
+    }
+
+    // ── system rules ───────────────────────────────────────────────
+
+    fn disk_only(pct: f64) -> Signals {
+        Signals {
+            disk_root_free_pct: Some(pct),
+            ..Default::default()
+        }
+    }
+
+    fn mem_only(free_pct: f64, swap_used: Option<f64>) -> Signals {
+        Signals {
+            mem_free_pct: Some(free_pct),
+            swap_used_pct: swap_used,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn disk_critical_fires_at_or_below_5() {
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&disk_only(3.0));
+        assert_eq!(nudges.len(), 1);
+        assert_eq!(nudges[0].rule, "disk_critical");
+        assert_eq!(nudges[0].urgency, Urgency::Critical);
+    }
+
+    #[test]
+    fn disk_low_fires_in_6_15_band() {
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&disk_only(10.0));
+        assert_eq!(nudges.len(), 1);
+        assert_eq!(nudges[0].rule, "disk_low");
+        assert_eq!(nudges[0].urgency, Urgency::Warning);
+    }
+
+    #[test]
+    fn disk_critical_takes_priority_at_5_pct() {
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&disk_only(5.0));
+        assert_eq!(nudges.len(), 1);
+        assert_eq!(nudges[0].rule, "disk_critical");
+    }
+
+    #[test]
+    fn disk_healthy_no_nudge() {
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&disk_only(80.0));
+        assert!(nudges.is_empty());
+    }
+
+    #[test]
+    fn memory_critical_fires_when_low_ram_and_swap_pressured() {
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&mem_only(3.0, Some(80.0)));
+        let critical: Vec<_> = nudges
+            .iter()
+            .filter(|n| n.rule == "memory_critical")
+            .collect();
+        assert_eq!(critical.len(), 1);
+        assert_eq!(critical[0].urgency, Urgency::Critical);
+    }
+
+    #[test]
+    fn memory_critical_fires_when_swap_absent_and_ram_below_5() {
+        // No swap configured (None) — ram alone is enough to fire.
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&mem_only(3.0, None));
+        assert!(nudges.iter().any(|n| n.rule == "memory_critical"));
+    }
+
+    #[test]
+    fn memory_low_fires_in_5_10_band() {
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&mem_only(8.0, Some(20.0)));
+        let low: Vec<_> = nudges.iter().filter(|n| n.rule == "memory_low").collect();
+        assert_eq!(low.len(), 1);
+        assert_eq!(low[0].urgency, Urgency::Warning);
+    }
+
+    #[test]
+    fn memory_low_does_not_fire_when_critical_also_matches() {
+        // mem=3% → critical hits; low band starts at 5% so it
+        // should NOT match. memory_critical exclusive at <5%.
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&mem_only(3.0, Some(80.0)));
+        let low: Vec<_> = nudges.iter().filter(|n| n.rule == "memory_low").collect();
+        assert!(low.is_empty(), "memory_low must not double-fire with critical");
+    }
+
+    #[test]
+    fn memory_healthy_no_nudge() {
+        let mut eng = ProactiveEngine::new(system_rules());
+        let nudges = eng.evaluate(&mem_only(60.0, Some(10.0)));
         assert!(nudges.is_empty());
     }
 }
