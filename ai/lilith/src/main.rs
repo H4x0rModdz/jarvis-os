@@ -120,6 +120,19 @@ impl LilithService {
         step: u32,
         action: &str,
     ) -> zbus::Result<()>;
+
+    /// Lilith speaks up without being asked. Fired by the proactive
+    /// engine when a rule triggers + its cooldown has elapsed. The
+    /// shell surfaces the message in the conversation popup with
+    /// urgency-coloured accents — Critical chimes, Warning shows a
+    /// pulsing indicator, Info appears like a regular reply.
+    #[zbus(signal)]
+    async fn proactive_nudge(
+        ctx: &SignalContext<'_>,
+        rule: &str,
+        text: &str,
+        urgency: &str,
+    ) -> zbus::Result<()>;
 }
 
 /// Production SignalSink that forwards through zbus to the
@@ -664,7 +677,7 @@ async fn main() -> anyhow::Result<()> {
         audit,
     };
 
-    let _conn = connection::Builder::session()?
+    let conn = connection::Builder::session()?
         .name("com.jarvis.Lilith")?
         .serve_at("/com/jarvis/Lilith", service)?
         .build()
@@ -672,9 +685,69 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Lilith ready on com.jarvis.Lilith");
 
+    // Proactive engine — ticks every 30 s, queries UPower, evaluates
+    // the rules, emits ProactiveNudge for anything that fires. Off
+    // by default if the user opts out via `lilith.proactive_enabled`
+    // (TODO: wire the settings read; for V1 we always run).
+    spawn_proactive_loop(conn.clone());
+
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
     }
+}
+
+/// Spawn the proactive-engine tick loop. Runs forever; the only
+/// way out is daemon shutdown (the spawn handle is dropped + the
+/// runtime collects it).
+fn spawn_proactive_loop(conn: zbus::Connection) {
+    use proactive::{Probe, ProactiveEngine};
+    use proactive_rules::{battery_rules, UPowerProbe};
+
+    tokio::spawn(async move {
+        // SignalContext is what `proactive_nudge` needs to emit.
+        // Build it once from the served path; reusing across
+        // ticks costs nothing.
+        let ctx = match zbus::SignalContext::new(&conn, "/com/jarvis/Lilith") {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::warn!(error = %e, "proactive: SignalContext build failed; loop exits");
+                return;
+            }
+        };
+        let probe: std::sync::Arc<dyn Probe> = std::sync::Arc::new(UPowerProbe);
+        let mut engine = ProactiveEngine::new(battery_rules());
+
+        // 30 s tick. Tight enough that a 100% → 5% drop triggers
+        // within half a minute; loose enough that the daemon spends
+        // ~no CPU on the loop.
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
+        // Skip the first immediate fire — that one would race with
+        // the daemon's boot sequence (DBus services come up in
+        // parallel) and could miss UPower not being ready yet.
+        interval.tick().await;
+
+        loop {
+            interval.tick().await;
+            let signals = probe.snapshot().await;
+            for nudge in engine.evaluate(&signals) {
+                tracing::info!(
+                    rule = %nudge.rule,
+                    urgency = %nudge.urgency.as_str(),
+                    "proactive: nudge fired"
+                );
+                if let Err(e) = LilithService::proactive_nudge(
+                    &ctx,
+                    nudge.rule,
+                    &nudge.text,
+                    nudge.urgency.as_str(),
+                )
+                .await
+                {
+                    tracing::warn!(error = %e, "proactive: signal emit failed");
+                }
+            }
+        }
+    });
 }
 
 // ── Test harness ─────────────────────────────────────────────────────
