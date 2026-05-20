@@ -204,6 +204,7 @@ Window {
         onSettingsRequested: settingsPanel.requestOpen()
         onNotificationsRequested: notificationDrawer.requestOpen()
         onNetworksRequested: connectivityPanel.requestOpen()
+        onBluetoothRequested: bluetoothPanel.requestOpen()
         // On bar-input focus, open the Lilith popup if not already
         // showing — gives the empty-state suggestions a chance to be
         // seen by users who haven't issued a command yet.
@@ -292,4 +293,8 @@ Window {
     // Wi-Fi panel — opens via the bar's Wi-Fi button. Polls nmcli
     // while visible; stops on close.
     ConnectivityPanel { id: connectivityPanel }
+
+    // Bluetooth panel — opens via the bar's Bluetooth button.
+    // Polls bluetoothctl while visible.
+    BluetoothPanel { id: bluetoothPanel }
 }
