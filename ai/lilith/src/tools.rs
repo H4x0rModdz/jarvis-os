@@ -621,6 +621,23 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["key"]
             }),
         },
+        Tool {
+            action: "memory.search",
+            description: "Search past conversation turns by substring (case-insensitive). Use \
+                          when the user asks 'o que falamos sobre X' / 'lembra quando eu disse \
+                          Y' / 'achei já ter perguntado isso'. Returns matches newest-first with \
+                          timestamp + the original user/reply text — you can then quote back \
+                          to the user. Different from memory.recall, which fetches a single \
+                          named fact.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Substring to look for in user prompts + Lilith replies." },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 50, "description": "Max matches to return (default 5)." }
+                },
+                "required": ["query"]
+            }),
+        },
     ]
 }
 

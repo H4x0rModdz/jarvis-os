@@ -461,6 +461,13 @@ impl LilithService {
     /// shaped exactly like an Action Bus response so the rest of the pipeline
     /// (`dispatch_and_record`) doesn't need a special case.
     fn handle_memory_tool(&self, call: &ToolCall) -> Result<Value, error::LilithError> {
+        // `memory.search` takes `query` (not `key`) and routes to the
+        // turn store rather than the fact store — branch out before
+        // the key-validation that the rest of the actions share.
+        if call.action == "memory.search" {
+            return Ok(self.handle_memory_search(call));
+        }
+
         let key = call
             .params
             .get("key")
@@ -539,6 +546,73 @@ impl LilithService {
             response["error"] = e;
         }
         Ok(response)
+    }
+
+    /// Search past turns by substring. Returns at most `limit`
+    /// matches (default 5, capped at 50) newest-first, each with
+    /// timestamp + user/reply text so the caller can quote back.
+    /// Tool calls and action responses are intentionally dropped
+    /// from the result — they bloat context for almost no signal
+    /// when summarising a conversation.
+    fn handle_memory_search(&self, call: &ToolCall) -> Value {
+        let start = std::time::Instant::now();
+        let query = call
+            .params
+            .get("query")
+            .and_then(|q| q.as_str())
+            .unwrap_or("")
+            .trim();
+        if query.is_empty() {
+            return json!({
+                "action": call.action,
+                "status": "error",
+                "error": { "code": "INVALID_PARAMS", "message": "missing 'query'" },
+                "duration_ms": start.elapsed().as_millis() as u64,
+            });
+        }
+        let limit = call
+            .params
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5)
+            .min(50) as usize;
+
+        let Some(store) = self.memory.store() else {
+            return json!({
+                "action": call.action,
+                "status": "error",
+                "error": { "code": "UNAVAILABLE", "message": "turn store not configured" },
+                "duration_ms": start.elapsed().as_millis() as u64,
+            });
+        };
+
+        let result = match store.search(query, limit) {
+            Ok(hits) => {
+                let matches: Vec<Value> = hits
+                    .into_iter()
+                    .map(|h| {
+                        json!({
+                            "ts": h.ts,
+                            "user_text": h.turn.user_text,
+                            "reply_text": h.turn.reply_text,
+                        })
+                    })
+                    .collect();
+                json!({
+                    "action": call.action,
+                    "status": "success",
+                    "result": { "matches": matches },
+                    "duration_ms": start.elapsed().as_millis() as u64,
+                })
+            }
+            Err(e) => json!({
+                "action": call.action,
+                "status": "error",
+                "error": { "code": "INTERNAL_ERROR", "message": e.to_string() },
+                "duration_ms": start.elapsed().as_millis() as u64,
+            }),
+        };
+        result
     }
 }
 
@@ -814,6 +888,71 @@ mod tests {
         let r = service.handle_memory_tool(&bad).unwrap();
         assert_eq!(r["status"], "error");
         assert_eq!(r["error"]["code"], "INVALID_PARAMS");
+    }
+
+    #[tokio::test]
+    async fn memory_search_returns_matches_from_turn_store() {
+        // The default `build_service` constructs SessionMemory
+        // without a store — swap in a store-backed one before
+        // running the search.
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let mut service = build_service(ollama, bus);
+        let store = Arc::new(turn_store::TurnStore::in_memory().unwrap());
+        service.memory = Arc::new(SessionMemory::with_store(32, store.clone()));
+
+        // Three turns in the history, only one matches "gimp".
+        service.memory.record(Turn {
+            user_text: "instala o gimp".into(),
+            tool_call: None,
+            action_response: None,
+            reply_text: "ok".into(),
+        });
+        service.memory.record(Turn {
+            user_text: "abrir firefox".into(),
+            tool_call: None,
+            action_response: None,
+            reply_text: "abrindo".into(),
+        });
+
+        let call = ToolCall {
+            action: "memory.search".into(),
+            params: json!({ "query": "gimp", "limit": 10 }),
+        };
+        let r = service.handle_memory_tool(&call).unwrap();
+        assert_eq!(r["status"], "success");
+        let matches = r["result"]["matches"].as_array().unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0]["user_text"], "instala o gimp");
+    }
+
+    #[tokio::test]
+    async fn memory_search_empty_query_is_invalid_params() {
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let service = build_service(ollama, bus);
+        let call = ToolCall {
+            action: "memory.search".into(),
+            params: json!({ "query": "   " }),
+        };
+        let r = service.handle_memory_tool(&call).unwrap();
+        assert_eq!(r["status"], "error");
+        assert_eq!(r["error"]["code"], "INVALID_PARAMS");
+    }
+
+    #[tokio::test]
+    async fn memory_search_without_store_returns_unavailable() {
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        // Default build_service has no store attached → UNAVAILABLE.
+        let service = build_service(ollama, bus);
+        let call = ToolCall {
+            action: "memory.search".into(),
+            params: json!({ "query": "anything" }),
+        };
+        let r = service.handle_memory_tool(&call).unwrap();
+        assert_eq!(r["status"], "error");
+        assert_eq!(r["error"]["code"], "UNAVAILABLE");
     }
 
     #[test]
