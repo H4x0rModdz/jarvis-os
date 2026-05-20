@@ -8,6 +8,7 @@ mod persistent;
 mod settings;
 mod signals;
 mod tools;
+mod turn_store;
 
 use async_trait::async_trait;
 use audit::AuditLog;
