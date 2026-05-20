@@ -815,6 +815,184 @@ mod tests {
         assert_eq!(text, "");
     }
 
+    // ── VoiceSignalSink + state-machine ────────────────────────────
+
+    /// Records every emission with a discriminant so tests assert
+    /// against the sequence (which the production shell binding
+    /// subscribes to via DBus).
+    #[derive(Default)]
+    struct RecordingVoiceSink {
+        events: StdMutex<Vec<(String, String)>>,
+    }
+
+    impl RecordingVoiceSink {
+        fn events(&self) -> Vec<(String, String)> {
+            self.events.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl VoiceSignalSink for RecordingVoiceSink {
+        async fn state_changed(&self, state: &str) {
+            self.events
+                .lock()
+                .unwrap()
+                .push(("state".into(), state.into()));
+        }
+        async fn transcription_final(&self, text: &str) {
+            self.events
+                .lock()
+                .unwrap()
+                .push(("final".into(), text.into()));
+        }
+        async fn transcription_failed(&self, reason: &str) {
+            self.events
+                .lock()
+                .unwrap()
+                .push(("failed".into(), reason.into()));
+        }
+    }
+
+    fn temp_vp_db() -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "jarvis-voice-test-vp-{}-{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0),
+        ));
+        let _ = std::fs::remove_file(&path);
+        path
+    }
+
+    fn build_service(
+        capture: Arc<dyn AudioCapture>,
+        stt: Arc<dyn Stt>,
+    ) -> VoiceService {
+        // Spawn a real hotword actor — its thread sits idle until
+        // enable() is called, which our tests don't do. Receiver
+        // dropped immediately; if a future test triggers a wake-word
+        // it gets back end-of-channel and exits cleanly.
+        let (hotword_handle, _rx) = hotword::spawn();
+        VoiceService {
+            state: Arc::new(AsyncMutex::new(State::Idle)),
+            capture,
+            hotword: hotword_handle,
+            voiceprints: Arc::new(
+                VoiceprintStore::open(&temp_vp_db()).unwrap(),
+            ),
+            stt,
+        }
+    }
+
+    #[tokio::test]
+    async fn start_listening_idle_succeeds_and_emits_listening() {
+        let mock = Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = mock.clone();
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let service = build_service(capture, stt);
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.start_listening_impl(sink_dyn).await;
+
+        assert!(resp.contains("\"started\":true"));
+        // State guard moved to Listening.
+        assert_eq!(*service.state.lock().await, State::Listening);
+        // Exactly one state_changed("listening") emitted.
+        let events = sink.events();
+        assert_eq!(events, vec![("state".into(), "listening".into())]);
+    }
+
+    #[tokio::test]
+    async fn start_listening_busy_returns_reason_and_emits_nothing() {
+        let mock = Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = mock.clone();
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let service = build_service(capture, stt);
+        // Force the state to "speaking" to trigger the busy branch.
+        *service.state.lock().await = State::Speaking;
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.start_listening_impl(sink_dyn).await;
+
+        assert!(resp.contains("busy (speaking)"));
+        // No state change attempted → no emission.
+        assert!(sink.events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn cancel_returns_to_idle_from_listening() {
+        let mock = Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = mock.clone();
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let service = build_service(capture, stt);
+        // Pretend we were mid-listen — the daemon's cancel doesn't
+        // care which state it was in, just bulldozes to idle.
+        *service.state.lock().await = State::Listening;
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.cancel_impl(sink_dyn).await;
+
+        assert!(resp.contains("\"cancelled\":true"));
+        assert!(resp.contains("\"previous\":\"listening\""));
+        assert_eq!(*service.state.lock().await, State::Idle);
+        assert_eq!(sink.events(), vec![("state".into(), "idle".into())]);
+    }
+
+    #[tokio::test]
+    async fn stop_listening_when_not_listening_returns_reason() {
+        let mock = Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = mock.clone();
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let service = build_service(capture, stt);
+        // State is idle — stop_listening should refuse and emit nothing.
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.stop_listening_impl(sink_dyn).await;
+
+        assert!(resp.contains("not listening (idle)"));
+        assert!(sink.events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn speak_empty_text_returns_reason_without_state_change() {
+        let mock = Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = mock.clone();
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let service = build_service(capture, stt);
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.speak_impl("   ", sink_dyn).await;
+
+        assert!(resp.contains("empty text"));
+        assert_eq!(*service.state.lock().await, State::Idle);
+        assert!(sink.events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn speak_busy_returns_reason_without_state_change() {
+        let mock = Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = mock.clone();
+        let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
+        let service = build_service(capture, stt);
+        *service.state.lock().await = State::Listening;
+        let sink = Arc::new(RecordingVoiceSink::default());
+        let sink_dyn: Arc<dyn VoiceSignalSink> = sink.clone();
+
+        let resp = service.speak_impl("oi", sink_dyn).await;
+
+        assert!(resp.contains("busy (listening)"));
+        // State unchanged — busy guard refused the transition.
+        assert_eq!(*service.state.lock().await, State::Listening);
+        assert!(sink.events().is_empty());
+    }
+
     #[test]
     fn state_transitions_are_exhaustive() {
         // Round-trip every variant through the state → &str → match.

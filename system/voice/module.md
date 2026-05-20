@@ -142,11 +142,20 @@ start/stop/cancel/double-start semantics, `run_stt` routed through
 mocks. Voiceprint pure-function tests live in `voiceprint.rs` from
 Phases 5–6.
 
-The DBus methods (`start_listening`, `stop_listening`, `cancel`,
-`speak`, etc.) still need a voice-side `SignalSink` abstraction
-before they can be tested end-to-end — they emit `StateChanged` /
-`TranscriptionFinal` through a `SignalContext` that requires a
-live connection. That refactor is the natural next step.
+Phase 16 closed that gap. `VoiceSignalSink` in `signals.rs` lets
+production wrap a `SignalContext` (`DbusVoiceSink`) and tests use
+`RecordingVoiceSink` to assert on the `(kind, payload)` sequence
+emitted. DBus methods (`start_listening`, `stop_listening`,
+`cancel`, `speak`) are thin wrappers over `*_impl` helpers that
+take an `Arc<dyn VoiceSignalSink>` — tests call those helpers
+directly with mock everything.
+
+State-machine coverage today: start when idle, start when busy,
+cancel from listening, stop_listening when not listening, speak
+empty / busy. Spawned-task paths (the STT loop after stop_listening
+fires, the TTS spawn from speak) are still not asserted because
+the TTS subprocess (piper) isn't abstracted yet — the natural
+follow-up trait.
 
 ## Failure Modes
 
