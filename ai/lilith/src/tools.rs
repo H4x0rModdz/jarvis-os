@@ -318,6 +318,52 @@ pub fn all_tools() -> Vec<Tool> {
                 }
             }),
         },
+        // ── network (Wi-Fi) ─────────────────────────────────────────────
+        Tool {
+            action: "network.scan",
+            description: "Scan for nearby Wi-Fi networks and return the fresh list. Use when the \
+                          user asks 'que redes tem aqui' or 'procurar Wi-Fi'. Returns networks: \
+                          [{ssid, signal, security, in_use}].",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "network.list",
+            description: "Return the cached Wi-Fi list without rescanning. Faster than scan; use \
+                          when the user asks 'qual minha rede' / 'estou conectado em qual' / \
+                          'lista as redes'.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "network.connect",
+            description: "Connect to a Wi-Fi network by SSID. Pass password for secured networks; \
+                          omit / empty string for open networks. Use for 'conecta no <ssid>' / \
+                          'me conecta na rede X senha Y'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "ssid":     { "type": "string", "description": "Network SSID (case-sensitive)." },
+                    "password": { "type": "string", "description": "WPA/WPA2 password; empty for open networks." }
+                },
+                "required": ["ssid"]
+            }),
+        },
+        Tool {
+            action: "network.disconnect",
+            description: "Drop the active Wi-Fi connection. Radio stays on so a reconnect works \
+                          immediately. Use for 'desconecta do Wi-Fi'.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "network.set_enabled",
+            description: "Toggle the Wi-Fi radio. Use for 'liga o Wi-Fi' / 'desliga o Wi-Fi'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "enabled": { "type": "boolean", "description": "true turns radio on, false off." }
+                },
+                "required": ["enabled"]
+            }),
+        },
         // ── compat (Windows app runner) ─────────────────────────────────
         Tool {
             action: "compat.run_exe",

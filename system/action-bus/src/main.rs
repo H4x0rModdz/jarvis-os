@@ -135,6 +135,12 @@ fn build_registry() -> Registry {
     reg!("audio.adjust_volume", handlers::audio::adjust_volume);
     reg!("audio.toggle_mute", handlers::audio::toggle_mute);
 
+    reg!("network.scan", handlers::network::scan);
+    reg!("network.list", handlers::network::list);
+    reg!("network.connect", handlers::network::connect);
+    reg!("network.disconnect", handlers::network::disconnect);
+    reg!("network.set_enabled", handlers::network::set_enabled);
+
     reg!("updater.check", handlers::updater::check);
     reg!("updater.apply_os", handlers::updater::apply_os);
 

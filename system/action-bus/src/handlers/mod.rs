@@ -4,6 +4,7 @@ pub mod browser;
 pub mod clipboard;
 pub mod compat;
 pub mod file;
+pub mod network;
 pub mod screenshot;
 pub mod sdk;
 pub mod system;
