@@ -9,10 +9,34 @@
 //!   JARVIS_VOICE_BINARY   path to the whisper-cli binary
 //!   JARVIS_VOICE_MODEL    path to a ggml-*.bin model file
 //!   JARVIS_VOICE_LANG     forced source language code, "auto" by default
+//!
+//! The `Stt` trait wraps `transcribe()` so tests can swap in a
+//! scripted fake (see the test module in main.rs). Production wires
+//! `WhisperCli` which calls the existing subprocess path.
 
 use anyhow::{anyhow, Context, Result};
+use async_trait::async_trait;
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
+
+/// Abstraction over speech-to-text so tests don't need a real
+/// whisper-cli on PATH. Production impl is `WhisperCli`; tests
+/// implement their own scripted versions.
+#[async_trait]
+pub trait Stt: Send + Sync {
+    async fn transcribe(&self, wav_path: &Path) -> Result<String>;
+}
+
+/// Production STT: shells out to whisper-cli with the model + lang
+/// resolution that `transcribe()` already does.
+pub struct WhisperCli;
+
+#[async_trait]
+impl Stt for WhisperCli {
+    async fn transcribe(&self, wav_path: &Path) -> Result<String> {
+        transcribe(wav_path).await
+    }
+}
 
 pub const DEFAULT_BINARY: &str = "/usr/bin/whisper-cli";
 pub const DEFAULT_MODEL: &str = "/usr/share/whisper-models/ggml-base.bin";

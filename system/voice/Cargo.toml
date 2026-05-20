@@ -16,6 +16,7 @@ thiserror          = "1"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "time", "process"] }
+async-trait        = "0.1"
 zbus               = { version = "4", features = ["tokio"] }
 
 # V2 — STT via whisper.cpp subprocess.

@@ -22,6 +22,7 @@ use hotword::HotwordHandle;
 use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
+use stt::Stt;
 use tokio::sync::Mutex as AsyncMutex;
 use voiceprint::VoiceprintStore;
 use zbus::{connection, interface, SignalContext};
@@ -54,6 +55,7 @@ struct VoiceService {
     capture: CaptureHandle,
     hotword: HotwordHandle,
     voiceprints: Arc<VoiceprintStore>,
+    stt: Arc<dyn Stt>,
 }
 
 #[interface(name = "com.jarvis.Voice")]
@@ -110,11 +112,12 @@ impl VoiceService {
         }
 
         let capture = self.capture.clone();
+        let stt = self.stt.clone();
         let ctx_owned = ctx.to_owned();
         let state_handle = self.state.clone();
 
         tokio::spawn(async move {
-            let outcome = run_stt(capture).await;
+            let outcome = run_stt(capture, stt.as_ref()).await;
             match outcome {
                 Ok(text) if !text.is_empty() => {
                     if let Err(e) = VoiceService::transcription_final(&ctx_owned, &text).await {
@@ -399,8 +402,9 @@ impl VoiceService {
 }
 
 /// Bottom half of the STT pipeline: finish the capture, write the WAV,
-/// invoke whisper.
-async fn run_stt(capture: CaptureHandle) -> anyhow::Result<String> {
+/// invoke the Stt impl. Trait makes the call testable without a real
+/// whisper-cli on PATH.
+async fn run_stt(capture: CaptureHandle, stt: &dyn Stt) -> anyhow::Result<String> {
     let samples = capture.stop().await?;
     if samples.is_empty() {
         return Ok(String::new());
@@ -411,7 +415,7 @@ async fn run_stt(capture: CaptureHandle) -> anyhow::Result<String> {
     let samples_for_write = samples;
     tokio::task::spawn_blocking(move || write_wav(&wav_path_owned, &samples_for_write)).await??;
 
-    let text = stt::transcribe(&wav_path).await?;
+    let text = stt.transcribe(&wav_path).await?;
 
     // Best-effort cleanup.
     let _ = tokio::fs::remove_file(&wav_path).await;
@@ -465,11 +469,13 @@ async fn main() -> anyhow::Result<()> {
     );
     tracing::info!(db = %vp_path.display(), "Voiceprint store ready");
 
+    let stt: Arc<dyn Stt> = Arc::new(stt::WhisperCli);
     let service = VoiceService {
         state: Arc::new(AsyncMutex::new(State::Idle)),
         capture: capture::spawn(),
         hotword: hotword_handle,
         voiceprints,
+        stt,
     };
 
     let conn = connection::Builder::session()?
