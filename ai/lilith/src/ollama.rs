@@ -1,8 +1,35 @@
 use crate::error::LilithError;
 use crate::memory::Turn;
 use crate::tools::{ollama_tools_payload, Tool, ToolCall};
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+/// Abstraction over Ollama so tests can swap in a scripted fake
+/// without standing up an HTTP server. The production implementation
+/// is `OllamaClient`; tests use `MockOllama` from the `#[cfg(test)]`
+/// module in main.rs.
+#[async_trait]
+pub trait Ollama: Send + Sync {
+    async fn chat_messages(
+        &self,
+        messages: &[Value],
+        tools: &[Tool],
+        chunks: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    ) -> Result<OllamaReply, LilithError>;
+}
+
+#[async_trait]
+impl Ollama for OllamaClient {
+    async fn chat_messages(
+        &self,
+        messages: &[Value],
+        tools: &[Tool],
+        chunks: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+    ) -> Result<OllamaReply, LilithError> {
+        OllamaClient::chat_messages(self, messages, tools, chunks).await
+    }
+}
 
 const DEFAULT_HOST: &str = "http://localhost:11434";
 const DEFAULT_MODEL: &str = "qwen3:4b";

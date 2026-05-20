@@ -32,9 +32,9 @@ Pergunte em português ou inglês — eu encadeio várias ações quando faz \
 sentido (\"tira um print e abre no editor\").";
 
 use audit::AuditLog;
-use bus_client::BusClient;
+use bus_client::{BusClient, BusDispatcher};
 use memory::{SessionMemory, Turn};
-use ollama::{append_tool_step, build_initial_messages, OllamaClient};
+use ollama::{append_tool_step, build_initial_messages, Ollama, OllamaClient};
 use persistent::FactStore;
 use serde_json::{json, Value};
 use std::path::PathBuf;
@@ -44,8 +44,8 @@ use tools::{all_tools, ToolCall};
 use zbus::{connection, interface, SignalContext};
 
 struct LilithService {
-    bus: Arc<BusClient>,
-    ollama: OllamaClient,
+    bus: Arc<dyn BusDispatcher>,
+    ollama: Arc<dyn Ollama>,
     memory: Arc<SessionMemory>,
     facts: Arc<FactStore>,
     audit: Arc<AuditLog>,
@@ -504,9 +504,11 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Audit log: {}", audit_path.display());
     tracing::info!("Fact store: {}", facts_path.display());
 
-    let bus = Arc::new(BusClient::connect().await?);
-    let ollama = OllamaClient::from_env().await;
-    tracing::info!("Ollama configured (model = {})", ollama.model());
+    let bus_concrete = BusClient::connect().await?;
+    let bus: Arc<dyn BusDispatcher> = Arc::new(bus_concrete);
+    let ollama_concrete = OllamaClient::from_env().await;
+    tracing::info!("Ollama configured (model = {})", ollama_concrete.model());
+    let ollama: Arc<dyn Ollama> = Arc::new(ollama_concrete);
 
     let memory = Arc::new(SessionMemory::new(32));
     let facts = Arc::new(FactStore::open(&facts_path)?);
@@ -530,5 +532,231 @@ async fn main() -> anyhow::Result<()> {
 
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
+    }
+}
+
+// ── Test harness ─────────────────────────────────────────────────────
+//
+// Covers the pieces of LilithService that don't need a SignalContext:
+// the help intent, dispatch_and_record's audit + memory bookkeeping,
+// and the memory.* in-process tools. Full process() integration
+// (which emits PartialReply/ChainStep via signal context) is left as
+// Phase 13 work — it needs a SignalSink abstraction that lets tests
+// pass a no-op sink. ADR-style trade-off recorded in module.md.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use ollama::OllamaReply;
+    use std::sync::Mutex as StdMutex;
+    use tools::Tool;
+
+    /// Scripted Ollama: hands out replies in order, fails the test
+    /// if it runs out. Records the messages it was called with so
+    /// tests can verify history flattening.
+    struct MockOllama {
+        replies: StdMutex<Vec<OllamaReply>>,
+        seen_messages: StdMutex<Vec<Vec<Value>>>,
+    }
+
+    impl MockOllama {
+        fn new(replies: Vec<OllamaReply>) -> Self {
+            Self {
+                replies: StdMutex::new(replies),
+                seen_messages: StdMutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> usize {
+            self.seen_messages.lock().unwrap().len()
+        }
+    }
+
+    #[async_trait]
+    impl Ollama for MockOllama {
+        async fn chat_messages(
+            &self,
+            messages: &[Value],
+            _tools: &[Tool],
+            _chunks: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+        ) -> Result<OllamaReply, error::LilithError> {
+            self.seen_messages.lock().unwrap().push(messages.to_vec());
+            let mut replies = self.replies.lock().unwrap();
+            assert!(
+                !replies.is_empty(),
+                "MockOllama: ran out of scripted replies (tests should script enough)"
+            );
+            Ok(replies.remove(0))
+        }
+    }
+
+    /// Records every dispatch + returns a configurable response per call.
+    struct MockBus {
+        responses: StdMutex<Vec<Value>>,
+        seen_calls: StdMutex<Vec<ToolCall>>,
+    }
+
+    impl MockBus {
+        fn new(responses: Vec<Value>) -> Self {
+            Self {
+                responses: StdMutex::new(responses),
+                seen_calls: StdMutex::new(Vec::new()),
+            }
+        }
+
+        fn calls(&self) -> Vec<ToolCall> {
+            self.seen_calls.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl BusDispatcher for MockBus {
+        async fn dispatch(&self, call: &ToolCall) -> Result<Value, error::LilithError> {
+            self.seen_calls.lock().unwrap().push(call.clone());
+            let mut responses = self.responses.lock().unwrap();
+            if responses.is_empty() {
+                return Ok(json!({
+                    "action": call.action,
+                    "status": "success",
+                    "duration_ms": 0,
+                    "result": {},
+                }));
+            }
+            Ok(responses.remove(0))
+        }
+    }
+
+    fn temp_path(prefix: &str) -> PathBuf {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        std::env::temp_dir().join(format!("jarvis-lilith-test-{prefix}-{}.db", ts))
+    }
+
+    fn build_service(
+        ollama: Arc<dyn Ollama>,
+        bus: Arc<dyn BusDispatcher>,
+    ) -> LilithService {
+        let facts_path = temp_path("facts");
+        let _ = std::fs::remove_file(&facts_path);
+        LilithService {
+            bus,
+            ollama,
+            memory: Arc::new(SessionMemory::new(32)),
+            facts: Arc::new(FactStore::open(&facts_path).unwrap()),
+            audit: Arc::new(AuditLog::new(temp_path("audit").with_extension("log"))),
+        }
+    }
+
+    #[tokio::test]
+    async fn help_intent_short_circuits_without_ollama_or_bus() {
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let service = build_service(ollama.clone(), bus.clone());
+
+        let resp = service.respond_with_help("/help").await;
+
+        assert_eq!(resp["action"], Value::Null);
+        let reply = resp["reply"].as_str().unwrap_or("");
+        assert!(reply.contains("abrir"));
+        assert!(reply.contains("instalar"));
+        // No DBus / Ollama calls — pure local response.
+        assert_eq!(ollama.calls(), 0);
+        assert!(bus.calls().is_empty());
+    }
+
+    #[tokio::test]
+    async fn dispatch_and_record_writes_audit_and_memory() {
+        let bus = Arc::new(MockBus::new(vec![json!({
+            "action": "app.open",
+            "status": "success",
+            "duration_ms": 5,
+            "result": { "launched": true },
+        })]));
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let service = build_service(ollama, bus.clone());
+
+        let call = ToolCall {
+            action: "app.open".into(),
+            params: json!({ "app": "firefox" }),
+        };
+        let resp = service.dispatch_and_record("abre firefox", call.clone()).await;
+
+        assert_eq!(resp["action"], "app.open");
+        assert_eq!(bus.calls().len(), 1);
+        assert_eq!(bus.calls()[0].action, "app.open");
+        // Memory captured the turn so cross-turn history (#116) works.
+        assert_eq!(service.memory.recent(8).len(), 1);
+    }
+
+    #[tokio::test]
+    async fn memory_tool_remember_recall_round_trip() {
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let service = build_service(ollama, bus.clone());
+
+        // Remember
+        let remember = ToolCall {
+            action: "memory.remember".into(),
+            params: json!({ "key": "router_pw", "value": "1234" }),
+        };
+        let r = service.handle_memory_tool(&remember).unwrap();
+        assert_eq!(r["status"], "success");
+
+        // Recall — should NOT hit the bus (memory.* is in-process).
+        let recall = ToolCall {
+            action: "memory.recall".into(),
+            params: json!({ "key": "router_pw" }),
+        };
+        let r = service.handle_memory_tool(&recall).unwrap();
+        assert_eq!(r["status"], "success");
+        assert_eq!(r["result"]["value"], "1234");
+        assert!(bus.calls().is_empty(), "memory.* must not touch the bus");
+    }
+
+    #[tokio::test]
+    async fn memory_tool_recall_missing_returns_null_value() {
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let service = build_service(ollama, bus);
+
+        let recall = ToolCall {
+            action: "memory.recall".into(),
+            params: json!({ "key": "nothing-here" }),
+        };
+        let r = service.handle_memory_tool(&recall).unwrap();
+        assert_eq!(r["status"], "success");
+        assert!(r["result"]["value"].is_null());
+    }
+
+    #[tokio::test]
+    async fn memory_tool_rejects_empty_key() {
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let service = build_service(ollama, bus);
+
+        let bad = ToolCall {
+            action: "memory.remember".into(),
+            params: json!({ "key": "", "value": "x" }),
+        };
+        let r = service.handle_memory_tool(&bad).unwrap();
+        assert_eq!(r["status"], "error");
+        assert_eq!(r["error"]["code"], "INVALID_PARAMS");
+    }
+
+    #[test]
+    fn help_query_matches_common_phrasings() {
+        assert!(intent::is_help_query("/help"));
+        assert!(intent::is_help_query("/ajuda"));
+        assert!(intent::is_help_query("ajuda"));
+        assert!(intent::is_help_query("o que você sabe fazer"));
+        assert!(intent::is_help_query("O que voce sabe fazer?"));
+        assert!(intent::is_help_query("what can you do"));
+        // The "preciso de ajuda para X" false-positive guard:
+        assert!(!intent::is_help_query("preciso de ajuda para abrir o navegador"));
+        // Random non-help text:
+        assert!(!intent::is_help_query("abrir o gmail"));
     }
 }

@@ -81,6 +81,22 @@ The Phase 1 design called for split `session.db` / `persistent.db`
 files; we collapsed to one SQLite database with a single `facts` table
 once it was clear we didn't need durable session memory.
 
+## Test harness
+
+Phase 12 extracted `Ollama` and `BusDispatcher` traits so `LilithService`
+fields are `Arc<dyn Ollama>` and `Arc<dyn BusDispatcher>`. The test
+module in `main.rs` ships `MockOllama` (scripted replies) and
+`MockBus` (recorded dispatches) so the help intent, dispatch
+bookkeeping, and the in-process `memory.*` tools are covered without
+a live DBus or Ollama instance.
+
+Full `process()` integration tests (which would exercise the
+multi-step chain loop end-to-end) are still pending: the loop emits
+`PartialReply` and `ChainStep` signals through a `SignalContext`
+that's hard to fake. A future commit will introduce a `SignalSink`
+trait with a no-op test impl so the chain loop becomes testable
+end-to-end.
+
 ## Failure modes
 
 | Failure | Behavior |

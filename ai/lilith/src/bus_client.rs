@@ -1,8 +1,25 @@
 use crate::error::LilithError;
 use crate::tools::ToolCall;
+use async_trait::async_trait;
 use serde_json::{json, Value};
 use uuid::Uuid;
 use zbus::{proxy, Connection};
+
+/// Abstraction over the Action Bus so tests can swap in a recording
+/// fake without standing up a DBus connection. Production
+/// implementation is `BusClient`; test mocks live in the test module
+/// in main.rs.
+#[async_trait]
+pub trait BusDispatcher: Send + Sync {
+    async fn dispatch(&self, call: &ToolCall) -> Result<Value, LilithError>;
+}
+
+#[async_trait]
+impl BusDispatcher for BusClient {
+    async fn dispatch(&self, call: &ToolCall) -> Result<Value, LilithError> {
+        BusClient::dispatch(self, call).await
+    }
+}
 
 /// Generated proxy for `com.jarvis.ActionBus`.
 #[proxy(
