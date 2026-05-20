@@ -236,6 +236,14 @@ RUN flatpak remote-add --if-not-exists flathub \
 RUN flatpak install --system --noninteractive --no-related -y \
         flathub org.mozilla.firefox
 
+# Pre-install Dolphin (KDE file manager). Phase 23 — closes the
+# "where are my files?" gap. The user picked KDE's Dolphin over
+# Nautilus + others; first install pulls in the KDE Platform
+# runtime (~1 GB) which is the costly part. Future KDE apps reuse
+# the runtime so they're tiny in comparison.
+RUN flatpak install --system --noninteractive --no-related -y \
+        flathub org.kde.dolphin
+
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.
 RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \
