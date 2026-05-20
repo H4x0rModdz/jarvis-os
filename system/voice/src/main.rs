@@ -13,13 +13,16 @@
 
 mod capture;
 mod hotword;
+mod signals;
 mod stt;
 mod tts;
 mod voiceprint;
 
+use async_trait::async_trait;
 use capture::AudioCapture;
 use hotword::HotwordHandle;
 use serde_json::json;
+use signals::VoiceSignalSink;
 use std::path::PathBuf;
 use std::sync::Arc;
 use stt::Stt;
@@ -56,6 +59,40 @@ struct VoiceService {
     hotword: HotwordHandle,
     voiceprints: Arc<VoiceprintStore>,
     stt: Arc<dyn Stt>,
+}
+
+/// Production `VoiceSignalSink` — wraps an owned `SignalContext` so
+/// callers can keep it alive across spawned tasks. Each method
+/// forwards to the matching `#[zbus(signal)]` declared on
+/// `VoiceService` and silences the result (signals are advisory; a
+/// subscriber that misses one picks up state on the next message).
+struct DbusVoiceSink {
+    ctx: SignalContext<'static>,
+}
+
+#[async_trait]
+impl VoiceSignalSink for DbusVoiceSink {
+    async fn state_changed(&self, state: &str) {
+        if let Err(e) = VoiceService::state_changed(&self.ctx, state).await {
+            tracing::warn!(error = %e, "StateChanged emit failed");
+        }
+    }
+    async fn transcription_final(&self, text: &str) {
+        if let Err(e) = VoiceService::transcription_final(&self.ctx, text).await {
+            tracing::warn!(error = %e, "TranscriptionFinal emit failed");
+        }
+    }
+    async fn transcription_failed(&self, reason: &str) {
+        if let Err(e) = VoiceService::transcription_failed(&self.ctx, reason).await {
+            tracing::warn!(error = %e, "TranscriptionFailed emit failed");
+        }
+    }
+}
+
+fn dbus_sink(ctx: SignalContext<'_>) -> Arc<dyn VoiceSignalSink> {
+    Arc::new(DbusVoiceSink {
+        ctx: ctx.to_owned(),
+    })
 }
 
 #[interface(name = "com.jarvis.Voice")]
