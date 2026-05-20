@@ -297,4 +297,13 @@ Window {
     // Bluetooth panel — opens via the bar's Bluetooth button.
     // Polls bluetoothctl while visible.
     BluetoothPanel { id: bluetoothPanel }
+
+    // First-boot wizard — opens once after install. Self-gates via
+    // QSettings `first_boot.completed`. Hides itself when the user
+    // hits Concluir on the last page; never opens again unless the
+    // flag is reset.
+    FirstBootWizard {
+        id: firstBootWizard
+        Component.onCompleted: maybeOpen()
+    }
 }
