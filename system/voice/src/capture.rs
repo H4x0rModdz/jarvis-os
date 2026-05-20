@@ -12,9 +12,48 @@
 //! config and resample/downmix on stop.
 
 use anyhow::{anyhow, Context, Result};
+use async_trait::async_trait;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::{Arc, Mutex};
 use tokio::sync::{mpsc, oneshot};
+
+/// Abstraction over microphone capture so tests can swap in a
+/// scripted fake. The production impl is `CaptureHandle`; tests use
+/// `MockCapture` in the test module.
+///
+/// All three methods are async because the production path talks to
+/// a tokio actor over an mpsc channel. The trait stays minimal —
+/// start, stop, cancel — to match the actor's protocol.
+#[async_trait]
+pub trait AudioCapture: Send + Sync {
+    /// Begin capturing from the default microphone. Returns
+    /// immediately once the stream is set up; samples accumulate
+    /// until `stop` is called. Returns an error if a stream is
+    /// already live, or if cpal can't open the device.
+    async fn start(&self) -> Result<()>;
+
+    /// Stop the in-flight recording and return the captured samples
+    /// (16 kHz mono i16). Returns an error if `start` wasn't called
+    /// first.
+    async fn stop(&self) -> Result<Vec<i16>>;
+
+    /// Abort whatever is in flight. Fire-and-forget; no-op when
+    /// nothing is capturing.
+    async fn cancel(&self);
+}
+
+#[async_trait]
+impl AudioCapture for CaptureHandle {
+    async fn start(&self) -> Result<()> {
+        CaptureHandle::start(self).await
+    }
+    async fn stop(&self) -> Result<Vec<i16>> {
+        CaptureHandle::stop(self).await
+    }
+    async fn cancel(&self) {
+        CaptureHandle::cancel(self).await
+    }
+}
 
 const TARGET_SAMPLE_RATE: u32 = 16_000;
 const TARGET_CHANNELS: u16 = 1;

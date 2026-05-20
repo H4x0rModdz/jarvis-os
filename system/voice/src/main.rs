@@ -17,7 +17,7 @@ mod stt;
 mod tts;
 mod voiceprint;
 
-use capture::CaptureHandle;
+use capture::AudioCapture;
 use hotword::HotwordHandle;
 use serde_json::json;
 use std::path::PathBuf;
@@ -52,7 +52,7 @@ impl State {
 
 struct VoiceService {
     state: Arc<AsyncMutex<State>>,
-    capture: CaptureHandle,
+    capture: Arc<dyn AudioCapture>,
     hotword: HotwordHandle,
     voiceprints: Arc<VoiceprintStore>,
     stt: Arc<dyn Stt>,
@@ -405,7 +405,7 @@ impl VoiceService {
 /// samples to `transcribe_samples`. Splitting capture-stop from the
 /// rest lets tests exercise the WAV write + Stt call without a real
 /// cpal stream.
-async fn run_stt(capture: CaptureHandle, stt: &dyn Stt) -> anyhow::Result<String> {
+async fn run_stt(capture: Arc<dyn AudioCapture>, stt: &dyn Stt) -> anyhow::Result<String> {
     let samples = capture.stop().await?;
     transcribe_samples(samples, stt).await
 }
@@ -479,9 +479,10 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(db = %vp_path.display(), "Voiceprint store ready");
 
     let stt: Arc<dyn Stt> = Arc::new(stt::WhisperCli);
+    let capture: Arc<dyn AudioCapture> = Arc::new(capture::spawn());
     let service = VoiceService {
         state: Arc::new(AsyncMutex::new(State::Idle)),
-        capture: capture::spawn(),
+        capture,
         hotword: hotword_handle,
         voiceprints,
         stt,
