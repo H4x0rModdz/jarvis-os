@@ -65,6 +65,14 @@ Window {
                 fadeTimer.restart();
             }
         }
+        // Proactive nudge arrived — pop the popup if it's closed so
+        // the banner is actually seen. Don't fade automatically;
+        // proactive messages stay until the user dismisses them
+        // (cancelling fadeTimer if it was running).
+        function onProactiveNudgeReceived(rule, text, urgency) {
+            if (!root.visible) root.requestOpen();
+            fadeTimer.stop();
+        }
     }
 
     // ESC closes immediately when the popup itself has focus.
@@ -228,6 +236,95 @@ Window {
                 }
 
                 Item { Layout.fillHeight: true } // pushes grid up
+            }
+
+            // ── Proactive nudge banner ─────────────────────────────
+            // Renders above the conversation when LilithBridge has a
+            // live nudge. Accent strip color tracks urgency. Click
+            // the × to dismiss (UI-side only; daemon cooldown is
+            // unaffected).
+            Rectangle {
+                id: proactiveBanner
+                Layout.fillWidth: true
+                Layout.preferredHeight: bannerCol.implicitHeight + 16
+                visible: LilithBridge.proactiveNudgeText.length > 0
+                radius: 10
+                color: {
+                    const u = LilithBridge.proactiveNudgeUrgency;
+                    if (u === "critical")
+                        return Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.16);
+                    if (u === "warning")
+                        return Qt.rgba(1, 0.71, 0.28, 0.16);  // amber 0xffb547
+                    return Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.16);
+                }
+                border.width: 1
+                border.color: {
+                    const u = LilithBridge.proactiveNudgeUrgency;
+                    if (u === "critical") return Theme.danger;
+                    if (u === "warning") return "#ffb547";
+                    return Theme.accent;
+                }
+
+                // Left accent strip — a 4px tall colored bar at the
+                // top edge, mirroring the notification-toast style.
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: 4
+                    radius: 2
+                    color: parent.border.color
+                }
+
+                RowLayout {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 8
+                    spacing: 8
+
+                    ColumnLayout {
+                        id: bannerCol
+                        Layout.fillWidth: true
+                        spacing: 2
+                        Text {
+                            text: {
+                                const u = LilithBridge.proactiveNudgeUrgency;
+                                if (u === "critical") return qsTr("LILITH — ATENÇÃO");
+                                if (u === "warning")  return qsTr("LILITH — AVISO");
+                                return qsTr("LILITH");
+                            }
+                            color: proactiveBanner.border.color
+                            font.pixelSize: 9
+                            font.weight: Font.Bold
+                            font.letterSpacing: 1
+                        }
+                        Text {
+                            text: LilithBridge.proactiveNudgeText
+                            color: Theme.text
+                            font.pixelSize: 13
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    Text {
+                        text: "×"
+                        color: dismissArea.containsMouse ? Theme.danger : Theme.textDim
+                        font.pixelSize: 18
+                        font.weight: Font.Bold
+                        Layout.preferredWidth: 22
+                        horizontalAlignment: Text.AlignHCenter
+                        MouseArea {
+                            id: dismissArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: LilithBridge.dismissProactiveNudge()
+                        }
+                    }
+                }
             }
 
             // ── Conversation list ──────────────────────────────────
