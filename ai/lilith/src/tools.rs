@@ -386,6 +386,83 @@ pub fn all_tools() -> Vec<Tool> {
                 "required": ["enabled"]
             }),
         },
+        // ── bluetooth ───────────────────────────────────────────────────
+        Tool {
+            action: "bluetooth.scan",
+            description: "Run a 10-second Bluetooth discovery + return the paired + nearby list. \
+                          Use for 'procurar dispositivos bluetooth' / 'buscar fones'. Returns \
+                          { paired: [{mac, name, connected}], nearby: [{mac, name}] }.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "bluetooth.list_paired",
+            description: "Return paired devices with current connection state. Faster than scan; \
+                          use when the user asks 'que dispositivos tenho pareados' / 'meus fones \
+                          estão conectados'.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            action: "bluetooth.pair",
+            description: "Pair + trust + connect a Bluetooth device by MAC. Just-works pairing \
+                          only — devices that need a passkey return an error. Use for 'parear \
+                          AirPods' / 'parear meus fones'. Get the MAC from bluetooth.scan first \
+                          if you don't have it.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "mac": { "type": "string", "description": "MAC address, AA:BB:CC:DD:EE:FF format (case-insensitive)." }
+                },
+                "required": ["mac"]
+            }),
+        },
+        Tool {
+            action: "bluetooth.connect",
+            description: "Reconnect to an already-paired Bluetooth device. Use for 'conecta nos \
+                          meus fones' when the device is in pairedDevices but not connected.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "mac": { "type": "string" }
+                },
+                "required": ["mac"]
+            }),
+        },
+        Tool {
+            action: "bluetooth.disconnect",
+            description: "Drop a Bluetooth connection without unpairing. Use for 'desconecta os \
+                          fones' / 'desconecta do <device>'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "mac": { "type": "string" }
+                },
+                "required": ["mac"]
+            }),
+        },
+        Tool {
+            action: "bluetooth.unpair",
+            description: "Remove a Bluetooth device's pairing entirely. Use for 'remove o \
+                          pareamento' / 'esquece os fones'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "mac": { "type": "string" }
+                },
+                "required": ["mac"]
+            }),
+        },
+        Tool {
+            action: "bluetooth.set_enabled",
+            description: "Toggle the Bluetooth radio. Use for 'liga o bluetooth' / 'desliga o \
+                          bluetooth'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "enabled": { "type": "boolean" }
+                },
+                "required": ["enabled"]
+            }),
+        },
         // ── compat (Windows app runner) ─────────────────────────────────
         Tool {
             action: "compat.run_exe",

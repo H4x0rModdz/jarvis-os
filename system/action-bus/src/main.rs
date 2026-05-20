@@ -143,6 +143,15 @@ fn build_registry() -> Registry {
     reg!("network.disconnect", handlers::network::disconnect);
     reg!("network.set_enabled", handlers::network::set_enabled);
 
+    reg!("bluetooth.scan", handlers::bluetooth::scan);
+    reg!("bluetooth.list_paired", handlers::bluetooth::list_paired);
+    reg!("bluetooth.list_nearby", handlers::bluetooth::list_nearby);
+    reg!("bluetooth.pair", handlers::bluetooth::pair);
+    reg!("bluetooth.unpair", handlers::bluetooth::unpair);
+    reg!("bluetooth.connect", handlers::bluetooth::connect);
+    reg!("bluetooth.disconnect", handlers::bluetooth::disconnect);
+    reg!("bluetooth.set_enabled", handlers::bluetooth::set_enabled);
+
     reg!("updater.check", handlers::updater::check);
     reg!("updater.apply_os", handlers::updater::apply_os);
 

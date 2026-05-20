@@ -1,5 +1,6 @@
 pub mod app;
 pub mod audio;
+pub mod bluetooth;
 pub mod browser;
 pub mod clipboard;
 pub mod compat;
