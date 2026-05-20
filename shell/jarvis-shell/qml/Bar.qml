@@ -117,6 +117,10 @@ Rectangle {
             onClicked: root.networksRequested()
         }
 
+        BarBatteryIndicator {
+            Layout.alignment: Qt.AlignVCenter
+        }
+
         BarBellButton {
             Layout.alignment: Qt.AlignVCenter
             onClicked: root.notificationsRequested()
