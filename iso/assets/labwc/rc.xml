@@ -31,6 +31,23 @@
     <keybind key="W-Return"><action name="Execute"><command>foot</command></action></keybind>
     <keybind key="W-L"><action name="Execute"><command>jarvis-lock-ctl lock</command></action></keybind>
     <keybind key="W"><action name="Execute"><command>jarvis-voice-ctl toggle</command></action></keybind>
+
+    <!-- Laptop hardware keys. The dedicated XF86* keysyms are what
+         the kernel maps the volume/brightness/media keys to; the
+         small shell wrappers under /usr/libexec/jarvis-keys/
+         encapsulate the actual pactl / brightnessctl / playerctl
+         commands + post replaces_id notifications so the user gets
+         an OSD-style toast without a separate OSD process. -->
+    <keybind key="XF86AudioRaiseVolume"><action name="Execute"><command>/usr/libexec/jarvis-keys/volume-up</command></action></keybind>
+    <keybind key="XF86AudioLowerVolume"><action name="Execute"><command>/usr/libexec/jarvis-keys/volume-down</command></action></keybind>
+    <keybind key="XF86AudioMute"><action name="Execute"><command>/usr/libexec/jarvis-keys/volume-mute</command></action></keybind>
+    <keybind key="XF86AudioMicMute"><action name="Execute"><command>/usr/libexec/jarvis-keys/mic-mute</command></action></keybind>
+    <keybind key="XF86MonBrightnessUp"><action name="Execute"><command>/usr/libexec/jarvis-keys/brightness-up</command></action></keybind>
+    <keybind key="XF86MonBrightnessDown"><action name="Execute"><command>/usr/libexec/jarvis-keys/brightness-down</command></action></keybind>
+    <keybind key="XF86AudioPlay"><action name="Execute"><command>/usr/libexec/jarvis-keys/media-toggle</command></action></keybind>
+    <keybind key="XF86AudioPause"><action name="Execute"><command>/usr/libexec/jarvis-keys/media-toggle</command></action></keybind>
+    <keybind key="XF86AudioNext"><action name="Execute"><command>/usr/libexec/jarvis-keys/media-next</command></action></keybind>
+    <keybind key="XF86AudioPrev"><action name="Execute"><command>/usr/libexec/jarvis-keys/media-prev</command></action></keybind>
   </keyboard>
 
   <mouse>
