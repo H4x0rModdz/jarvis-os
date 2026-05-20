@@ -130,17 +130,23 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
 
 ## Test harness
 
-Phase 14 extracted the `Stt` trait (real impl: `stt::WhisperCli`)
-so tests can swap in a scripted `MockStt`. `run_stt` is split
-into a capture-bound front half and a `transcribe_samples` back
-half — the latter writes the WAV, calls the trait, and is the
-piece tests cover.
+Phase 14 extracted the `Stt` trait (real impl: `stt::WhisperCli`).
+Phase 15 followed up with `AudioCapture` (real impl:
+`CaptureHandle`). Both fronts of the STT pipeline are now reachable
+through traits; tests use `MockStt` + `MockCapture` to exercise
+`run_stt` end-to-end without cpal or whisper-cli.
 
 Coverage today: WAV write + Stt dispatch happy path, empty-samples
-short-circuit, error propagation, state-enum round-trip,
-voiceprint pure-function tests (Phase 5/6). The capture + hotword
-actors stay un-mocked — they need their own `AudioCapture` trait,
-which is the natural next refactor.
+short-circuit, error propagation, state-enum round-trip, AudioCapture
+start/stop/cancel/double-start semantics, `run_stt` routed through
+mocks. Voiceprint pure-function tests live in `voiceprint.rs` from
+Phases 5–6.
+
+The DBus methods (`start_listening`, `stop_listening`, `cancel`,
+`speak`, etc.) still need a voice-side `SignalSink` abstraction
+before they can be tested end-to-end — they emit `StateChanged` /
+`TranscriptionFinal` through a `SignalContext` that requires a
+live connection. That refactor is the natural next step.
 
 ## Failure Modes
 

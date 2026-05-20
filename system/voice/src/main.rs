@@ -578,6 +578,7 @@ mod tests {
     use async_trait::async_trait;
     use std::path::Path;
     use std::sync::Mutex as StdMutex;
+    use tokio::sync::Mutex as AsyncMutex;
 
     #[test]
     fn state_str_round_trips() {
@@ -662,6 +663,116 @@ mod tests {
         let samples: Vec<i16> = vec![0; 1600];
         let err = transcribe_samples(samples, &stt).await.unwrap_err();
         assert!(err.to_string().contains("model not found"));
+    }
+
+    // ── AudioCapture trait coverage ──────────────────────────────────
+
+    /// In-memory AudioCapture: holds a `live` flag + the samples that
+    /// the next `stop` should return. Mirrors what CaptureHandle does
+    /// over an mpsc channel but without any real cpal stream.
+    struct MockCapture {
+        live: AsyncMutex<bool>,
+        samples_on_stop: StdMutex<Vec<i16>>,
+        stop_calls: StdMutex<u32>,
+    }
+
+    impl MockCapture {
+        fn with_samples(samples: Vec<i16>) -> Self {
+            Self {
+                live: AsyncMutex::new(false),
+                samples_on_stop: StdMutex::new(samples),
+                stop_calls: StdMutex::new(0),
+            }
+        }
+
+        fn stop_call_count(&self) -> u32 {
+            *self.stop_calls.lock().unwrap()
+        }
+    }
+
+    #[async_trait]
+    impl AudioCapture for MockCapture {
+        async fn start(&self) -> anyhow::Result<()> {
+            let mut live = self.live.lock().await;
+            if *live {
+                anyhow::bail!("already capturing");
+            }
+            *live = true;
+            Ok(())
+        }
+
+        async fn stop(&self) -> anyhow::Result<Vec<i16>> {
+            let mut live = self.live.lock().await;
+            *self.stop_calls.lock().unwrap() += 1;
+            if !*live {
+                anyhow::bail!("not capturing");
+            }
+            *live = false;
+            Ok(self.samples_on_stop.lock().unwrap().clone())
+        }
+
+        async fn cancel(&self) {
+            *self.live.lock().await = false;
+        }
+    }
+
+    #[tokio::test]
+    async fn capture_start_then_stop_returns_scripted_samples() {
+        let mock = MockCapture::with_samples(vec![10, 20, 30]);
+        mock.start().await.unwrap();
+        let samples = mock.stop().await.unwrap();
+        assert_eq!(samples, vec![10, 20, 30]);
+        assert_eq!(mock.stop_call_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn capture_double_start_errors() {
+        let mock = MockCapture::with_samples(vec![]);
+        mock.start().await.unwrap();
+        let err = mock.start().await.unwrap_err();
+        assert!(err.to_string().contains("already capturing"));
+    }
+
+    #[tokio::test]
+    async fn capture_stop_without_start_errors() {
+        let mock = MockCapture::with_samples(vec![]);
+        let err = mock.stop().await.unwrap_err();
+        assert!(err.to_string().contains("not capturing"));
+    }
+
+    #[tokio::test]
+    async fn capture_cancel_clears_live_state() {
+        let mock = MockCapture::with_samples(vec![1, 2, 3]);
+        mock.start().await.unwrap();
+        mock.cancel().await;
+        // After cancel, stop should error because we're no longer live.
+        let err = mock.stop().await.unwrap_err();
+        assert!(err.to_string().contains("not capturing"));
+    }
+
+    #[tokio::test]
+    async fn run_stt_routes_through_audio_capture_and_stt() {
+        // Full pipeline through the trait objects: capture stops with
+        // 0.1 s of zero samples → write_wav → MockStt returns scripted
+        // text. Confirms the type signatures all line up.
+        let capture: Arc<dyn AudioCapture> =
+            Arc::new(MockCapture::with_samples(vec![0; 1600]));
+        let stt = MockStt::new(vec![Ok("ouvi você".into())]);
+        // Start the mock first so stop() succeeds.
+        capture.start().await.unwrap();
+
+        let text = run_stt(capture, &stt).await.unwrap();
+        assert_eq!(text, "ouvi você");
+    }
+
+    #[tokio::test]
+    async fn run_stt_returns_empty_when_no_samples() {
+        let capture: Arc<dyn AudioCapture> =
+            Arc::new(MockCapture::with_samples(vec![]));
+        let stt = MockStt::new(vec![]);
+        capture.start().await.unwrap();
+        let text = run_stt(capture, &stt).await.unwrap();
+        assert_eq!(text, "");
     }
 
     #[test]
