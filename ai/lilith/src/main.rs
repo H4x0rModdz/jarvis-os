@@ -5,6 +5,7 @@ mod intent;
 mod memory;
 mod ollama;
 mod persistent;
+mod proactive;
 mod settings;
 mod signals;
 mod tools;
