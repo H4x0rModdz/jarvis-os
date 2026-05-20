@@ -27,3 +27,16 @@ pub async fn read_string(key: &str) -> Option<String> {
     }
     parsed.get("value")?.as_str().map(|s| s.to_string())
 }
+
+/// Read a boolean-ish setting. Returns `default` when the key isn't
+/// set or the Settings daemon is unreachable. Truthy values: "true",
+/// "1", "yes", "on" (case-insensitive). Anything else is false.
+pub async fn read_bool(key: &str, default: bool) -> bool {
+    match read_string(key).await {
+        Some(s) => {
+            let v = s.trim().to_ascii_lowercase();
+            matches!(v.as_str(), "true" | "1" | "yes" | "on")
+        }
+        None => default,
+    }
+}

@@ -746,6 +746,13 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
 
         loop {
             interval.tick().await;
+            // Opt-out: per-tick settings check is cheap (one DBus
+            // call) and means the user can toggle proactivity in
+            // Settings and have it take effect within 30 s without
+            // restarting the daemon.
+            if !settings::read_bool("lilith.proactive_enabled", true).await {
+                continue;
+            }
             let signals = probe.snapshot().await;
             for nudge in engine.evaluate(&signals) {
                 tracing::info!(

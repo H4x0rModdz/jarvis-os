@@ -170,6 +170,60 @@ Window {
                 }
             }
 
+            // ── Row: Lilith proativa ──────────────────────────────────
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: qsTr("Lilith proativa")
+                        color: Theme.text
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        text: qsTr("Permite que a Lilith fale sem ser perguntada quando algo merece atenção (bateria crítica, etc.). Desligado, ela só responde a comandos.")
+                        color: Theme.textDim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Rectangle {
+                    id: proactiveSwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 44
+                    implicitHeight: 24
+                    radius: 12
+                    property bool checked: (root._settingsTick, SettingsBridge.getBool("lilith.proactive_enabled", true))
+                    color: checked ? Theme.accent : Qt.rgba(1, 1, 1, 0.08)
+                    border.color: checked ? Theme.accent : Theme.border
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                    Rectangle {
+                        width: 18; height: 18; radius: 9
+                        color: Theme.text
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: parent.checked ? parent.width - width - 3 : 3
+                        Behavior on x { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            const next = !proactiveSwitch.checked;
+                            // Daemon re-reads this key on every tick
+                            // (every 30 s) — no DBus method to call.
+                            SettingsBridge.setBool("lilith.proactive_enabled", next);
+                        }
+                    }
+                }
+            }
+
             // ── Row: Hotword toggle ──────────────────────────────────
             RowLayout {
                 Layout.fillWidth: true
