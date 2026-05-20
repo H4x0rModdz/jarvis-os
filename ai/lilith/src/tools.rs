@@ -425,12 +425,123 @@ pub fn all_tools() -> Vec<Tool> {
     ]
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn help_text_lists_every_namespace_in_the_catalog() {
+        let h = help_text();
+        // Every namespace from all_tools() must appear at least once,
+        // either through the labeled section or the fallback raw
+        // identifier branch.
+        let mut namespaces: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for tool in all_tools() {
+            namespaces.insert(tool.action.split('.').next().unwrap_or(tool.action));
+        }
+        for ns in &namespaces {
+            assert!(
+                h.contains(ns) || h.contains(label_for_test(ns)),
+                "namespace {ns} not in help_text:\n{h}"
+            );
+        }
+    }
+
+    /// Mirrors LABELS in help_text — used in the assertion above.
+    /// Kept in sync manually for now; a future commit could expose
+    /// LABELS publicly if drift becomes a real problem.
+    fn label_for_test(ns: &str) -> &'static str {
+        match ns {
+            "app" => "aplicativos",
+            "browser" => "navegador",
+            "screenshot" => "screenshots",
+            "clipboard" => "área de transferência",
+            "audio" => "áudio",
+            "window" => "janelas",
+            "workspace" => "workspaces",
+            "file" => "arquivos",
+            "system" => "sistema",
+            "compat" => "Windows (Wine/Proton)",
+            "updater" => "atualizações",
+            "memory" => "memória",
+            other => other,
+        }
+    }
+
+    #[test]
+    fn help_text_includes_chain_hint() {
+        let h = help_text();
+        assert!(h.contains("encadeio"));
+    }
+}
+
 fn window_id_schema() -> Value {
     json!({
         "type": "object",
         "properties": { "window_id": { "type": "integer" } },
         "required": ["window_id"]
     })
+}
+
+/// Human-readable capability listing, built at runtime from
+/// `all_tools()`. Used by the help intent (`/help`, "o que você sabe
+/// fazer?") so the reply tracks the actual tool catalog instead of
+/// drifting from a hardcoded string.
+///
+/// Groups by namespace prefix (`app.*`, `file.*`, …). Known
+/// namespaces get a pt-BR label; unknown ones fall back to the
+/// namespace identifier itself so new groups still show up.
+pub fn help_text() -> String {
+    use std::collections::BTreeMap;
+
+    // Friendly labels per namespace. Order here is the display order
+    // — picked to match the "set up my desktop" arc the empty-state
+    // suggestions follow.
+    const LABELS: &[(&str, &str)] = &[
+        ("app", "aplicativos"),
+        ("browser", "navegador"),
+        ("screenshot", "screenshots"),
+        ("clipboard", "área de transferência"),
+        ("audio", "áudio"),
+        ("window", "janelas"),
+        ("workspace", "workspaces"),
+        ("file", "arquivos"),
+        ("system", "sistema"),
+        ("compat", "Windows (Wine/Proton)"),
+        ("updater", "atualizações"),
+        ("memory", "memória"),
+    ];
+
+    let mut groups: BTreeMap<&str, Vec<String>> = BTreeMap::new();
+    for tool in all_tools() {
+        let ns = tool.action.split('.').next().unwrap_or(tool.action);
+        groups.entry(ns).or_default().push(tool.action.to_string());
+    }
+
+    let mut body = String::new();
+    let mut emitted: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    for (ns, label) in LABELS {
+        if let Some(actions) = groups.get(ns) {
+            // Two-space padding-as-separator keeps the layout legible
+            // even when the namespace label has accented characters
+            // (width still counts code points).
+            body.push_str(&format!("• {label:<22}— {}\n", actions.join(", ")));
+            emitted.insert(ns);
+        }
+    }
+    // Any namespace we didn't list in LABELS shows up too, with its
+    // raw identifier as the label. Keeps the help honest when new
+    // tool groups land before this table catches up.
+    for (ns, actions) in &groups {
+        if !emitted.contains(ns) {
+            body.push_str(&format!("• {ns:<22}— {}\n", actions.join(", ")));
+        }
+    }
+
+    format!(
+        "Posso fazer isso aqui pra você:\n\n{body}\nPergunte em português ou inglês — \
+         eu encadeio várias ações quando faz sentido (\"tira um print e abre no editor\")."
+    )
 }
 
 /// Format tools for Ollama's `/api/chat` `tools` array (OpenAI-compatible shape).

@@ -9,29 +9,6 @@ mod settings;
 mod signals;
 mod tools;
 
-/// Hardcoded reply for `is_help_query`. Lists the namespaces of the
-/// Action Bus catalogue, not every action — the user wants a tour,
-/// not a man page. Phrased so the user can immediately copy a line
-/// into the bar input.
-const HELP_REPLY: &str = "\
-Posso fazer isso aqui pra você:
-
-• abrir / fechar apps   — \"abrir o navegador\", \"fechar o firefox\"
-• instalar / remover    — \"instalar o gimp\" (via Flatpak)
-• arquivos              — \"mover X para Y\", \"deletar X\"
-• janelas               — focar / minimizar / maximizar / fechar / snap left|right
-• áudio                 — \"volume 50\", \"mudo\", \"aumentar volume\"
-• clipboard             — \"copiar X\", \"o que tem no clipboard\"
-• screenshot            — \"tirar print\"
-• navegador             — \"abrir https://…\"
-• Wine / Proton         — \"rodar C:\\…\\app.exe\" (default ou prefix nomeado)
-• notificações          — \"notifique X\"
-• lembrar               — \"lembra que minha senha do roteador é 1234\" → memory.remember
-• atualizar             — \"checar atualizações\", \"atualizar o sistema\"
-
-Pergunte em português ou inglês — eu encadeio várias ações quando faz \
-sentido (\"tira um print e abre no editor\").";
-
 use async_trait::async_trait;
 use audit::AuditLog;
 use bus_client::{BusClient, BusDispatcher};
@@ -407,12 +384,13 @@ impl LilithService {
         })
     }
 
-    /// Build the hardcoded capability listing returned to "/help",
-    /// "ajuda", and "o que você sabe fazer". Records as a regular
-    /// chat-style turn (no tool call) so the popup conversation
-    /// view treats it like any other Lilith reply.
+    /// Build the capability listing returned to "/help", "ajuda", and
+    /// "o que você sabe fazer". Generated from the live tool catalog
+    /// (`tools::help_text`) so it always matches the actions Lilith
+    /// actually exposes. Records as a regular chat-style turn so the
+    /// popup conversation view treats it like any other Lilith reply.
     async fn respond_with_help(&self, user_text: &str) -> Value {
-        let reply = HELP_REPLY.to_string();
+        let reply = tools::help_text();
         self.audit.write(user_text, None, None, &reply).await;
         self.memory.record(Turn {
             user_text: user_text.into(),
@@ -681,8 +659,12 @@ mod tests {
 
         assert_eq!(resp["action"], Value::Null);
         let reply = resp["reply"].as_str().unwrap_or("");
-        assert!(reply.contains("abrir"));
-        assert!(reply.contains("instalar"));
+        // Help text is now generated from the tool catalog: the
+        // assertion targets concrete action names + the pt-BR
+        // labels that the generator emits.
+        assert!(reply.contains("aplicativos"));
+        assert!(reply.contains("app.open"));
+        assert!(reply.contains("encadeio"));
         // No DBus / Ollama calls — pure local response.
         assert_eq!(ollama.calls(), 0);
         assert!(bus.calls().is_empty());
@@ -843,10 +825,12 @@ mod tests {
 
         let resp = service.process("/help", sink.clone()).await;
 
+        // The generated help text always contains the chain hint —
+        // a more stable anchor than any individual action name.
         assert!(resp["reply"]
             .as_str()
             .unwrap_or("")
-            .contains("abrir"));
+            .contains("encadeio"));
         assert_eq!(ollama.calls(), 0);
         assert!(bus.calls().is_empty());
     }
