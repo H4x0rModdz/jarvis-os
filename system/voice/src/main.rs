@@ -59,6 +59,7 @@ struct VoiceService {
     hotword: HotwordHandle,
     voiceprints: Arc<VoiceprintStore>,
     stt: Arc<dyn Stt>,
+    tts: Arc<dyn tts::Tts>,
 }
 
 /// Production `VoiceSignalSink` — wraps an owned `SignalContext` so
@@ -414,8 +415,9 @@ impl VoiceService {
         let text_owned = text.to_string();
         let state_handle = self.state.clone();
         let signals_for_task = signals.clone();
+        let tts = self.tts.clone();
         tokio::spawn(async move {
-            if let Err(e) = tts::speak(&text_owned).await {
+            if let Err(e) = tts.speak(&text_owned).await {
                 tracing::warn!(error = %e, "TTS speak failed");
                 signals_for_task.transcription_failed(&e.to_string()).await;
             }
@@ -519,6 +521,7 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!(db = %vp_path.display(), "Voiceprint store ready");
 
     let stt: Arc<dyn Stt> = Arc::new(stt::WhisperCli);
+    let tts: Arc<dyn tts::Tts> = Arc::new(tts::PiperTts);
     let capture: Arc<dyn AudioCapture> = Arc::new(capture::spawn());
     let service = VoiceService {
         state: Arc::new(AsyncMutex::new(State::Idle)),
@@ -526,6 +529,7 @@ async fn main() -> anyhow::Result<()> {
         hotword: hotword_handle,
         voiceprints,
         stt,
+        tts,
     };
 
     let conn = connection::Builder::session()?
@@ -870,6 +874,14 @@ mod tests {
         capture: Arc<dyn AudioCapture>,
         stt: Arc<dyn Stt>,
     ) -> VoiceService {
+        build_service_with_tts(capture, stt, Arc::new(tts::NoopTts))
+    }
+
+    fn build_service_with_tts(
+        capture: Arc<dyn AudioCapture>,
+        stt: Arc<dyn Stt>,
+        tts: Arc<dyn tts::Tts>,
+    ) -> VoiceService {
         // Spawn a real hotword actor — its thread sits idle until
         // enable() is called, which our tests don't do. Receiver
         // dropped immediately; if a future test triggers a wake-word
@@ -883,6 +895,7 @@ mod tests {
                 VoiceprintStore::open(&temp_vp_db()).unwrap(),
             ),
             stt,
+            tts,
         }
     }
 

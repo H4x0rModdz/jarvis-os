@@ -46,6 +46,18 @@ impl Tts for PiperTts {
     }
 }
 
+/// No-op TTS — silently succeeds on every call. Used by the
+/// state-machine tests in `main.rs` that don't care about the
+/// audible output, only the state transitions.
+pub struct NoopTts;
+
+#[async_trait]
+impl Tts for NoopTts {
+    async fn speak(&self, _text: &str) -> Result<()> {
+        Ok(())
+    }
+}
+
 /// Synthesize `text` and play it. Blocks until playback finishes — the
 /// caller wraps this in `tokio::spawn` so the DBus method returns
 /// quickly. Kept as a free function for the existing unit tests +
