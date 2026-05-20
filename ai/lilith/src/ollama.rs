@@ -1,4 +1,5 @@
 use crate::error::LilithError;
+use crate::memory::Turn;
 use crate::tools::{ollama_tools_payload, Tool, ToolCall};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -41,21 +42,34 @@ impl OllamaClient {
         &self.model
     }
 
-    /// Send a user message with the available tools and parse the model's response.
-    pub async fn chat(&self, user_text: &str, tools: &[Tool]) -> Result<OllamaReply, LilithError> {
+    /// Send a user message with conversation history + the available
+    /// tools, parse the model's response.
+    ///
+    /// `history` is the recent session turns (oldest first). They're
+    /// flattened into user/assistant message pairs so the model can
+    /// resolve pronouns and follow-ups ("abre o gmail também" → uses
+    /// the previous "abrir o navegador" as context).
+    pub async fn chat(
+        &self,
+        user_text: &str,
+        history: &[Turn],
+        tools: &[Tool],
+    ) -> Result<OllamaReply, LilithError> {
         let url = format!("{}/api/chat", self.host);
+        let mut messages: Vec<Value> = Vec::with_capacity(2 + history.len() * 2);
+        messages.push(json!({ "role": "system", "content": SYSTEM_PROMPT }));
+        for turn in history {
+            messages.push(json!({ "role": "user", "content": turn.user_text }));
+            messages.push(json!({
+                "role": "assistant",
+                "content": assistant_message_for(turn),
+            }));
+        }
+        messages.push(json!({ "role": "user", "content": user_text }));
+
         let body = json!({
             "model": self.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": user_text
-                }
-            ],
+            "messages": messages,
             "tools": ollama_tools_payload(tools),
             "stream": false
         });
@@ -80,6 +94,34 @@ impl OllamaClient {
             .map_err(|e| LilithError::OllamaInvalid(e.to_string()))?;
 
         Ok(OllamaReply::from(parsed))
+    }
+}
+
+/// Synthesise the assistant message for one historical Turn. When the
+/// turn dispatched a tool we describe what happened so the model has
+/// concrete context ("I opened the browser"); when it was a chat-only
+/// reply we just pass through the original text.
+fn assistant_message_for(turn: &Turn) -> String {
+    match &turn.tool_call {
+        Some(call) => {
+            let params = if call.params.is_null() {
+                String::new()
+            } else {
+                serde_json::to_string(&call.params).unwrap_or_default()
+            };
+            if params.is_empty() {
+                format!(
+                    "[I called {}; result: {}]",
+                    call.action, turn.reply_text
+                )
+            } else {
+                format!(
+                    "[I called {}({}); result: {}]",
+                    call.action, params, turn.reply_text
+                )
+            }
+        }
+        None => turn.reply_text.clone(),
     }
 }
 

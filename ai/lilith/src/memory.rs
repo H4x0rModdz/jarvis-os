@@ -40,6 +40,14 @@ impl SessionMemory {
         self.turns.lock().unwrap().clear();
     }
 
+    /// Snapshot the last `n` turns, oldest first. Cloned so the
+    /// caller can release the mutex before any async work.
+    pub fn recent(&self, n: usize) -> Vec<Turn> {
+        let t = self.turns.lock().unwrap();
+        let skip = t.len().saturating_sub(n);
+        t.iter().skip(skip).cloned().collect()
+    }
+
     #[cfg(test)]
     pub fn len(&self) -> usize {
         self.turns.lock().unwrap().len()

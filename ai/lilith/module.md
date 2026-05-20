@@ -64,7 +64,7 @@ bus and write to the local fact store.
 
 | Layer | Storage | Lifetime | API |
 |---|---|---|---|
-| Session ring | RAM, last ~50 turns | until daemon restart or `Reset()` | implicit, passed to Ollama as chat history |
+| Session ring | RAM, last 32 turns | until daemon restart or `Reset()` | the last 8 turns are flattened into user/assistant messages and prepended to every `ollama.chat()` call so follow-ups resolve against context |
 | Fact store | SQLite at `~/.jarvis/lilith/facts.db` | persistent | `memory.remember`, `memory.recall`, `memory.forget` tools |
 
 The Phase 1 design called for split `session.db` / `persistent.db`

@@ -85,8 +85,13 @@ impl LilithService {
             return self.dispatch_and_record(text, call).await;
         }
 
-        // 2. Fall back to Ollama for natural language.
-        match self.ollama.chat(text, &all_tools()).await {
+        // 2. Fall back to Ollama for natural language. Feed the last
+        // 8 turns so follow-up phrasing ("e o Gmail também", "agora
+        // fecha tudo") resolves against real context instead of
+        // running headfirst into a stateless LLM call.
+        const HISTORY_TURNS: usize = 8;
+        let history = self.memory.recent(HISTORY_TURNS);
+        match self.ollama.chat(text, &history, &all_tools()).await {
             Ok(reply) => {
                 if let Some(first) = reply.tool_calls.into_iter().next() {
                     tracing::info!(action = %first.action, "Ollama selected tool");
