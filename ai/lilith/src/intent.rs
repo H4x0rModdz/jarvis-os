@@ -58,8 +58,61 @@ struct Rule {
     build: fn(&regex::Captures) -> ToolCall,
 }
 
+/// Resolve `$HOME` once at first rule-match. The lazy `OnceCell`
+/// avoids re-calling `dirs::home_dir()` on every parse.
+fn home() -> String {
+    dirs::home_dir()
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "/".into())
+}
+
+/// Map an XDG folder name token (in either pt-BR or English) to the
+/// absolute path under $HOME. We hardcode the English XDG defaults —
+/// localised folder names ("Documentos" instead of "Documents") only
+/// kick in when `xdg-user-dirs` is configured per-user, which Jarvis
+/// OS doesn't ship today. Phase 24+ candidate: read
+/// `$XDG_CONFIG_HOME/user-dirs.dirs` and translate.
+fn xdg_folder_path(name: &str) -> String {
+    let sub = match name.to_lowercase().as_str() {
+        "downloads" => "Downloads",
+        "documentos" | "documents" => "Documents",
+        "imagens" | "images" | "pictures" => "Pictures",
+        "música" | "musica" | "music" => "Music",
+        "vídeos" | "videos" => "Videos",
+        _ => return home(),
+    };
+    format!("{}/{}", home(), sub)
+}
+
 static RULES: Lazy<Vec<Rule>> = Lazy::new(|| {
     vec![
+        // ── File navigation — opens Dolphin (via xdg-open) at the
+        //    matching XDG folder. The MIME default
+        //    (inode/directory → org.kde.dolphin.desktop) handles the
+        //    routing; we just hand xdg-open the path. Matched before
+        //    the generic `abrir <app>` rule so "abrir downloads"
+        //    doesn't try to launch a `downloads` executable.
+        Rule {
+            pattern: Regex::new(
+                r"^(?:abr(?:ir|a)|open)\s+(?P<folder>downloads|documentos|documents|imagens|images|pictures|m[uú]sica|music|v[ií]deos|videos)$",
+            )
+            .unwrap(),
+            build: |c| ToolCall {
+                action: "app.open".into(),
+                params: json!({ "app": xdg_folder_path(&c["folder"]) }),
+            },
+        },
+        Rule {
+            pattern: Regex::new(
+                r"^(?:abr(?:ir|a)|open)\s+(?:arquivos|files|home|minha\s+pasta|pasta\s+pessoal)$",
+            )
+            .unwrap(),
+            build: |_| ToolCall {
+                action: "app.open".into(),
+                params: json!({ "app": home() }),
+            },
+        },
+
         // ── app.open ───────────────────────────────────────────────────
         Rule {
             pattern: Regex::new(r"^(?:open|launch|abr(?:ir|a)|inicia[r]?)\s+(?P<app>[\w\-.]+)$")
@@ -309,6 +362,43 @@ mod tests {
         assert_eq!(call.params["app"], "firefox");
 
         let call = parse("abra firefox").unwrap();
+        assert_eq!(call.action, "app.open");
+    }
+
+    #[test]
+    fn parses_open_xdg_folder() {
+        // The folder-specific rule must match BEFORE the generic
+        // `abrir <app>` rule — otherwise "abrir downloads" would
+        // try to launch a binary called `downloads`. This test pins
+        // the order.
+        let call = parse("abrir downloads").unwrap();
+        assert_eq!(call.action, "app.open");
+        let path = call.params["app"].as_str().unwrap_or("");
+        assert!(path.ends_with("/Downloads"), "path was {path}");
+
+        let call = parse("open documents").unwrap();
+        assert!(call.params["app"].as_str().unwrap_or("").ends_with("/Documents"));
+
+        let call = parse("abrir música").unwrap();
+        assert!(call.params["app"].as_str().unwrap_or("").ends_with("/Music"));
+
+        let call = parse("abrir vídeos").unwrap();
+        assert!(call.params["app"].as_str().unwrap_or("").ends_with("/Videos"));
+    }
+
+    #[test]
+    fn parses_open_home() {
+        let call = parse("abrir arquivos").unwrap();
+        assert_eq!(call.action, "app.open");
+        let path = call.params["app"].as_str().unwrap_or("");
+        // Should be the bare $HOME, not a subfolder.
+        assert!(!path.ends_with("/Downloads"));
+        assert!(!path.is_empty());
+
+        let call = parse("open files").unwrap();
+        assert_eq!(call.action, "app.open");
+
+        let call = parse("abrir minha pasta").unwrap();
         assert_eq!(call.action, "app.open");
     }
 
