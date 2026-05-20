@@ -32,6 +32,7 @@ class LilithBridge : public QObject
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
     Q_PROPERTY(QString streamingText READ streamingText NOTIFY streamingTextChanged)
     Q_PROPERTY(QVariantList chainSteps READ chainSteps NOTIFY chainStepsChanged)
+    Q_PROPERTY(QVariantList conversation READ conversation NOTIFY conversationChanged)
 
 public:
     explicit LilithBridge(QObject* parent = nullptr);
@@ -40,14 +41,21 @@ public:
     bool busy() const { return m_busy; }
     QString streamingText() const { return m_streamingText; }
     QVariantList chainSteps() const { return m_chainSteps; }
+    QVariantList conversation() const { return m_conversation; }
 
     Q_INVOKABLE void send(const QString& text);
+
+    /// Wipe the conversation history. Calls into the daemon's Reset()
+    /// so the session memory there also clears — keeps the two views
+    /// in sync. Triggered by a UI "limpar" button (Phase 11 popup).
+    Q_INVOKABLE void resetConversation();
 
 signals:
     void reachableChanged();
     void busyChanged();
     void streamingTextChanged();
     void chainStepsChanged();
+    void conversationChanged();
     void replyReceived(const QString& reply, const QString& action, const QString& resultJson);
     void errorOccurred(const QString& message);
 
@@ -60,6 +68,9 @@ private:
     void setReachable(bool v);
     void setBusy(bool v);
     void resetStreamingState();
+    void pushConversationUser(const QString& text);
+    void pushConversationLilith(const QString& reply, const QString& action,
+                                const QVariantList& chainSteps);
 
     QDBusInterface* m_iface = nullptr;
     QTimer m_pingTimer;
@@ -67,4 +78,6 @@ private:
     bool m_busy = false;
     QString m_streamingText;
     QVariantList m_chainSteps; // [{ step: int, action: string }, …]
+    QVariantList m_conversation;
+    static constexpr int kConversationCap = 32;
 };

@@ -82,8 +82,11 @@ void LilithBridge::send(const QString& text)
     }
 
     // Clear streaming state so the UI shows the current command in
-    // flight, not residue from the previous one.
+    // flight, not residue from the previous one. Conversation history
+    // accumulates across commands — push the user line now so the
+    // popup can render the question even before the reply lands.
     resetStreamingState();
+    pushConversationUser(text);
     setBusy(true);
     auto pending = m_iface->asyncCall(QStringLiteral("Command"), text);
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
@@ -114,9 +117,60 @@ void LilithBridge::send(const QString& text)
                 ? QString::fromUtf8(QJsonDocument(result.toObject()).toJson(QJsonDocument::Compact))
                 : QString();
 
+            // Pin the chain-steps that landed during this command
+            // onto the conversation entry so the popup can render
+            // them even after the next command resets streaming
+            // state.
+            pushConversationLilith(replyText, action, m_chainSteps);
             emit replyReceived(replyText, action, resultJson);
             w->deleteLater();
         });
+}
+
+void LilithBridge::resetConversation()
+{
+    if (m_iface) {
+        // Best-effort; nothing actionable on error since the local
+        // conversation reset still proceeds.
+        m_iface->asyncCall(QStringLiteral("Reset"));
+    }
+    if (!m_conversation.isEmpty()) {
+        m_conversation.clear();
+        emit conversationChanged();
+    }
+    resetStreamingState();
+}
+
+void LilithBridge::pushConversationUser(const QString& text)
+{
+    QVariantMap entry;
+    entry.insert(QStringLiteral("role"), QStringLiteral("user"));
+    entry.insert(QStringLiteral("text"), text);
+    if (m_conversation.size() >= kConversationCap) {
+        m_conversation.removeFirst();
+    }
+    m_conversation.append(entry);
+    emit conversationChanged();
+}
+
+void LilithBridge::pushConversationLilith(const QString& reply,
+                                          const QString& action,
+                                          const QVariantList& chainSteps)
+{
+    QVariantMap entry;
+    entry.insert(QStringLiteral("role"), QStringLiteral("lilith"));
+    entry.insert(QStringLiteral("text"), reply);
+    if (!action.isEmpty()) {
+        entry.insert(QStringLiteral("action"), action);
+    }
+    if (!chainSteps.isEmpty()) {
+        entry.insert(QStringLiteral("chainSteps"), chainSteps);
+    }
+    if (m_conversation.size() >= kConversationCap) {
+        m_conversation.removeFirst();
+    }
+    m_conversation.append(entry);
+    emit conversationChanged();
 }
 
 void LilithBridge::setReachable(bool v)
