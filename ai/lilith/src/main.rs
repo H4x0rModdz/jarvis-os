@@ -9,6 +9,7 @@ mod proactive;
 mod proactive_rules;
 mod settings;
 mod signals;
+mod summarizer;
 mod tools;
 mod turn_store;
 
@@ -690,6 +691,15 @@ async fn main() -> anyhow::Result<()> {
     // by default if the user opts out via `lilith.proactive_enabled`
     // (TODO: wire the settings read; for V1 we always run).
     spawn_proactive_loop(conn.clone());
+
+    // Auto-summarizer — every 5 min, if turns count > TRIGGER_AT,
+    // compresses the oldest batch via Ollama into a single
+    // summaries row. Keeps the live table bounded + preserves
+    // long-term context (the summary lands in the Ollama prompt
+    // on subsequent turns via #174). Both Arc clones live for the
+    // process lifetime — spawn returns nothing because the loop
+    // is detached.
+    summarizer::spawn_loop(turn_store.clone(), ollama.clone());
 
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;

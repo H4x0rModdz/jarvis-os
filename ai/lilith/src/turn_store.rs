@@ -35,6 +35,20 @@ pub struct StoredTurn {
     pub turn: Turn,
 }
 
+/// A summary row — one chunk of old conversation compressed by the
+/// LLM. The shell never sees these directly; they get injected into
+/// the Ollama context as a single system note ("past conversation:
+/// <text>") so the assistant retains long-term context after the
+/// raw turns get pruned.
+#[derive(Debug, Clone, Serialize)]
+pub struct Summary {
+    pub id: i64,
+    pub ts_from: i64,
+    pub ts_to: i64,
+    pub turn_count: i64,
+    pub text: String,
+}
+
 impl TurnStore {
     pub fn open(path: &Path) -> Result<Self, LilithError> {
         if let Some(parent) = path.parent() {
@@ -72,7 +86,16 @@ impl TurnStore {
                 action_response_json  TEXT,
                 reply_text            TEXT    NOT NULL
             );
-            CREATE INDEX IF NOT EXISTS idx_turns_ts ON turns(ts DESC);",
+            CREATE INDEX IF NOT EXISTS idx_turns_ts ON turns(ts DESC);
+
+            CREATE TABLE IF NOT EXISTS summaries (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts_from     INTEGER NOT NULL,
+                ts_to       INTEGER NOT NULL,
+                turn_count  INTEGER NOT NULL,
+                text        TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_summaries_ts ON summaries(ts_to DESC);",
         )
         .map_err(sql_err)?;
 
@@ -270,12 +293,86 @@ impl TurnStore {
         Ok(n)
     }
 
-    #[cfg(test)]
+    /// Total live turns. Used by the auto-summary job to decide
+    /// whether the store has grown enough to compress.
     pub fn count(&self) -> Result<i64, LilithError> {
         let conn = self.conn.lock().unwrap();
         conn.query_row("SELECT COUNT(*) FROM turns", [], |row| row.get(0))
             .map_err(sql_err)
     }
+
+    /// Oldest `n` turns, id ASC. The summary job feeds these to
+    /// Ollama and then deletes them by `id <= max_id`.
+    pub fn oldest(&self, n: usize) -> Result<Vec<StoredTurn>, LilithError> {
+        let conn = self.conn.lock().unwrap();
+        let n = n.min(i64::MAX as usize) as i64;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, ts, user_text, tool_call_json, action_response_json, reply_text
+                 FROM turns ORDER BY id ASC LIMIT ?1",
+            )
+            .map_err(sql_err)?;
+        let rows = stmt
+            .query_map(params![n], row_to_stored_turn)
+            .map_err(sql_err)?;
+        Ok(rows.filter_map(Result::ok).collect())
+    }
+
+    /// Delete turns whose id is `<= max_id`. The summary job calls
+    /// this after a successful Ollama round-trip so the same range
+    /// can't be re-summarised on the next pass.
+    pub fn delete_through(&self, max_id: i64) -> Result<usize, LilithError> {
+        let conn = self.conn.lock().unwrap();
+        let n = conn
+            .execute("DELETE FROM turns WHERE id <= ?1", params![max_id])
+            .map_err(sql_err)?;
+        Ok(n)
+    }
+
+    /// Record a summary. The summary spans `ts_from..=ts_to` and
+    /// represents `turn_count` original turns.
+    pub fn record_summary(
+        &self,
+        ts_from: i64,
+        ts_to: i64,
+        turn_count: i64,
+        text: &str,
+    ) -> Result<i64, LilithError> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO summaries (ts_from, ts_to, turn_count, text)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![ts_from, ts_to, turn_count, text],
+        )
+        .map_err(sql_err)?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Most-recent summary by ts_to, if any. Used by the context
+    /// builder (#174) to prepend "past conversation" to the
+    /// Ollama prompt.
+    pub fn latest_summary(&self) -> Result<Option<Summary>, LilithError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, ts_from, ts_to, turn_count, text
+                 FROM summaries ORDER BY ts_to DESC LIMIT 1",
+            )
+            .map_err(sql_err)?;
+        let row = stmt
+            .query_row([], |row| {
+                Ok(Summary {
+                    id: row.get(0)?,
+                    ts_from: row.get(1)?,
+                    ts_to: row.get(2)?,
+                    turn_count: row.get(3)?,
+                    text: row.get(4)?,
+                })
+            })
+            .ok();
+        Ok(row)
+    }
+
 }
 
 fn sql_err(e: rusqlite::Error) -> LilithError {
