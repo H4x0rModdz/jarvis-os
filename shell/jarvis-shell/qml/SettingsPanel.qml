@@ -224,6 +224,65 @@ Window {
                 }
             }
 
+            // ── Sub-row: Lilith fala em voz alta ──────────────────────
+            // Indented + visually slaved to the proativa toggle: when
+            // proativa is off, this row dims out (no proactive →
+            // no speech to gate).
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 24
+                spacing: 12
+                opacity: proactiveSwitch.checked ? 1.0 : 0.45
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: qsTr("Falar em voz alta")
+                        color: Theme.text
+                        font.pixelSize: 13
+                    }
+                    Text {
+                        text: qsTr("Avisos críticos (bateria crítica, etc.) tocam pela TTS além do banner. Avisos comuns ficam silenciosos.")
+                        color: Theme.textDim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Rectangle {
+                    id: proactiveSpeaksSwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 40
+                    implicitHeight: 22
+                    radius: 11
+                    enabled: proactiveSwitch.checked
+                    property bool checked: (root._settingsTick, SettingsBridge.getBool("lilith.proactive_speaks", true))
+                    color: checked ? Theme.accent : Qt.rgba(1, 1, 1, 0.08)
+                    border.color: checked ? Theme.accent : Theme.border
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                    Rectangle {
+                        width: 16; height: 16; radius: 8
+                        color: Theme.text
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: parent.checked ? parent.width - width - 3 : 3
+                        Behavior on x { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        enabled: proactiveSwitch.checked
+                        onClicked: {
+                            const next = !proactiveSpeaksSwitch.checked;
+                            SettingsBridge.setBool("lilith.proactive_speaks", next);
+                        }
+                    }
+                }
+            }
+
             // ── Row: Hotword toggle ──────────────────────────────────
             RowLayout {
                 Layout.fillWidth: true
