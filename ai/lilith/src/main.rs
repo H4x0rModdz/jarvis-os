@@ -194,7 +194,15 @@ impl LilithService {
         const MAX_STEPS: usize = 4;
 
         let history = self.memory.recent(HISTORY_TURNS);
-        let mut messages = build_initial_messages(text, &history);
+        // Latest compressed-history blob, if the summarizer has fired
+        // at least once for this user. None when the store is fresh
+        // or no batch crossed the threshold yet.
+        let summary_text = self
+            .memory
+            .store()
+            .and_then(|s| s.latest_summary().ok().flatten())
+            .map(|s| s.text);
+        let mut messages = build_initial_messages(text, &history, summary_text.as_deref());
 
         // Per-step state we update as the loop progresses; final reply
         // pulls from these when we exit either with a text answer or

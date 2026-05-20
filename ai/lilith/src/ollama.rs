@@ -175,17 +175,40 @@ impl OllamaClient {
         history: &[Turn],
         tools: &[Tool],
     ) -> Result<OllamaReply, LilithError> {
-        let messages = build_initial_messages(user_text, history);
+        let messages = build_initial_messages(user_text, history, None);
         self.chat_messages(&messages, tools, None).await
     }
 }
 
 /// Build the messages list for the first call of a turn: system prompt
-/// + flattened history + current user text. The tool-chain loop in
-/// `main.rs` extends this list with assistant/tool entries as it goes.
-pub fn build_initial_messages(user_text: &str, history: &[Turn]) -> Vec<Value> {
-    let mut messages: Vec<Value> = Vec::with_capacity(2 + history.len() * 2);
+/// + (optional) long-term summary + flattened history + current
+/// user text. The tool-chain loop in `main.rs` extends this list
+/// with assistant/tool entries as it goes.
+///
+/// `summary` is the latest Memory-V3 compressed-history blob. When
+/// present we add a second system message right after SYSTEM_PROMPT
+/// recapping the older conversation that's no longer in `history`.
+/// Keeping it as system role (vs. user) signals to the model that
+/// it's contextual not a new request.
+pub fn build_initial_messages(
+    user_text: &str,
+    history: &[Turn],
+    summary: Option<&str>,
+) -> Vec<Value> {
+    let mut messages: Vec<Value> = Vec::with_capacity(3 + history.len() * 2);
     messages.push(json!({ "role": "system", "content": SYSTEM_PROMPT }));
+    if let Some(s) = summary {
+        let trimmed = s.trim();
+        if !trimmed.is_empty() {
+            messages.push(json!({
+                "role": "system",
+                "content": format!(
+                    "Resumo de conversas anteriores com este usuário:\n{trimmed}\n\
+                     Use isso como contexto se relevante."
+                ),
+            }));
+        }
+    }
     for turn in history {
         messages.push(json!({ "role": "user", "content": turn.user_text }));
         messages.push(json!({
@@ -319,4 +342,47 @@ struct OllamaFunction {
 pub struct OllamaReply {
     pub text: String,
     pub tool_calls: Vec<ToolCall>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_initial_messages_without_summary_starts_with_system_then_user() {
+        let messages = build_initial_messages("oi", &[], None);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[0]["content"], SYSTEM_PROMPT);
+        assert_eq!(messages[1]["role"], "user");
+        assert_eq!(messages[1]["content"], "oi");
+    }
+
+    #[test]
+    fn build_initial_messages_injects_summary_after_system_prompt() {
+        let messages = build_initial_messages(
+            "lembra?",
+            &[],
+            Some("usuário gosta de Rust; mora em São Paulo."),
+        );
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[0]["content"], SYSTEM_PROMPT);
+        // Summary is its own system message immediately after.
+        assert_eq!(messages[1]["role"], "system");
+        let s = messages[1]["content"].as_str().unwrap();
+        assert!(s.contains("Resumo de conversas anteriores"));
+        assert!(s.contains("Rust"));
+        assert!(s.contains("São Paulo"));
+        assert_eq!(messages[2]["role"], "user");
+    }
+
+    #[test]
+    fn build_initial_messages_empty_summary_does_not_add_a_message() {
+        // Whitespace-only summary should be treated like None.
+        let messages = build_initial_messages("oi", &[], Some("   \n  "));
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages[1]["role"], "user");
+    }
 }
