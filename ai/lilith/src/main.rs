@@ -780,4 +780,238 @@ mod tests {
         // Random non-help text:
         assert!(!intent::is_help_query("abrir o gmail"));
     }
+
+    // ── Full process() integration tests ─────────────────────────────
+
+    /// Records (step, payload) tuples instead of emitting DBus signals.
+    /// Tests assert against these to verify the chain loop emitted
+    /// the right sequence (which the production UI binds to).
+    #[derive(Default)]
+    struct RecordingSink {
+        partials: StdMutex<Vec<(u32, String)>>,
+        chain_steps: StdMutex<Vec<(u32, String)>>,
+    }
+
+    impl RecordingSink {
+        fn chain_steps_seen(&self) -> Vec<(u32, String)> {
+            self.chain_steps.lock().unwrap().clone()
+        }
+    }
+
+    #[async_trait]
+    impl SignalSink for RecordingSink {
+        async fn partial_reply(&self, step: u32, chunk: &str) {
+            self.partials.lock().unwrap().push((step, chunk.into()));
+        }
+        async fn chain_step(&self, step: u32, action: &str) {
+            self.chain_steps.lock().unwrap().push((step, action.into()));
+        }
+    }
+
+    fn tool_call_reply(action: &str, params: Value) -> OllamaReply {
+        OllamaReply {
+            text: String::new(),
+            tool_calls: vec![ToolCall {
+                action: action.into(),
+                params,
+            }],
+        }
+    }
+
+    fn text_reply(text: &str) -> OllamaReply {
+        OllamaReply {
+            text: text.into(),
+            tool_calls: Vec::new(),
+        }
+    }
+
+    fn success_response(action: &str, result: Value) -> Value {
+        json!({
+            "action": action,
+            "status": "success",
+            "duration_ms": 1,
+            "result": result,
+        })
+    }
+
+    #[tokio::test]
+    async fn process_help_path_short_circuits() {
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let sink: Arc<dyn SignalSink> = Arc::new(RecordingSink::default());
+        let service = build_service(ollama.clone(), bus.clone());
+
+        let resp = service.process("/help", sink.clone()).await;
+
+        assert!(resp["reply"]
+            .as_str()
+            .unwrap_or("")
+            .contains("abrir"));
+        assert_eq!(ollama.calls(), 0);
+        assert!(bus.calls().is_empty());
+    }
+
+    #[tokio::test]
+    async fn process_rule_path_dispatches_via_bus() {
+        // "abrir firefox" matches the app.open rule in intent.rs.
+        let ollama = Arc::new(MockOllama::new(vec![]));
+        let bus = Arc::new(MockBus::new(vec![success_response(
+            "app.open",
+            json!({ "launched": true }),
+        )]));
+        let sink: Arc<dyn SignalSink> = Arc::new(RecordingSink::default());
+        let service = build_service(ollama.clone(), bus.clone());
+
+        let resp = service.process("abrir firefox", sink).await;
+
+        assert_eq!(resp["action"], "app.open");
+        // Rule path skips Ollama entirely.
+        assert_eq!(ollama.calls(), 0);
+        // Single bus dispatch.
+        assert_eq!(bus.calls().len(), 1);
+        assert_eq!(bus.calls()[0].action, "app.open");
+    }
+
+    #[tokio::test]
+    async fn process_ollama_text_only() {
+        // Ollama returns plain text with no tool calls — chat-only.
+        let ollama = Arc::new(MockOllama::new(vec![text_reply("Tudo bem por aqui.")]));
+        let bus = Arc::new(MockBus::new(vec![]));
+        let sink_concrete = Arc::new(RecordingSink::default());
+        let sink: Arc<dyn SignalSink> = sink_concrete.clone();
+        let service = build_service(ollama.clone(), bus.clone());
+
+        // A query that doesn't match any rule + isn't help.
+        let resp = service.process("tudo bem com você?", sink).await;
+
+        assert_eq!(resp["reply"], "Tudo bem por aqui.");
+        assert_eq!(resp["action"], Value::Null);
+        // One Ollama call, no bus dispatch, no chain_step signals.
+        assert_eq!(ollama.calls(), 1);
+        assert!(bus.calls().is_empty());
+        assert!(sink_concrete.chain_steps_seen().is_empty());
+    }
+
+    #[tokio::test]
+    async fn process_single_tool_call_then_text() {
+        // First Ollama call: tool. Second: text wrap-up.
+        let ollama = Arc::new(MockOllama::new(vec![
+            tool_call_reply("browser.open", json!({ "url": "https://example.com" })),
+            text_reply("Pronto, abri o site."),
+        ]));
+        let bus = Arc::new(MockBus::new(vec![success_response(
+            "browser.open",
+            json!({ "opened": true }),
+        )]));
+        let sink_concrete = Arc::new(RecordingSink::default());
+        let sink: Arc<dyn SignalSink> = sink_concrete.clone();
+        let service = build_service(ollama.clone(), bus.clone());
+
+        let resp = service.process("abre example.com", sink).await;
+
+        assert_eq!(resp["reply"], "Pronto, abri o site.");
+        // Two Ollama calls (initial + post-tool wrap-up), one bus
+        // dispatch, one chain_step signal at index 0.
+        assert_eq!(ollama.calls(), 2);
+        assert_eq!(bus.calls().len(), 1);
+        assert_eq!(bus.calls()[0].action, "browser.open");
+        let steps = sink_concrete.chain_steps_seen();
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0], (0, "browser.open".to_string()));
+    }
+
+    #[tokio::test]
+    async fn process_multi_step_chain() {
+        // Screenshot → app.open chain — the canonical compound request.
+        let ollama = Arc::new(MockOllama::new(vec![
+            tool_call_reply("screenshot.capture", json!({})),
+            tool_call_reply("app.open", json!({ "app": "feh" })),
+            text_reply("Print salvo e aberto no visualizador."),
+        ]));
+        let bus = Arc::new(MockBus::new(vec![
+            success_response("screenshot.capture", json!({ "path": "/tmp/shot.png" })),
+            success_response("app.open", json!({ "launched": true })),
+        ]));
+        let sink_concrete = Arc::new(RecordingSink::default());
+        let sink: Arc<dyn SignalSink> = sink_concrete.clone();
+        let service = build_service(ollama.clone(), bus.clone());
+
+        let resp = service
+            .process("tira um print e abre no visualizador", sink)
+            .await;
+
+        assert_eq!(resp["reply"], "Print salvo e aberto no visualizador.");
+        assert_eq!(ollama.calls(), 3);
+        assert_eq!(bus.calls().len(), 2);
+        let steps = sink_concrete.chain_steps_seen();
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0].1, "screenshot.capture");
+        assert_eq!(steps[1].1, "app.open");
+        // Each step gets its own session-memory Turn (Phase 9
+        // promise) so cross-turn follow-ups see the full chain.
+        assert_eq!(service.memory.recent(8).len(), 2);
+    }
+
+    #[tokio::test]
+    async fn process_step_cap_hit() {
+        // Ollama keeps emitting tool calls past the MAX_STEPS=4 cap.
+        // Loop exits at step 4 with a "(parei após 4 passos)" reply.
+        let mut replies = Vec::new();
+        for _ in 0..6 {
+            replies.push(tool_call_reply("app.open", json!({ "app": "firefox" })));
+        }
+        let ollama = Arc::new(MockOllama::new(replies));
+        let bus = Arc::new(MockBus::new(
+            (0..6)
+                .map(|_| success_response("app.open", json!({ "launched": true })))
+                .collect(),
+        ));
+        let sink_concrete = Arc::new(RecordingSink::default());
+        let sink: Arc<dyn SignalSink> = sink_concrete.clone();
+        let service = build_service(ollama.clone(), bus.clone());
+
+        let resp = service.process("loop forever", sink).await;
+
+        assert!(resp["reply"]
+            .as_str()
+            .unwrap_or("")
+            .contains("parei após"));
+        // Exactly 4 chain steps, even though the mock had 6 ready.
+        assert_eq!(sink_concrete.chain_steps_seen().len(), 4);
+        assert_eq!(bus.calls().len(), 4);
+    }
+
+    #[tokio::test]
+    async fn process_ollama_error_falls_back() {
+        // Custom MockOllama that always errors. Re-using MockOllama
+        // would need an empty replies list — but that panics in the
+        // mock. Easier to make a one-off error implementor here.
+        struct ErrorOllama;
+        #[async_trait]
+        impl Ollama for ErrorOllama {
+            async fn chat_messages(
+                &self,
+                _messages: &[Value],
+                _tools: &[Tool],
+                _chunks: Option<tokio::sync::mpsc::UnboundedSender<String>>,
+            ) -> Result<OllamaReply, error::LilithError> {
+                Err(error::LilithError::OllamaUnreachable("simulated".into()))
+            }
+        }
+
+        let ollama = Arc::new(ErrorOllama);
+        let bus = Arc::new(MockBus::new(vec![]));
+        let sink: Arc<dyn SignalSink> = Arc::new(RecordingSink::default());
+        let service = build_service(ollama, bus.clone());
+
+        let resp = service.process("comando aleatório", sink).await;
+
+        // Fallback path returns the canned "não entendi" reply.
+        assert!(resp["reply"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Não entendi"));
+        assert_eq!(resp["action"], Value::Null);
+        assert!(bus.calls().is_empty());
+    }
 }

@@ -90,12 +90,13 @@ module in `main.rs` ships `MockOllama` (scripted replies) and
 bookkeeping, and the in-process `memory.*` tools are covered without
 a live DBus or Ollama instance.
 
-Full `process()` integration tests (which would exercise the
-multi-step chain loop end-to-end) are still pending: the loop emits
-`PartialReply` and `ChainStep` signals through a `SignalContext`
-that's hard to fake. A future commit will introduce a `SignalSink`
-trait with a no-op test impl so the chain loop becomes testable
-end-to-end.
+Phase 13 closed the integration-test gap. `signals.rs` defines the
+`SignalSink` trait; production wires it as `DbusSignalSink`
+(wrapping the zbus `SignalContext`), tests use `RecordingSink` which
+captures `(step, payload)` tuples. The chain loop now has scenario
+coverage: rule path, help, plain text, single-tool + text wrap-up,
+multi-step chain (screenshot → app.open), step-cap hit, Ollama
+error fallback.
 
 ## Failure modes
 
