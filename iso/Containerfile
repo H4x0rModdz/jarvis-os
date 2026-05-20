@@ -221,6 +221,20 @@ RUN dnf -y install \
 RUN flatpak remote-add --if-not-exists flathub \
         https://flathub.org/repo/flathub.flatpakrepo
 
+# Pre-install Firefox so the first boot has a working browser even
+# when the user hasn't connected to Wi-Fi yet. Adds ~200 MB to the
+# image (Firefox + Freedesktop runtime) but makes "open the browser"
+# work out of the box.
+#
+# --system installs into /var/lib/flatpak which is writable on bootc;
+# --no-related skips pre-installing the locale extensions (they'd add
+# another ~100 MB without much benefit on a pt-BR default).
+# The .desktop file lands in /var/lib/flatpak/exports/share/applications,
+# which is already in XDG_DATA_DIRS via iso/assets/launchers/jarvis-
+# session-launch — so the launcher grid (Phase 3 polish) picks it up.
+RUN flatpak install --system --noninteractive --no-related -y \
+        flathub org.mozilla.firefox
+
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.
 RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \
