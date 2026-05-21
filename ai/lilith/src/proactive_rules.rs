@@ -14,7 +14,7 @@
 //! different signal than "user hasn't typed for 5 min". A future
 //! commit will add a Wayland-portable idle source.
 
-use crate::proactive::{BatteryState, Nudge, Probe, Rule, Signals, Urgency};
+use crate::proactive::{BatteryState, EdgeRule, Nudge, Probe, Rule, Signals, Urgency};
 use async_trait::async_trait;
 use std::time::Duration;
 use zbus::Connection;
@@ -100,6 +100,54 @@ pub fn system_rules() -> Vec<Rule> {
                              Fechar algumas abas do navegador ajuda."
                         ),
                         urgency: Urgency::Warning,
+                    })
+                } else {
+                    None
+                }
+            },
+        },
+    ]
+}
+
+/// Edge-triggered network rules. Use `EdgeRule` so they only
+/// fire on actual transitions — without that, the loop would
+/// emit "wifi caiu" every 30 s while the user is offline.
+///
+/// Cooldown is short (60 s) on both — the only way they could
+/// re-fire that quickly is genuine flapping, in which case the
+/// user probably wants to know.
+pub fn network_rules() -> Vec<EdgeRule> {
+    vec![
+        EdgeRule {
+            name: "network_lost",
+            cooldown: Duration::from_secs(60),
+            check: |current, previous| {
+                let prev = previous?;
+                let prev_online = prev.has_connectivity?;
+                let now_online = current.has_connectivity?;
+                if prev_online && !now_online {
+                    Some(Nudge {
+                        rule: "network_lost",
+                        text: "Sem internet. Verifique o Wi-Fi.".into(),
+                        urgency: Urgency::Warning,
+                    })
+                } else {
+                    None
+                }
+            },
+        },
+        EdgeRule {
+            name: "network_restored",
+            cooldown: Duration::from_secs(60),
+            check: |current, previous| {
+                let prev = previous?;
+                let prev_online = prev.has_connectivity?;
+                let now_online = current.has_connectivity?;
+                if !prev_online && now_online {
+                    Some(Nudge {
+                        rule: "network_restored",
+                        text: "Internet de volta.".into(),
+                        urgency: Urgency::Info,
                     })
                 } else {
                     None
@@ -389,5 +437,53 @@ mod tests {
         let mut eng = ProactiveEngine::new(system_rules());
         let nudges = eng.evaluate(&mem_only(60.0, Some(10.0)));
         assert!(nudges.is_empty());
+    }
+
+    // ── network rules (edge-triggered) ─────────────────────────────
+
+    fn conn(has_internet: bool) -> Signals {
+        Signals {
+            has_connectivity: Some(has_internet),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn network_lost_fires_on_online_to_offline_transition() {
+        let mut eng = ProactiveEngine::with_edge_rules(vec![], network_rules());
+        // Tick 1: online (warms the prev_signals).
+        let warm = eng.evaluate(&conn(true));
+        assert!(warm.is_empty());
+        // Tick 2: offline → fire network_lost.
+        let nudges = eng.evaluate(&conn(false));
+        assert_eq!(nudges.len(), 1);
+        assert_eq!(nudges[0].rule, "network_lost");
+        assert_eq!(nudges[0].urgency, Urgency::Warning);
+    }
+
+    #[test]
+    fn network_restored_fires_on_offline_to_online_transition() {
+        let mut eng = ProactiveEngine::with_edge_rules(vec![], network_rules());
+        eng.evaluate(&conn(false)); // warm
+        let nudges = eng.evaluate(&conn(true));
+        assert_eq!(nudges.len(), 1);
+        assert_eq!(nudges[0].rule, "network_restored");
+        assert_eq!(nudges[0].urgency, Urgency::Info);
+    }
+
+    #[test]
+    fn no_network_nudge_on_first_tick() {
+        // Booting offline shouldn't fire — we never saw a transition.
+        let mut eng = ProactiveEngine::with_edge_rules(vec![], network_rules());
+        let nudges = eng.evaluate(&conn(false));
+        assert!(nudges.is_empty());
+    }
+
+    #[test]
+    fn no_network_nudge_on_steady_state() {
+        let mut eng = ProactiveEngine::with_edge_rules(vec![], network_rules());
+        eng.evaluate(&conn(true));
+        let nudges = eng.evaluate(&conn(true));
+        assert!(nudges.is_empty(), "online → online is no transition");
     }
 }

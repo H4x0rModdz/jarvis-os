@@ -722,7 +722,8 @@ async fn main() -> anyhow::Result<()> {
 /// runtime collects it).
 fn spawn_proactive_loop(conn: zbus::Connection) {
     use proactive::{CompositeProbe, Probe, ProactiveEngine};
-    use proactive_rules::{battery_rules, system_rules, UPowerProbe};
+    use proactive_network::NetworkProbe;
+    use proactive_rules::{battery_rules, network_rules, system_rules, UPowerProbe};
     use proactive_system::SystemProbe;
 
     tokio::spawn(async move {
@@ -736,19 +737,25 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
                 return;
             }
         };
-        // Composite probe fans out to UPower (battery) + the
-        // /proc-backed SystemProbe (disk/mem/swap). Each owns
-        // different Signals fields; the merge picks non-None
-        // values so a failing probe just leaves its slice unset.
+        // Composite probe fans out to UPower (battery) +
+        // SystemProbe (disk/mem/swap) + NetworkProbe (default
+        // route). Each owns different Signals fields; the merge
+        // picks non-None values so a failing probe just leaves
+        // its slice unset.
         let upower: std::sync::Arc<dyn Probe> = std::sync::Arc::new(UPowerProbe);
         let system: std::sync::Arc<dyn Probe> = std::sync::Arc::new(SystemProbe);
-        let probe: std::sync::Arc<dyn Probe> =
-            std::sync::Arc::new(CompositeProbe::new(vec![upower, system]));
-        // Concat the rule sets — engine treats them uniformly,
-        // each with its own cooldown stamp.
-        let mut rules = battery_rules();
-        rules.extend(system_rules());
-        let mut engine = ProactiveEngine::new(rules);
+        let network: std::sync::Arc<dyn Probe> = std::sync::Arc::new(NetworkProbe);
+        let probe: std::sync::Arc<dyn Probe> = std::sync::Arc::new(
+            CompositeProbe::new(vec![upower, system, network]),
+        );
+        // Stateless rules (battery + system) and edge rules
+        // (network) feed the engine separately. Engine tracks the
+        // previous-tick Signals internally so edge rules can see
+        // transitions.
+        let mut stateless = battery_rules();
+        stateless.extend(system_rules());
+        let mut engine =
+            ProactiveEngine::with_edge_rules(stateless, network_rules());
 
         // 30 s tick. Tight enough that a 100% → 5% drop triggers
         // within half a minute; loose enough that the daemon spends
