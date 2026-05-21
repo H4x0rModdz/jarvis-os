@@ -110,8 +110,14 @@ mod tests {
         let signals = probe.snapshot().await;
         #[cfg(target_os = "linux")]
         {
-            assert!(signals.mem_free_pct.is_some(), "mem_free_pct should populate on linux");
-            assert!(signals.disk_root_free_pct.is_some(), "disk_root_free_pct should populate on linux");
+            assert!(
+                signals.mem_free_pct.is_some(),
+                "mem_free_pct should populate on linux"
+            );
+            assert!(
+                signals.disk_root_free_pct.is_some(),
+                "disk_root_free_pct should populate on linux"
+            );
             let m = signals.mem_free_pct.unwrap();
             assert!(m >= 0.0 && m <= 100.0, "mem pct out of range: {m}");
             let d = signals.disk_root_free_pct.unwrap();

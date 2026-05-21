@@ -407,32 +407,52 @@ mod tests {
         assert!(path.ends_with("/Downloads"), "path was {path}");
 
         let call = parse("open documents").unwrap();
-        assert!(call.params["app"].as_str().unwrap_or("").ends_with("/Documents"));
+        assert!(call.params["app"]
+            .as_str()
+            .unwrap_or("")
+            .ends_with("/Documents"));
 
         let call = parse("abrir música").unwrap();
-        assert!(call.params["app"].as_str().unwrap_or("").ends_with("/Music"));
+        assert!(call.params["app"]
+            .as_str()
+            .unwrap_or("")
+            .ends_with("/Music"));
 
         let call = parse("abrir vídeos").unwrap();
-        assert!(call.params["app"].as_str().unwrap_or("").ends_with("/Videos"));
+        assert!(call.params["app"]
+            .as_str()
+            .unwrap_or("")
+            .ends_with("/Videos"));
     }
 
     #[test]
     fn calc_extracts_expression() {
-        assert_eq!(extract_calc_expression("quanto é 2 + 2"),
-                   Some("2 + 2".into()));
-        assert_eq!(extract_calc_expression("quanto é 3 metros + 4 pés"),
-                   Some("3 metros + 4 pés".into()));
+        assert_eq!(
+            extract_calc_expression("quanto é 2 + 2"),
+            Some("2 + 2".into())
+        );
+        assert_eq!(
+            extract_calc_expression("quanto é 3 metros + 4 pés"),
+            Some("3 metros + 4 pés".into())
+        );
         // Trailing punctuation should be stripped.
-        assert_eq!(extract_calc_expression("quanto é 5 * 5?"),
-                   Some("5 * 5".into()));
-        assert_eq!(extract_calc_expression("calcular 2^10"),
-                   Some("2^10".into()));
-        assert_eq!(extract_calc_expression("calc 1+1"),
-                   Some("1+1".into()));
-        assert_eq!(extract_calc_expression("converter 50 milhas para km"),
-                   Some("50 milhas para km".into()));
-        assert_eq!(extract_calc_expression("what is 1024 / 16"),
-                   Some("1024 / 16".into()));
+        assert_eq!(
+            extract_calc_expression("quanto é 5 * 5?"),
+            Some("5 * 5".into())
+        );
+        assert_eq!(
+            extract_calc_expression("calcular 2^10"),
+            Some("2^10".into())
+        );
+        assert_eq!(extract_calc_expression("calc 1+1"), Some("1+1".into()));
+        assert_eq!(
+            extract_calc_expression("converter 50 milhas para km"),
+            Some("50 milhas para km".into())
+        );
+        assert_eq!(
+            extract_calc_expression("what is 1024 / 16"),
+            Some("1024 / 16".into())
+        );
         // Empty body → None (the regex requires non-empty expr).
         assert_eq!(extract_calc_expression("calcular"), None);
         // Non-calc questions → None.

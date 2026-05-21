@@ -258,10 +258,7 @@ fn decode_battery_state(code: u32) -> BatteryState {
 
 async fn read_property<T>(conn: &Connection, name: &str) -> Option<T>
 where
-    T: zbus::zvariant::Type
-        + for<'de> serde::de::Deserialize<'de>
-        + std::fmt::Debug
-        + 'static,
+    T: zbus::zvariant::Type + for<'de> serde::de::Deserialize<'de> + std::fmt::Debug + 'static,
 {
     let proxy = zbus::fdo::PropertiesProxy::builder(conn)
         .destination(UPOWER_SERVICE)
@@ -429,7 +426,10 @@ mod tests {
         let mut eng = ProactiveEngine::new(system_rules());
         let nudges = eng.evaluate(&mem_only(3.0, Some(80.0)));
         let low: Vec<_> = nudges.iter().filter(|n| n.rule == "memory_low").collect();
-        assert!(low.is_empty(), "memory_low must not double-fire with critical");
+        assert!(
+            low.is_empty(),
+            "memory_low must not double-fire with critical"
+        );
     }
 
     #[test]

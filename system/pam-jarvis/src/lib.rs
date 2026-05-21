@@ -158,9 +158,7 @@ mod tests {
     /// must always return PAM_IGNORE so accidental misuse is safe.
     #[test]
     fn authenticate_null_pamh_returns_ignore() {
-        let r = unsafe {
-            pam_sm_authenticate(std::ptr::null_mut(), 0, 0, std::ptr::null())
-        };
+        let r = unsafe { pam_sm_authenticate(std::ptr::null_mut(), 0, 0, std::ptr::null()) };
         assert_eq!(r, PAM_IGNORE);
     }
 

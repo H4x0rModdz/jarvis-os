@@ -414,8 +414,7 @@ mod tests {
     fn edge_rule_does_not_fire_on_first_tick() {
         // First call: prev is None — transition rule should NOT fire
         // (no prior state to transition from).
-        let mut eng =
-            ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
+        let mut eng = ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
         let s = Signals {
             has_connectivity: Some(false),
             ..Default::default()
@@ -426,8 +425,7 @@ mod tests {
 
     #[test]
     fn edge_rule_fires_on_true_to_false_transition() {
-        let mut eng =
-            ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
+        let mut eng = ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
         // Tick 1: online.
         let online = Signals {
             has_connectivity: Some(true),
@@ -446,14 +444,13 @@ mod tests {
 
     #[test]
     fn edge_rule_no_fire_when_steady_state() {
-        let mut eng =
-            ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
+        let mut eng = ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
         let offline = Signals {
             has_connectivity: Some(false),
             ..Default::default()
         };
         eng.evaluate(&offline); // first tick — no prev
-        // Second tick still offline; no transition.
+                                // Second tick still offline; no transition.
         let nudges = eng.evaluate(&offline);
         assert!(nudges.is_empty(), "no transition → no fire");
     }
@@ -483,8 +480,10 @@ mod tests {
             }
         }
 
-        let composite =
-            CompositeProbe::new(vec![std::sync::Arc::new(First), std::sync::Arc::new(Second)]);
+        let composite = CompositeProbe::new(vec![
+            std::sync::Arc::new(First),
+            std::sync::Arc::new(Second),
+        ]);
         let s = composite.snapshot().await;
         assert_eq!(s.mem_free_pct, Some(90.0), "later probe should win");
     }

@@ -25,8 +25,14 @@ const NMCLI: &str = "nmcli";
 /// invoking this action want fresh data, not the cached list.
 pub async fn scan(_params: Value) -> Result<Value, BusError> {
     let out = run_nmcli(&[
-        "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
-        "device", "wifi", "list", "--rescan", "yes",
+        "-t",
+        "-f",
+        "IN-USE,SSID,SIGNAL,SECURITY",
+        "device",
+        "wifi",
+        "list",
+        "--rescan",
+        "yes",
     ])
     .await?;
     Ok(json!({ "networks": parse_wifi_list(&out) }))
@@ -36,8 +42,12 @@ pub async fn scan(_params: Value) -> Result<Value, BusError> {
 /// the caller wants "what's around right now" without the latency.
 pub async fn list(_params: Value) -> Result<Value, BusError> {
     let out = run_nmcli(&[
-        "-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY",
-        "device", "wifi", "list",
+        "-t",
+        "-f",
+        "IN-USE,SSID,SIGNAL,SECURITY",
+        "device",
+        "wifi",
+        "list",
     ])
     .await?;
     Ok(json!({ "networks": parse_wifi_list(&out) }))
@@ -69,8 +79,12 @@ pub async fn disconnect(_params: Value) -> Result<Value, BusError> {
     // first; passing the SSID itself to `nmcli device disconnect`
     // doesn't work (it takes a device, not a connection name).
     let active = run_nmcli(&[
-        "-t", "-f", "NAME,TYPE,DEVICE",
-        "connection", "show", "--active",
+        "-t",
+        "-f",
+        "NAME,TYPE,DEVICE",
+        "connection",
+        "show",
+        "--active",
     ])
     .await?;
     let device = active
@@ -153,13 +167,14 @@ fn split_nmcli_row(line: &str) -> Vec<String> {
 }
 
 async fn run_nmcli(args: &[&str]) -> Result<String, BusError> {
-    let output = Command::new(NMCLI)
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| BusError::ExecutionFailed {
-            message: format!("nmcli not available: {e}"),
-        })?;
+    let output =
+        Command::new(NMCLI)
+            .args(args)
+            .output()
+            .await
+            .map_err(|e| BusError::ExecutionFailed {
+                message: format!("nmcli not available: {e}"),
+            })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(BusError::ExecutionFailed {

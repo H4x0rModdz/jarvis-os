@@ -257,10 +257,7 @@ fn assistant_message_for(turn: &Turn) -> String {
                 serde_json::to_string(&call.params).unwrap_or_default()
             };
             if params.is_empty() {
-                format!(
-                    "[I called {}; result: {}]",
-                    call.action, turn.reply_text
-                )
+                format!("[I called {}; result: {}]", call.action, turn.reply_text)
             } else {
                 format!(
                     "[I called {}({}); result: {}]",

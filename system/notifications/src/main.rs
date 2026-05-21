@@ -115,11 +115,7 @@ impl Service {
         }
     }
 
-    async fn close_notification(
-        &self,
-        id: u32,
-        #[zbus(signal_context)] ctx: SignalContext<'_>,
-    ) {
+    async fn close_notification(&self, id: u32, #[zbus(signal_context)] ctx: SignalContext<'_>) {
         let removed = self.history.dismiss(id).unwrap_or(false);
         if removed {
             if let Err(e) = Self::notification_closed(&ctx, id, 3 /* closed by call */).await {
@@ -204,11 +200,7 @@ impl History {
     /// Drop one entry from the history buffer. UI-only — distinct
     /// from FreeDesktop's `CloseNotification` which signals the
     /// originating app.
-    async fn dismiss(
-        &self,
-        id: u32,
-        #[zbus(signal_context)] ctx: SignalContext<'_>,
-    ) -> bool {
+    async fn dismiss(&self, id: u32, #[zbus(signal_context)] ctx: SignalContext<'_>) -> bool {
         let removed = self.history.dismiss(id).unwrap_or(false);
         if removed {
             if let Err(e) = Self::history_changed(&ctx).await {

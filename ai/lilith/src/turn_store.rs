@@ -159,10 +159,7 @@ impl TurnStore {
             .tool_call
             .as_ref()
             .map(|c| serde_json::to_string(c).unwrap_or_default());
-        let action_response_json = turn
-            .action_response
-            .as_ref()
-            .map(|v| v.to_string());
+        let action_response_json = turn.action_response.as_ref().map(|v| v.to_string());
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO turns (ts, user_text, tool_call_json, action_response_json, reply_text)
@@ -372,7 +369,6 @@ impl TurnStore {
             .ok();
         Ok(row)
     }
-
 }
 
 fn sql_err(e: rusqlite::Error) -> LilithError {
@@ -482,7 +478,9 @@ mod tests {
     #[test]
     fn search_matches_reply_text() {
         let store = TurnStore::in_memory().unwrap();
-        store.append(&turn("oi", "instalei o Firefox às 3 da tarde")).unwrap();
+        store
+            .append(&turn("oi", "instalei o Firefox às 3 da tarde"))
+            .unwrap();
         let hits = store.search("firefox", 10).unwrap();
         assert_eq!(hits.len(), 1);
     }
@@ -549,7 +547,9 @@ mod tests {
         if !has_fts(&store.conn.lock().unwrap()) {
             return;
         }
-        store.append(&turn("instala o gimp por favor", "ok")).unwrap();
+        store
+            .append(&turn("instala o gimp por favor", "ok"))
+            .unwrap();
         store.append(&turn("desinstala o gimp", "feito")).unwrap();
         store.append(&turn("abrir firefox", "abrindo")).unwrap();
 

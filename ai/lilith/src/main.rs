@@ -47,11 +47,7 @@ impl LilithService {
     /// carrying each token batch as it streams in from Ollama. The
     /// final return value carries the assembled text — clients that
     /// don't subscribe to the signal still see the full response.
-    async fn command(
-        &self,
-        text: &str,
-        #[zbus(signal_context)] ctx: SignalContext<'_>,
-    ) -> String {
+    async fn command(&self, text: &str, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
         // Wrap the zbus-injected signal context in a SignalSink so
         // process()'s loop can be tested without a live connection
         // (see signals.rs + the #[cfg(test)] module below).
@@ -108,22 +104,14 @@ impl LilithService {
     /// chains (Phase 9) stay legible: text from step 0 vs. step 1
     /// can be rendered separately.
     #[zbus(signal)]
-    async fn partial_reply(
-        ctx: &SignalContext<'_>,
-        step: u32,
-        chunk: &str,
-    ) -> zbus::Result<()>;
+    async fn partial_reply(ctx: &SignalContext<'_>, step: u32, chunk: &str) -> zbus::Result<()>;
 
     /// Fired when the chain loop is about to dispatch a tool — lets
     /// the UI render "Capturando print…" / "Abrindo no editor…"
     /// inline before the tool actually finishes. `step` matches the
     /// step index on partial_reply so the shell can correlate.
     #[zbus(signal)]
-    async fn chain_step(
-        ctx: &SignalContext<'_>,
-        step: u32,
-        action: &str,
-    ) -> zbus::Result<()>;
+    async fn chain_step(ctx: &SignalContext<'_>, step: u32, action: &str) -> zbus::Result<()>;
 
     /// Lilith speaks up without being asked. Fired by the proactive
     /// engine when a rule triggers + its cooldown has elapsed. The
@@ -220,8 +208,7 @@ impl LilithService {
             // tagged with this step's index. Dropping the sender at
             // end of chat_messages closes the channel and the
             // forwarder finishes cleanly.
-            let (chunk_tx, mut chunk_rx) =
-                tokio::sync::mpsc::unbounded_channel::<String>();
+            let (chunk_tx, mut chunk_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
             let sink_for_forwarder = signals.clone();
             let step_idx = step as u32;
             let forwarder = tokio::spawn(async move {
@@ -264,7 +251,8 @@ impl LilithService {
                 } else if !last_step_reply.is_empty() {
                     last_step_reply.clone()
                 } else {
-                    "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'.".into()
+                    "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'."
+                        .into()
                 };
                 self.audit
                     .write(
@@ -311,10 +299,7 @@ impl LilithService {
             // returned so we can both feed it back to Ollama and roll
             // it into the final return.
             last_call = Some(call.clone());
-            last_response = step_value
-                .get("result")
-                .cloned()
-                .filter(|v| !v.is_null());
+            last_response = step_value.get("result").cloned().filter(|v| !v.is_null());
             last_step_reply = step_value
                 .get("reply")
                 .and_then(|r| r.as_str())
@@ -721,7 +706,7 @@ async fn main() -> anyhow::Result<()> {
 /// way out is daemon shutdown (the spawn handle is dropped + the
 /// runtime collects it).
 fn spawn_proactive_loop(conn: zbus::Connection) {
-    use proactive::{CompositeProbe, Probe, ProactiveEngine};
+    use proactive::{CompositeProbe, ProactiveEngine, Probe};
     use proactive_network::NetworkProbe;
     use proactive_rules::{battery_rules, network_rules, system_rules, UPowerProbe};
     use proactive_system::SystemProbe;
@@ -745,17 +730,15 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
         let upower: std::sync::Arc<dyn Probe> = std::sync::Arc::new(UPowerProbe);
         let system: std::sync::Arc<dyn Probe> = std::sync::Arc::new(SystemProbe);
         let network: std::sync::Arc<dyn Probe> = std::sync::Arc::new(NetworkProbe);
-        let probe: std::sync::Arc<dyn Probe> = std::sync::Arc::new(
-            CompositeProbe::new(vec![upower, system, network]),
-        );
+        let probe: std::sync::Arc<dyn Probe> =
+            std::sync::Arc::new(CompositeProbe::new(vec![upower, system, network]));
         // Stateless rules (battery + system) and edge rules
         // (network) feed the engine separately. Engine tracks the
         // previous-tick Signals internally so edge rules can see
         // transitions.
         let mut stateless = battery_rules();
         stateless.extend(system_rules());
-        let mut engine =
-            ProactiveEngine::with_edge_rules(stateless, network_rules());
+        let mut engine = ProactiveEngine::with_edge_rules(stateless, network_rules());
 
         // 30 s tick. Tight enough that a 100% → 5% drop triggers
         // within half a minute; loose enough that the daemon spends
@@ -776,8 +759,7 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
                 continue;
             }
             let signals = probe.snapshot().await;
-            let speaks_enabled =
-                settings::read_bool("lilith.proactive_speaks", true).await;
+            let speaks_enabled = settings::read_bool("lilith.proactive_speaks", true).await;
             for nudge in engine.evaluate(&signals) {
                 tracing::info!(
                     rule = %nudge.rule,
@@ -800,9 +782,7 @@ fn spawn_proactive_loop(conn: zbus::Connection) {
                 // round-trip doesn't delay the next iteration of
                 // the rule loop (multiple critical rules in one
                 // tick all fire their own spawns).
-                if speaks_enabled
-                    && nudge.urgency == proactive::Urgency::Critical
-                {
+                if speaks_enabled && nudge.urgency == proactive::Urgency::Critical {
                     let text = nudge.text.clone();
                     tokio::spawn(async move {
                         voice_client::speak(&text).await;
@@ -913,10 +893,7 @@ mod tests {
         std::env::temp_dir().join(format!("jarvis-lilith-test-{prefix}-{}.db", ts))
     }
 
-    fn build_service(
-        ollama: Arc<dyn Ollama>,
-        bus: Arc<dyn BusDispatcher>,
-    ) -> LilithService {
+    fn build_service(ollama: Arc<dyn Ollama>, bus: Arc<dyn BusDispatcher>) -> LilithService {
         let facts_path = temp_path("facts");
         let _ = std::fs::remove_file(&facts_path);
         LilithService {
@@ -964,7 +941,9 @@ mod tests {
             action: "app.open".into(),
             params: json!({ "app": "firefox" }),
         };
-        let resp = service.dispatch_and_record("abre firefox", call.clone()).await;
+        let resp = service
+            .dispatch_and_record("abre firefox", call.clone())
+            .await;
 
         assert_eq!(resp["action"], "app.open");
         assert_eq!(bus.calls().len(), 1);
@@ -1102,7 +1081,9 @@ mod tests {
         assert!(intent::is_help_query("O que voce sabe fazer?"));
         assert!(intent::is_help_query("what can you do"));
         // The "preciso de ajuda para X" false-positive guard:
-        assert!(!intent::is_help_query("preciso de ajuda para abrir o navegador"));
+        assert!(!intent::is_help_query(
+            "preciso de ajuda para abrir o navegador"
+        ));
         // Random non-help text:
         assert!(!intent::is_help_query("abrir o gmail"));
     }
@@ -1171,10 +1152,7 @@ mod tests {
 
         // The generated help text always contains the chain hint —
         // a more stable anchor than any individual action name.
-        assert!(resp["reply"]
-            .as_str()
-            .unwrap_or("")
-            .contains("encadeio"));
+        assert!(resp["reply"].as_str().unwrap_or("").contains("encadeio"));
         assert_eq!(ollama.calls(), 0);
         assert!(bus.calls().is_empty());
     }
@@ -1300,10 +1278,7 @@ mod tests {
 
         let resp = service.process("loop forever", sink).await;
 
-        assert!(resp["reply"]
-            .as_str()
-            .unwrap_or("")
-            .contains("parei após"));
+        assert!(resp["reply"].as_str().unwrap_or("").contains("parei após"));
         // Exactly 4 chain steps, even though the mock had 6 ready.
         assert_eq!(sink_concrete.chain_steps_seen().len(), 4);
         assert_eq!(bus.calls().len(), 4);
@@ -1335,10 +1310,7 @@ mod tests {
         let resp = service.process("comando aleatório", sink).await;
 
         // Fallback path returns the canned "não entendi" reply.
-        assert!(resp["reply"]
-            .as_str()
-            .unwrap_or("")
-            .contains("Não entendi"));
+        assert!(resp["reply"].as_str().unwrap_or("").contains("Não entendi"));
         assert_eq!(resp["action"], Value::Null);
         assert!(bus.calls().is_empty());
     }

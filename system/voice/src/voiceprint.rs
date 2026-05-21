@@ -52,7 +52,7 @@ const SAMPLE_RATE: u32 = 16_000;
 // Framing — 25 ms window, 10 ms hop.
 const FRAME_SAMPLES: usize = (SAMPLE_RATE as usize * 25) / 1000; // 400
 const HOP_SAMPLES: usize = (SAMPLE_RATE as usize * 10) / 1000; // 160
-// FFT bin count — round up to power of two for FFT speed.
+                                                               // FFT bin count — round up to power of two for FFT speed.
 const FFT_SIZE: usize = 512;
 
 const N_MEL_FILTERS: usize = 26;
@@ -85,7 +85,10 @@ pub fn extract_features(samples: &[i16]) -> FeatureVector {
         return Vec::new();
     }
 
-    let float_samples: Vec<f32> = samples.iter().map(|s| *s as f32 / i16::MAX as f32).collect();
+    let float_samples: Vec<f32> = samples
+        .iter()
+        .map(|s| *s as f32 / i16::MAX as f32)
+        .collect();
 
     // ── Pre-emphasis ─────────────────────────────────────────────────
     let mut emphasised = Vec::with_capacity(float_samples.len());

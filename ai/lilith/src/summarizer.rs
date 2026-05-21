@@ -193,7 +193,10 @@ mod tests {
         let ollama = Arc::new(CapturingOllama::new(""));
         let did_work = step(&store, ollama.as_ref()).await.unwrap();
         assert!(!did_work);
-        assert!(ollama.captured().is_empty(), "should not have called Ollama");
+        assert!(
+            ollama.captured().is_empty(),
+            "should not have called Ollama"
+        );
         assert_eq!(store.count().unwrap(), 10);
     }
 
@@ -207,10 +210,7 @@ mod tests {
         assert!(did_work);
         // Original count was TRIGGER_AT+5; BATCH_SIZE turns were
         // deleted; one summary row added.
-        assert_eq!(
-            store.count().unwrap(),
-            (TRIGGER_AT + 5) - BATCH_SIZE as i64
-        );
+        assert_eq!(store.count().unwrap(), (TRIGGER_AT + 5) - BATCH_SIZE as i64);
         let s = store.latest_summary().unwrap().expect("summary recorded");
         assert_eq!(s.turn_count, BATCH_SIZE as i64);
         assert!(s.text.contains("instalar X"));

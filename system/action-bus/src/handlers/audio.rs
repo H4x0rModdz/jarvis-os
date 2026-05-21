@@ -157,13 +157,14 @@ fn parse_sinks(list: &str, default_name: &str) -> Vec<Value> {
 /// Helper: run pactl, return stdout on success. Mirrors run_pactl
 /// but returns the captured stdout instead of swallowing it.
 async fn pactl_stdout(args: &[&str]) -> Result<String, BusError> {
-    let output = Command::new(PACTL)
-        .args(args)
-        .output()
-        .await
-        .map_err(|e| BusError::ExecutionFailed {
-            message: format!("pactl: {e}"),
-        })?;
+    let output =
+        Command::new(PACTL)
+            .args(args)
+            .output()
+            .await
+            .map_err(|e| BusError::ExecutionFailed {
+                message: format!("pactl: {e}"),
+            })?;
     if !output.status.success() {
         return Err(BusError::ExecutionFailed {
             message: format!(

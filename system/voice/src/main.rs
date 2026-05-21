@@ -182,7 +182,12 @@ impl VoiceService {
                 if let Err(e) = self.voiceprints.enroll(user, &features) {
                     return json!({ "ok": false, "reason": e.to_string() }).to_string();
                 }
-                tracing::info!(user, seconds, frames = features.len(), "Voiceprint enrolled");
+                tracing::info!(
+                    user,
+                    seconds,
+                    frames = features.len(),
+                    "Voiceprint enrolled"
+                );
                 json!({
                     "ok": true,
                     "user": user,
@@ -212,9 +217,7 @@ impl VoiceService {
                 })
                 .to_string()
             }
-            Err(e) => {
-                return json!({ "ok": false, "reason": e.to_string() }).to_string()
-            }
+            Err(e) => return json!({ "ok": false, "reason": e.to_string() }).to_string(),
         };
         // 2 s is long enough for "oi lilith" plus a beat, short enough
         // that the user doesn't wait forever to be let in.
@@ -515,8 +518,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join(".jarvis/voiceprints.db");
     let voiceprints = Arc::new(
-        VoiceprintStore::open(&vp_path)
-            .map_err(|e| anyhow::anyhow!("voiceprint store: {e}"))?,
+        VoiceprintStore::open(&vp_path).map_err(|e| anyhow::anyhow!("voiceprint store: {e}"))?,
     );
     tracing::info!(db = %vp_path.display(), "Voiceprint store ready");
 
@@ -799,8 +801,7 @@ mod tests {
         // Full pipeline through the trait objects: capture stops with
         // 0.1 s of zero samples → write_wav → MockStt returns scripted
         // text. Confirms the type signatures all line up.
-        let capture: Arc<dyn AudioCapture> =
-            Arc::new(MockCapture::with_samples(vec![0; 1600]));
+        let capture: Arc<dyn AudioCapture> = Arc::new(MockCapture::with_samples(vec![0; 1600]));
         let stt = MockStt::new(vec![Ok("ouvi você".into())]);
         // Start the mock first so stop() succeeds.
         capture.start().await.unwrap();
@@ -811,8 +812,7 @@ mod tests {
 
     #[tokio::test]
     async fn run_stt_returns_empty_when_no_samples() {
-        let capture: Arc<dyn AudioCapture> =
-            Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = Arc::new(MockCapture::with_samples(vec![]));
         let stt = MockStt::new(vec![]);
         capture.start().await.unwrap();
         let text = run_stt(capture, &stt).await.unwrap();
@@ -870,10 +870,7 @@ mod tests {
         path
     }
 
-    fn build_service(
-        capture: Arc<dyn AudioCapture>,
-        stt: Arc<dyn Stt>,
-    ) -> VoiceService {
+    fn build_service(capture: Arc<dyn AudioCapture>, stt: Arc<dyn Stt>) -> VoiceService {
         build_service_with_tts(capture, stt, Arc::new(tts::NoopTts))
     }
 
@@ -891,9 +888,7 @@ mod tests {
             state: Arc::new(AsyncMutex::new(State::Idle)),
             capture,
             hotword: hotword_handle,
-            voiceprints: Arc::new(
-                VoiceprintStore::open(&temp_vp_db()).unwrap(),
-            ),
+            voiceprints: Arc::new(VoiceprintStore::open(&temp_vp_db()).unwrap()),
             stt,
             tts,
         }
@@ -1057,24 +1052,20 @@ mod tests {
     /// machine — `speak_impl` flips it to Idle on the last line.
     /// Plus a 1-second cap so a regression doesn't hang CI forever.
     async fn await_state_idle(service: &VoiceService) {
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            async {
-                loop {
-                    if *service.state.lock().await == State::Idle {
-                        return;
-                    }
-                    tokio::task::yield_now().await;
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if *service.state.lock().await == State::Idle {
+                    return;
                 }
-            },
-        )
+                tokio::task::yield_now().await;
+            }
+        })
         .await;
     }
 
     #[tokio::test]
     async fn speak_happy_path_emits_speaking_then_idle() {
-        let capture: Arc<dyn AudioCapture> =
-            Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = Arc::new(MockCapture::with_samples(vec![]));
         let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
         let mock_tts = Arc::new(MockTts::ok());
         let tts: Arc<dyn tts::Tts> = mock_tts.clone();
@@ -1105,8 +1096,7 @@ mod tests {
 
     #[tokio::test]
     async fn speak_tts_error_emits_transcription_failed() {
-        let capture: Arc<dyn AudioCapture> =
-            Arc::new(MockCapture::with_samples(vec![]));
+        let capture: Arc<dyn AudioCapture> = Arc::new(MockCapture::with_samples(vec![]));
         let stt: Arc<dyn Stt> = Arc::new(MockStt::new(vec![]));
         let mock_tts = Arc::new(MockTts::failing("piper exploded"));
         let tts: Arc<dyn tts::Tts> = mock_tts.clone();
