@@ -120,8 +120,12 @@ impl HistoryStore {
     /// `RecentNotifications` contract). `limit == 0` means "every row".
     pub fn recent(&self, limit: u32) -> Result<Vec<Entry>> {
         let conn = self.conn.lock().unwrap();
+        // Project row_index into the inner SELECT so the outer
+        // ORDER BY can reference it. Stricter SQLite versions
+        // (bundled SQLite 3.46+) won't resolve column names that
+        // weren't carried up from the inner query.
         let sql = if limit == 0 {
-            "SELECT id, app, summary, body, urgency, posted_at, actions_json
+            "SELECT id, app, summary, body, urgency, posted_at, actions_json, row_index
              FROM notifications ORDER BY row_index ASC"
                 .to_string()
         } else {
@@ -129,7 +133,7 @@ impl HistoryStore {
             // to deliver oldest-first like the caller expects.
             format!(
                 "SELECT * FROM (
-                    SELECT id, app, summary, body, urgency, posted_at, actions_json
+                    SELECT id, app, summary, body, urgency, posted_at, actions_json, row_index
                     FROM notifications ORDER BY row_index DESC LIMIT {limit}
                  ) ORDER BY row_index ASC"
             )
