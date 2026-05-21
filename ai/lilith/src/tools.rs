@@ -656,8 +656,9 @@ mod tests {
             namespaces.insert(tool.action.split('.').next().unwrap_or(tool.action));
         }
         for ns in &namespaces {
+            let label = label_for_test(ns);
             assert!(
-                h.contains(ns) || h.contains(label_for_test(ns)),
+                h.contains(ns) || h.contains(label.as_str()),
                 "namespace {ns} not in help_text:\n{h}"
             );
         }
@@ -666,21 +667,21 @@ mod tests {
     /// Mirrors LABELS in help_text — used in the assertion above.
     /// Kept in sync manually for now; a future commit could expose
     /// LABELS publicly if drift becomes a real problem.
-    fn label_for_test(ns: &str) -> &'static str {
+    fn label_for_test(ns: &str) -> String {
         match ns {
-            "app" => "aplicativos",
-            "browser" => "navegador",
-            "screenshot" => "screenshots",
-            "clipboard" => "área de transferência",
-            "audio" => "áudio",
-            "window" => "janelas",
-            "workspace" => "workspaces",
-            "file" => "arquivos",
-            "system" => "sistema",
-            "compat" => "Windows (Wine/Proton)",
-            "updater" => "atualizações",
-            "memory" => "memória",
-            other => other,
+            "app" => "aplicativos".to_string(),
+            "browser" => "navegador".to_string(),
+            "screenshot" => "screenshots".to_string(),
+            "clipboard" => "área de transferência".to_string(),
+            "audio" => "áudio".to_string(),
+            "window" => "janelas".to_string(),
+            "workspace" => "workspaces".to_string(),
+            "file" => "arquivos".to_string(),
+            "system" => "sistema".to_string(),
+            "compat" => "Windows (Wine/Proton)".to_string(),
+            "updater" => "atualizações".to_string(),
+            "memory" => "memória".to_string(),
+            other => other.to_string(),
         }
     }
 

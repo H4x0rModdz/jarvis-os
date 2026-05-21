@@ -289,6 +289,7 @@ mod tests {
             battery_percent: Some(percent),
             battery_state: Some(state),
             idle_seconds: None,
+            ..Default::default()
         }
     }
 

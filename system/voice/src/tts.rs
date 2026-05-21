@@ -48,9 +48,15 @@ impl Tts for PiperTts {
 
 /// No-op TTS — silently succeeds on every call. Used by the
 /// state-machine tests in `main.rs` that don't care about the
-/// audible output, only the state transitions.
+/// audible output, only the state transitions. Gated behind
+/// `#[cfg(test)]` since production always wires `PiperTts`;
+/// without the gate, `-D dead_code` flags it on the release
+/// build (the build_service helper that constructs it is itself
+/// test-only).
+#[cfg(test)]
 pub struct NoopTts;
 
+#[cfg(test)]
 #[async_trait]
 impl Tts for NoopTts {
     async fn speak(&self, _text: &str) -> Result<()> {

@@ -361,6 +361,7 @@ fn zcr(samples: &[i16]) -> f64 {
 ///   - windows quieter than `SILENCE_RMS_THRESHOLD` (no signal)
 ///   - windows with ZCR above `SPEECH_ZCR_CEILING` (noisy fricatives,
 ///     fans, keyboard tapping, AC hum)
+///
 /// Anything that survives both gates gets fed to whisper-cli.
 fn is_speech(samples: &[i16]) -> bool {
     if rms(samples) < SILENCE_RMS_THRESHOLD {
