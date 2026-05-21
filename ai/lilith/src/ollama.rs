@@ -180,10 +180,11 @@ impl OllamaClient {
     }
 }
 
-/// Build the messages list for the first call of a turn: system prompt
-/// + (optional) long-term summary + flattened history + current
-/// user text. The tool-chain loop in `main.rs` extends this list
-/// with assistant/tool entries as it goes.
+/// Build the messages list for the first call of a turn. Layout is
+/// system prompt, then (optional) long-term summary, then flattened
+/// history turns, then the current user text. The tool-chain loop
+/// in `main.rs` extends this list with assistant/tool entries as it
+/// goes.
 ///
 /// `summary` is the latest Memory-V3 compressed-history blob. When
 /// present we add a second system message right after SYSTEM_PROMPT

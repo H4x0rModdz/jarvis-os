@@ -1,3 +1,10 @@
+// Lilith carries a growing API surface (Noop sinks, search helpers,
+// reset hooks) that aren't all wired into a consumer yet — some are
+// hooks for tests, others wait for upcoming features. CI's
+// `-D warnings` would flag them all as errors; demote dead_code
+// here so the daemon keeps building while the trait surface settles.
+#![allow(dead_code)]
+
 mod audit;
 mod bus_client;
 mod error;

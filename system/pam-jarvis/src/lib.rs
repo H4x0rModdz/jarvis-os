@@ -24,6 +24,12 @@
 //!
 //! See ADR 0019 for the full design rationale.
 
+// PAM module exposes FFI-required symbols (pam_sm_*) that the
+// linker resolves into libpam — Rust's dead_code lint can't see
+// across the C boundary and flags helper-only bits as unused.
+// Demote here so the crate keeps building.
+#![allow(dead_code)]
+
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 
