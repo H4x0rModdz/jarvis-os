@@ -6,6 +6,7 @@ mod memory;
 mod ollama;
 mod persistent;
 mod proactive;
+mod proactive_network;
 mod proactive_rules;
 mod proactive_system;
 mod settings;
