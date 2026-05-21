@@ -13,12 +13,16 @@
 # host can't drive EGL safely:
 #
 #   1. VirtualBox VMSVGA. With 3D enabled, EGL init succeeds but
-#      runtime dmabuf import fails and takes the compositor down. Real
-#      bug we hit on first install.
-#   2. No /dev/dri/renderD128. No DRM render node means no EGL path.
+#      runtime dmabuf import fails and takes the compositor down.
+#   2. VMware Workstation / Fusion. Same dmabuf import failure on
+#      the vmwgfx + virgl path — wlroots tries to import a dmabuf
+#      buffer and gets `error 7: importing the supplied dmabufs
+#      failed` at runtime. Repro'd on Workstation 17 nested under
+#      Hyper-V + on Fusion native; the pixman fallback sidesteps it.
+#   3. No /dev/dri/renderD128. No DRM render node means no EGL path.
 #
-# Other hypervisors (QEMU virtio-gpu, VMware Workstation 3D, Hyper-V
-# GPU-P) and real hardware fall through to the GPU path untouched.
+# Real hardware + Hyper-V GPU-P + QEMU virtio-gpu fall through to
+# the GPU path untouched.
 
 set -eu
 
@@ -29,7 +33,7 @@ force_pixman() {
 
 if [ -r /sys/class/dmi/id/sys_vendor ]; then
     case "$(cat /sys/class/dmi/id/sys_vendor 2>/dev/null || true)" in
-        *VirtualBox*|*Oracle*|innotek*)
+        *VirtualBox*|*Oracle*|innotek*|VMware*)
             force_pixman
             ;;
     esac

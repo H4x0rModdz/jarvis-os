@@ -27,6 +27,14 @@ Item {
     implicitWidth: 140
     implicitHeight: 200
 
+    /// Flip to `true` once the avatar PNGs land in the greeter's
+    /// qrc bundle (see CMakeLists.txt — they'd be a second
+    /// qt_add_resources block with prefix /avatar). Until then the
+    /// QML deliberately doesn't reference the missing source so we
+    /// don't emit "Image: Cannot open" warnings on every state
+    /// transition and confuse anyone reading the boot log.
+    readonly property bool spritesAvailable: false
+
     // Real sprite path. Image.status falls back to Image.Null when
     // the resource isn't compiled in, so we use that as the
     // "use procedural" switch — no manual check needed.
@@ -37,7 +45,7 @@ Item {
         smooth: true
         cache: true
         asynchronous: true
-        source: {
+        source: !root.spritesAvailable ? "" : {
             switch (root.state) {
                 case "talking":   return "qrc:/avatar/lilith-talking.png";
                 case "listening": return "qrc:/avatar/lilith-listening.png";
