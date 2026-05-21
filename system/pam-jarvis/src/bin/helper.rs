@@ -135,11 +135,4 @@ mod tests {
     fn lookup_uid_nonexistent_returns_none() {
         assert!(lookup_uid("definitely-not-a-real-user-xyz123").is_none());
     }
-
-    /// OsStrExt is used implicitly by Path::new; this is just a
-    /// compile-test guard.
-    #[test]
-    fn osstr_ext_in_scope() {
-        let _ = std::ffi::OsStr::new("x").as_bytes();
-    }
 }
