@@ -605,7 +605,7 @@ impl LilithService {
             });
         };
 
-        let result = match store.search(query, limit) {
+        match store.search(query, limit) {
             Ok(hits) => {
                 let matches: Vec<Value> = hits
                     .into_iter()
@@ -630,8 +630,7 @@ impl LilithService {
                 "error": { "code": "INTERNAL_ERROR", "message": e.to_string() },
                 "duration_ms": start.elapsed().as_millis() as u64,
             }),
-        };
-        result
+        }
     }
 }
 

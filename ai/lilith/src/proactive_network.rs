@@ -26,9 +26,10 @@ const RTF_UP: u64 = 0x0001;
 #[async_trait]
 impl Probe for NetworkProbe {
     async fn snapshot(&self) -> Signals {
-        let mut s = Signals::default();
-        s.has_connectivity = read_has_default_route();
-        s
+        Signals {
+            has_connectivity: read_has_default_route(),
+            ..Default::default()
+        }
     }
 }
 

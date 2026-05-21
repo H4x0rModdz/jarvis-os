@@ -21,21 +21,21 @@ pub struct SystemProbe;
 #[async_trait]
 impl Probe for SystemProbe {
     async fn snapshot(&self) -> Signals {
-        let mut s = Signals::default();
-
-        if let Some((free, total, swap_used)) = read_mem_pcts() {
-            s.mem_free_pct = Some(free);
-            // Total stays implicit; the rule only needs free %.
-            let _ = total;
-            // None when host has no swap (SwapTotal=0).
-            s.swap_used_pct = swap_used;
+        // Compute the three optionals up front so the final struct
+        // literal is one expression — clippy's
+        // field_reassign_with_default flags the partial-then-mutate
+        // pattern.
+        let (mem_free_pct, swap_used_pct) = match read_mem_pcts() {
+            Some((free, _total, swap)) => (Some(free), swap),
+            None => (None, None),
+        };
+        let disk_root_free_pct = statvfs_free_pct("/");
+        Signals {
+            mem_free_pct,
+            swap_used_pct,
+            disk_root_free_pct,
+            ..Default::default()
         }
-
-        if let Some(free_pct) = statvfs_free_pct("/") {
-            s.disk_root_free_pct = Some(free_pct);
-        }
-
-        s
     }
 }
 

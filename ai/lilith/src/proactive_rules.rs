@@ -92,7 +92,7 @@ pub fn system_rules() -> Vec<Rule> {
                 let mem_free = s.mem_free_pct?;
                 // memory_critical also matches at <5%; carve memory_low
                 // to (5%, 10%] so they don't both fire.
-                if mem_free >= 5.0 && mem_free < 10.0 {
+                if (5.0..10.0).contains(&mem_free) {
                     Some(Nudge {
                         rule: "memory_low",
                         text: format!(

@@ -641,57 +641,6 @@ pub fn all_tools() -> Vec<Tool> {
     ]
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn help_text_lists_every_namespace_in_the_catalog() {
-        let h = help_text();
-        // Every namespace from all_tools() must appear at least once,
-        // either through the labeled section or the fallback raw
-        // identifier branch.
-        let mut namespaces: std::collections::HashSet<&str> = std::collections::HashSet::new();
-        for tool in all_tools() {
-            namespaces.insert(tool.action.split('.').next().unwrap_or(tool.action));
-        }
-        for ns in &namespaces {
-            let label = label_for_test(ns);
-            assert!(
-                h.contains(ns) || h.contains(label.as_str()),
-                "namespace {ns} not in help_text:\n{h}"
-            );
-        }
-    }
-
-    /// Mirrors LABELS in help_text — used in the assertion above.
-    /// Kept in sync manually for now; a future commit could expose
-    /// LABELS publicly if drift becomes a real problem.
-    fn label_for_test(ns: &str) -> String {
-        match ns {
-            "app" => "aplicativos".to_string(),
-            "browser" => "navegador".to_string(),
-            "screenshot" => "screenshots".to_string(),
-            "clipboard" => "área de transferência".to_string(),
-            "audio" => "áudio".to_string(),
-            "window" => "janelas".to_string(),
-            "workspace" => "workspaces".to_string(),
-            "file" => "arquivos".to_string(),
-            "system" => "sistema".to_string(),
-            "compat" => "Windows (Wine/Proton)".to_string(),
-            "updater" => "atualizações".to_string(),
-            "memory" => "memória".to_string(),
-            other => other.to_string(),
-        }
-    }
-
-    #[test]
-    fn help_text_includes_chain_hint() {
-        let h = help_text();
-        assert!(h.contains("encadeio"));
-    }
-}
-
 fn window_id_schema() -> Value {
     json!({
         "type": "object",
@@ -777,4 +726,55 @@ pub fn ollama_tools_payload(tools: &[Tool]) -> Value {
         })
         .collect();
     Value::Array(arr)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn help_text_lists_every_namespace_in_the_catalog() {
+        let h = help_text();
+        // Every namespace from all_tools() must appear at least once,
+        // either through the labeled section or the fallback raw
+        // identifier branch.
+        let mut namespaces: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for tool in all_tools() {
+            namespaces.insert(tool.action.split('.').next().unwrap_or(tool.action));
+        }
+        for ns in &namespaces {
+            let label = label_for_test(ns);
+            assert!(
+                h.contains(ns) || h.contains(label.as_str()),
+                "namespace {ns} not in help_text:\n{h}"
+            );
+        }
+    }
+
+    /// Mirrors LABELS in help_text — used in the assertion above.
+    /// Kept in sync manually for now; a future commit could expose
+    /// LABELS publicly if drift becomes a real problem.
+    fn label_for_test(ns: &str) -> String {
+        match ns {
+            "app" => "aplicativos".to_string(),
+            "browser" => "navegador".to_string(),
+            "screenshot" => "screenshots".to_string(),
+            "clipboard" => "área de transferência".to_string(),
+            "audio" => "áudio".to_string(),
+            "window" => "janelas".to_string(),
+            "workspace" => "workspaces".to_string(),
+            "file" => "arquivos".to_string(),
+            "system" => "sistema".to_string(),
+            "compat" => "Windows (Wine/Proton)".to_string(),
+            "updater" => "atualizações".to_string(),
+            "memory" => "memória".to_string(),
+            other => other.to_string(),
+        }
+    }
+
+    #[test]
+    fn help_text_includes_chain_hint() {
+        let h = help_text();
+        assert!(h.contains("encadeio"));
+    }
 }
