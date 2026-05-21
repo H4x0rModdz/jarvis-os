@@ -41,6 +41,10 @@ pub struct Signals {
     /// Used % of swap ((SwapTotal-SwapFree)/SwapTotal). 0..100.
     /// None when the host has no swap configured.
     pub swap_used_pct: Option<f64>,
+    /// True when the host has a default route (i.e. can talk to
+    /// anything outside its own LAN). None when /proc/net/route
+    /// is unreadable.
+    pub has_connectivity: Option<bool>,
 }
 
 impl Signals {
@@ -67,6 +71,9 @@ impl Signals {
         }
         if other.swap_used_pct.is_some() {
             self.swap_used_pct = other.swap_used_pct;
+        }
+        if other.has_connectivity.is_some() {
+            self.has_connectivity = other.has_connectivity;
         }
     }
 }
@@ -107,12 +114,25 @@ pub struct Nudge {
     pub urgency: Urgency,
 }
 
-/// One proactive rule. Owns its cooldown — the engine tracks
-/// `last_fired` separately so rule definitions stay copyable.
+/// One stateless proactive rule — fires from a single Signals
+/// snapshot. Battery / disk / memory rules are all this shape.
 pub struct Rule {
     pub name: &'static str,
     pub cooldown: Duration,
     pub check: fn(&Signals) -> Option<Nudge>,
+}
+
+/// One edge-triggered rule — fires on a transition between two
+/// snapshots. Network rules use this so "wifi caiu" only toasts
+/// when connectivity goes online → offline, not on every tick
+/// while offline. The `previous` argument is `None` on the first
+/// tick after daemon start (no prior snapshot yet); edge rules
+/// typically refuse to fire in that case so a fresh boot doesn't
+/// generate a "lost!" toast for a state we never observed.
+pub struct EdgeRule {
+    pub name: &'static str,
+    pub cooldown: Duration,
+    pub check: fn(&Signals, Option<&Signals>) -> Option<Nudge>,
 }
 
 /// Probe interface — anything that can produce a `Signals` snapshot
@@ -161,19 +181,36 @@ impl Probe for CompositeProbe {
     }
 }
 
-/// In-memory engine. Owns the rule table + the cooldown map.
-/// Callers tick by calling `evaluate` periodically — the engine
-/// itself doesn't spawn a task; main.rs schedules.
+/// In-memory engine. Owns the rule table + the cooldown map +
+/// the previous-signals snapshot for edge rules. Callers tick by
+/// calling `evaluate` periodically — the engine itself doesn't
+/// spawn a task; main.rs schedules.
 pub struct ProactiveEngine {
     rules: Vec<Rule>,
+    edge_rules: Vec<EdgeRule>,
     last_fired: HashMap<&'static str, Instant>,
+    prev_signals: Option<Signals>,
 }
 
 impl ProactiveEngine {
     pub fn new(rules: Vec<Rule>) -> Self {
         Self {
             rules,
+            edge_rules: Vec::new(),
             last_fired: HashMap::new(),
+            prev_signals: None,
+        }
+    }
+
+    /// Construct an engine that runs both stateless + edge rules.
+    /// Both lists are evaluated each tick; stateless first, then
+    /// edge. Cooldowns are tracked per-rule across both kinds.
+    pub fn with_edge_rules(rules: Vec<Rule>, edge_rules: Vec<EdgeRule>) -> Self {
+        Self {
+            rules,
+            edge_rules,
+            last_fired: HashMap::new(),
+            prev_signals: None,
         }
     }
 
@@ -181,12 +218,17 @@ impl ProactiveEngine {
     /// that fire this tick. Each fire updates the cooldown stamp,
     /// so calling `evaluate` twice in a row only emits a given rule
     /// once.
+    ///
+    /// Edge rules also see the previous-tick snapshot; on the very
+    /// first tick `previous` is `None` and edge rules typically
+    /// refuse to fire to avoid alarming on a state we never saw a
+    /// transition into.
     pub fn evaluate(&mut self, signals: &Signals) -> Vec<Nudge> {
         let now = Instant::now();
         let mut out = Vec::new();
-        // Collect first so we don't hold the borrow on `self.rules`
-        // while mutating `last_fired`.
         let mut fired: Vec<(&'static str, Nudge)> = Vec::new();
+
+        // ── Stateless rules ───────────────────────────────────────
         for rule in &self.rules {
             if let Some(prev) = self.last_fired.get(rule.name) {
                 if now.duration_since(*prev) < rule.cooldown {
@@ -197,16 +239,34 @@ impl ProactiveEngine {
                 fired.push((rule.name, nudge));
             }
         }
+        // ── Edge rules ────────────────────────────────────────────
+        for rule in &self.edge_rules {
+            if let Some(prev) = self.last_fired.get(rule.name) {
+                if now.duration_since(*prev) < rule.cooldown {
+                    continue;
+                }
+            }
+            if let Some(nudge) = (rule.check)(signals, self.prev_signals.as_ref()) {
+                fired.push((rule.name, nudge));
+            }
+        }
         for (name, nudge) in fired {
             self.last_fired.insert(name, now);
             out.push(nudge);
         }
+
+        // Persist this tick's snapshot for the next call's edge
+        // comparison. Cloned because Signals is small + edge rules
+        // shouldn't be affected by later mutations of the live
+        // probe outputs.
+        self.prev_signals = Some(signals.clone());
+
         out
     }
 
     #[cfg(test)]
     pub fn rule_count(&self) -> usize {
-        self.rules.len()
+        self.rules.len() + self.edge_rules.len()
     }
 }
 
@@ -327,6 +387,75 @@ mod tests {
         assert_eq!(s.battery_state, Some(BatteryState::Discharging));
         assert_eq!(s.disk_root_free_pct, Some(33.0));
         assert_eq!(s.mem_free_pct, Some(50.0));
+    }
+
+    fn edge_transition_rule() -> EdgeRule {
+        EdgeRule {
+            name: "wifi_lost",
+            cooldown: Duration::from_secs(60),
+            check: |current, previous| {
+                let prev = previous?;
+                let prev_online = prev.has_connectivity?;
+                let now_online = current.has_connectivity?;
+                if prev_online && !now_online {
+                    Some(Nudge {
+                        rule: "wifi_lost",
+                        text: "wifi caiu".into(),
+                        urgency: Urgency::Warning,
+                    })
+                } else {
+                    None
+                }
+            },
+        }
+    }
+
+    #[test]
+    fn edge_rule_does_not_fire_on_first_tick() {
+        // First call: prev is None — transition rule should NOT fire
+        // (no prior state to transition from).
+        let mut eng =
+            ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
+        let s = Signals {
+            has_connectivity: Some(false),
+            ..Default::default()
+        };
+        let nudges = eng.evaluate(&s);
+        assert!(nudges.is_empty(), "should not fire on first tick");
+    }
+
+    #[test]
+    fn edge_rule_fires_on_true_to_false_transition() {
+        let mut eng =
+            ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
+        // Tick 1: online.
+        let online = Signals {
+            has_connectivity: Some(true),
+            ..Default::default()
+        };
+        eng.evaluate(&online);
+        // Tick 2: offline. Transition true→false → fire.
+        let offline = Signals {
+            has_connectivity: Some(false),
+            ..Default::default()
+        };
+        let nudges = eng.evaluate(&offline);
+        assert_eq!(nudges.len(), 1);
+        assert_eq!(nudges[0].rule, "wifi_lost");
+    }
+
+    #[test]
+    fn edge_rule_no_fire_when_steady_state() {
+        let mut eng =
+            ProactiveEngine::with_edge_rules(vec![], vec![edge_transition_rule()]);
+        let offline = Signals {
+            has_connectivity: Some(false),
+            ..Default::default()
+        };
+        eng.evaluate(&offline); // first tick — no prev
+        // Second tick still offline; no transition.
+        let nudges = eng.evaluate(&offline);
+        assert!(nudges.is_empty(), "no transition → no fire");
     }
 
     #[tokio::test]
