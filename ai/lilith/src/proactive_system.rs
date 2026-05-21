@@ -119,9 +119,9 @@ mod tests {
                 "disk_root_free_pct should populate on linux"
             );
             let m = signals.mem_free_pct.unwrap();
-            assert!(m >= 0.0 && m <= 100.0, "mem pct out of range: {m}");
+            assert!((0.0..=100.0).contains(&m), "mem pct out of range: {m}");
             let d = signals.disk_root_free_pct.unwrap();
-            assert!(d >= 0.0 && d <= 100.0, "disk pct out of range: {d}");
+            assert!((0.0..=100.0).contains(&d), "disk pct out of range: {d}");
         }
         // swap_used_pct intentionally not asserted — VMs / containers
         // routinely have no swap configured, which is a valid None.
