@@ -668,7 +668,7 @@ async fn main() -> anyhow::Result<()> {
 
     let service = LilithService {
         bus,
-        ollama,
+        ollama: ollama.clone(),
         memory,
         facts,
         audit,

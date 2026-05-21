@@ -38,7 +38,11 @@ pub trait VoiceSignalSink: Send + Sync {
 }
 
 /// No-op convenience — useful for early init or anywhere a caller
-/// doesn't have a real signal context handy.
+/// doesn't have a real signal context handy. Currently unused by
+/// the daemon itself (production uses `DbusVoiceSink`, tests build
+/// a custom `RecordingVoiceSink`); kept as part of the trait's
+/// public surface for downstream consumers.
+#[allow(dead_code)]
 pub struct NoopVoiceSink;
 
 #[async_trait]
@@ -49,6 +53,7 @@ impl VoiceSignalSink for NoopVoiceSink {
 }
 
 /// Helper for callers that don't need real signals.
+#[allow(dead_code)]
 pub fn noop_sink() -> Arc<dyn VoiceSignalSink> {
     Arc::new(NoopVoiceSink)
 }

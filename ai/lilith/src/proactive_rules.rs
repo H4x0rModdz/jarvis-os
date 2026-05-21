@@ -242,6 +242,7 @@ impl Probe for UPowerProbe {
             battery_percent: percent,
             battery_state: state_code.map(decode_battery_state),
             idle_seconds: None,
+            ..Default::default()
         }
     }
 }
@@ -258,7 +259,7 @@ fn decode_battery_state(code: u32) -> BatteryState {
 
 async fn read_property<T>(conn: &Connection, name: &str) -> Option<T>
 where
-    T: zbus::zvariant::Type + for<'de> serde::de::Deserialize<'de> + std::fmt::Debug + 'static,
+    T: TryFrom<zbus::zvariant::OwnedValue>,
 {
     let proxy = zbus::fdo::PropertiesProxy::builder(conn)
         .destination(UPOWER_SERVICE)
@@ -272,8 +273,9 @@ where
         .get(UPOWER_DEVICE_IFACE.try_into().ok()?, name)
         .await
         .ok()?;
-    // OwnedValue → T via try_from. zbus picks the right conversion
-    // when the inner variant matches T.
+    // OwnedValue → T via TryFrom. zbus 4 provides impls for the
+    // primitives we read (f64/u32/i64/String); `.ok()` drops the
+    // associated Error so the bound doesn't need to name it.
     T::try_from(value).ok()
 }
 

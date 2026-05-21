@@ -129,7 +129,7 @@ pub fn extract_features(samples: &[i16]) -> FeatureVector {
         }
 
         // Mel filter energies + log.
-        let mut mel_energies = vec![0.0f32; N_MEL_FILTERS];
+        let mut mel_energies = [0.0f32; N_MEL_FILTERS];
         for (m, filter) in mel_filters.iter().enumerate() {
             let mut sum = 0.0f32;
             for (k, weight) in filter.iter().enumerate() {
@@ -185,6 +185,13 @@ fn mel_to_hz(mel: f32) -> f32 {
 /// Build `n_filters` triangular filters spaced uniformly in mel scale
 /// between 0 Hz and the Nyquist. Each filter is a vector of weights
 /// the same length as the FFT half-spectrum (`fft_size/2 + 1`).
+//
+// clippy::needless_range_loop is technically right here but writing
+// the triangle weights via iter().enumerate().skip().take() is far
+// less readable than the index version below. The bin range bounds
+// (f_left, f_center, f_right) read top-to-bottom; refactoring would
+// flip the loop direction and add a closure depth.
+#[allow(clippy::needless_range_loop)]
 fn mel_filterbank(n_filters: usize, fft_size: usize, sample_rate: u32) -> Vec<Vec<f32>> {
     let n_bins = fft_size / 2 + 1;
     let nyquist = sample_rate as f32 / 2.0;
