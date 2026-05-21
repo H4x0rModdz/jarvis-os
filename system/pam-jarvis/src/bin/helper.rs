@@ -20,7 +20,6 @@
 //! has password fallback for a reason, and a 3-second timeout against a
 //! crashed daemon should never lock a user out of `sudo`.
 
-use std::os::unix::ffi::OsStrExt;
 use std::process::ExitCode;
 use std::time::Duration;
 
