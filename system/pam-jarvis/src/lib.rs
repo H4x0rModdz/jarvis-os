@@ -110,7 +110,7 @@ pub unsafe extern "C" fn pam_sm_authenticate(
     if pid == 0 {
         // Child: silence stdio (PAM doesn't expect chatter on our fd),
         // then exec. /dev/null swap is best-effort.
-        let devnull = libc::open(b"/dev/null\0".as_ptr() as *const c_char, libc::O_RDWR);
+        let devnull = libc::open(c"/dev/null".as_ptr(), libc::O_RDWR);
         if devnull >= 0 {
             libc::dup2(devnull, 0);
             libc::dup2(devnull, 1);
@@ -119,7 +119,7 @@ pub unsafe extern "C" fn pam_sm_authenticate(
                 libc::close(devnull);
             }
         }
-        libc::execv(helper_path.as_ptr(), argv.as_ptr() as *const *const c_char);
+        libc::execv(helper_path.as_ptr(), argv.as_ptr());
         // exec failed — exit "unavailable" so the parent picks PAM_IGNORE.
         libc::_exit(2);
     }
