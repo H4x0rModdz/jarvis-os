@@ -1259,9 +1259,11 @@ mod tests {
         assert_eq!(steps.len(), 2);
         assert_eq!(steps[0].1, "screenshot.capture");
         assert_eq!(steps[1].1, "app.open");
-        // Each step gets its own session-memory Turn (Phase 9
-        // promise) so cross-turn follow-ups see the full chain.
-        assert_eq!(service.memory.recent(8).len(), 2);
+        // Each tool step records its own Turn (Phase 9 promise) PLUS
+        // the chain-end branch records one more Turn carrying the
+        // model's final-summary text. So 2 tool steps → 3 Turns
+        // total: tool 1, tool 2, summary.
+        assert_eq!(service.memory.recent(8).len(), 3);
     }
 
     #[tokio::test]
