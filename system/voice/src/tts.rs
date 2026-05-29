@@ -20,7 +20,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 pub const DEFAULT_BINARY: &str = "/usr/bin/piper";
-pub const DEFAULT_MODEL: &str = "/usr/share/piper-voices/pt_BR-faber-medium.onnx";
+pub const DEFAULT_MODEL: &str = "/usr/share/piper-voices/en_US-amy-medium.onnx";
 pub const DEFAULT_PLAYER: &str = "paplay";
 
 /// Text-to-speech abstraction. The DBus `speak` method spawns a task

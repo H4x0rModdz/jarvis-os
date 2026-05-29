@@ -57,18 +57,27 @@ RUN git clone --depth 1 --branch ${WHISPER_VERSION} \
     && cp /src/whisper.cpp/models/ggml-base.bin /out/whisper-models/ggml-base.bin \
     && rm -rf /src/whisper.cpp /build/whisper
 
-# piper (TTS) — precompiled tarball + pt_BR-faber medium voice.
+# piper (TTS) — precompiled tarball + the voice model.
+#
+# Voice: en_US-amy-medium (female). The pt_BR piper catalog (faber/
+# edresson/jeff/cadu) is all male, and the user wants a female voice
+# for Lilith. Trade-off: Amy reads the pt-BR replies with English
+# phonemes, so PT words get an anglicised pronunciation — accepted
+# in exchange for a female voice. PIPER_VOICE_PATH is the HF dir;
+# PIPER_VOICE is the file stem. Both must match the daemon's
+# DEFAULT_MODEL in system/voice/src/tts.rs.
 ARG PIPER_VERSION=2023.11.14-2
-ARG PIPER_VOICE=pt_BR-faber-medium
+ARG PIPER_VOICE=en_US-amy-medium
+ARG PIPER_VOICE_PATH=en/en_US/amy/medium
 RUN mkdir -p /out/piper /out/piper-voices \
     && curl -fsSL -o /tmp/piper.tar.gz \
         https://github.com/rhasspy/piper/releases/download/${PIPER_VERSION}/piper_linux_x86_64.tar.gz \
     && tar -xzf /tmp/piper.tar.gz -C /out/piper --strip-components=1 \
     && rm /tmp/piper.tar.gz \
     && curl -fsSL -o /out/piper-voices/${PIPER_VOICE}.onnx \
-        https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/pt/pt_BR/faber/medium/${PIPER_VOICE}.onnx \
+        https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/${PIPER_VOICE_PATH}/${PIPER_VOICE}.onnx \
     && curl -fsSL -o /out/piper-voices/${PIPER_VOICE}.onnx.json \
-        https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/pt/pt_BR/faber/medium/${PIPER_VOICE}.onnx.json
+        https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/${PIPER_VOICE_PATH}/${PIPER_VOICE}.onnx.json
 
 # numbat-cli — Lilith's calculator backend.
 ARG NUMBAT_VERSION=1.16.0
