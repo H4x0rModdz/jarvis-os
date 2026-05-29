@@ -272,6 +272,40 @@ RUN flatpak install --system --noninteractive --no-related -y \
 # needing to maintain a per-user mimeapps.list.
 COPY iso/assets/xdg/mimeapps.list /etc/xdg/mimeapps.list
 
+# WhiteSur (macOS-like) GTK theme + icons + cursors, system-wide
+# under /usr/share. Styles GTK apps (Firefox) + the icon set the
+# launcher / file manager read + the pointer. Our own Qt shell keeps
+# its glassmorphic design — the GTK theme doesn't touch it.
+#
+# Dolphin (Qt/KDE) is NOT styled by this — matching it needs the
+# WhiteSur Kvantum theme + qt5ct/qt6ct wiring, deferred to a
+# follow-up. git is only needed for the clone, so we install it,
+# run the script, and the layer keeps the cloned repos out (the
+# script cleans its tmp dir).
+COPY iso/assets/theme/install-whitesur.sh /tmp/install-whitesur.sh
+RUN dnf -y install git \
+    && bash /tmp/install-whitesur.sh \
+    && rm -f /tmp/install-whitesur.sh \
+    && dnf -y remove git \
+    && dnf clean all
+
+# System-wide GTK defaults so GTK apps pick up WhiteSur + the icon
+# theme + cursor without a per-user config file.
+COPY iso/assets/theme/gtk-settings.ini /etc/gtk-3.0/settings.ini
+COPY iso/assets/theme/gtk-settings.ini /etc/gtk-4.0/settings.ini
+
+# Flatpak sandboxes don't see /usr/share/themes|icons and reset the
+# environment, so the session launcher's GTK_THEME won't reach
+# Firefox. A system-wide override grants read-only access to the
+# host theme dirs + sets GTK_THEME inside the sandbox. Applies to
+# every Flatpak (current + future), so Dolphin/Zed inherit the
+# icon + cursor too even though their widget toolkits differ.
+RUN flatpak override --system \
+        --filesystem=/usr/share/themes:ro \
+        --filesystem=/usr/share/icons:ro \
+        --env=GTK_THEME=WhiteSur-Dark \
+        --env=XCURSOR_THEME=WhiteSur-cursors
+
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.
 RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \

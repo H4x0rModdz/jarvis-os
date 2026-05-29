@@ -58,4 +58,13 @@ else
     export XDG_DATA_DIRS="${xdg_flatpak}:/usr/local/share:/usr/share"
 fi
 
+# WhiteSur look (Phase: WhiteSur). The cursor theme is honoured by
+# labwc + every Wayland client through XCURSOR_*; GTK_THEME +
+# the icon theme cover GTK apps that don't read /etc/gtk-*/settings
+# .ini (Flatpak sandboxes in particular). Our Qt shell ignores
+# GTK_THEME — it has its own design — but inherits the cursor.
+export XCURSOR_THEME="${XCURSOR_THEME:-WhiteSur-cursors}"
+export XCURSOR_SIZE="${XCURSOR_SIZE:-24}"
+export GTK_THEME="${GTK_THEME:-WhiteSur-Dark}"
+
 exec "$@"
