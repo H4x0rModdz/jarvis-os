@@ -82,9 +82,11 @@ pub async fn notify(params: Value) -> Result<Value, BusError> {
 /// already an explicit user gesture, so the shell dispatches them
 /// directly.
 pub async fn power(params: Value) -> Result<Value, BusError> {
-    let op = params["op"].as_str().ok_or_else(|| BusError::InvalidParams {
-        message: "missing required param 'op' (poweroff|reboot|suspend|lock)".into(),
-    })?;
+    let op = params["op"]
+        .as_str()
+        .ok_or_else(|| BusError::InvalidParams {
+            message: "missing required param 'op' (poweroff|reboot|suspend|lock)".into(),
+        })?;
 
     // (binary, args) per op. Unknown ops are rejected before we spawn so
     // we never hand an arbitrary verb to systemctl.

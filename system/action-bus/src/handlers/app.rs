@@ -61,11 +61,12 @@ pub async fn open(params: Value) -> Result<Value, BusError> {
     }
 
     // 3. Last resort: a real binary on PATH.
-    let child = tokio::process::Command::new(app)
-        .spawn()
-        .map_err(|e| BusError::ExecutionFailed {
-            message: format!("Failed to launch '{app}': {e}"),
-        })?;
+    let child =
+        tokio::process::Command::new(app)
+            .spawn()
+            .map_err(|e| BusError::ExecutionFailed {
+                message: format!("Failed to launch '{app}': {e}"),
+            })?;
     Ok(json!({ "launched": true, "pid": child.id(), "via": "exec" }))
 }
 
@@ -82,9 +83,7 @@ fn resolve_desktop(app: &str) -> Option<PathBuf> {
         )));
         dirs.push(PathBuf::from(format!("{home}/.local/share/applications")));
     }
-    dirs.push(PathBuf::from(
-        "/var/lib/flatpak/exports/share/applications",
-    ));
+    dirs.push(PathBuf::from("/var/lib/flatpak/exports/share/applications"));
     dirs.push(PathBuf::from("/usr/share/applications"));
     dirs.push(PathBuf::from("/usr/local/share/applications"));
 

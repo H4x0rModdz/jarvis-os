@@ -36,8 +36,7 @@ impl Probe for SystemProbe {
         // space (user data, containers, logs) lives on /var, which is
         // the actual backing filesystem. Fall back to "/" only if
         // /var can't be stat'd (non-ostree host).
-        let disk_root_free_pct =
-            statvfs_free_pct("/var").or_else(|| statvfs_free_pct("/"));
+        let disk_root_free_pct = statvfs_free_pct("/var").or_else(|| statvfs_free_pct("/"));
         Signals {
             mem_free_pct,
             swap_used_pct,
