@@ -21,3 +21,12 @@ x-directory/normal=org.kde.dolphin.desktop
 text/html=org.mozilla.firefox.desktop
 x-scheme-handler/http=org.mozilla.firefox.desktop
 x-scheme-handler/https=org.mozilla.firefox.desktop
+
+# Desktop-icon targets. The Computador / Lixeira icons on the desktop
+# (shell/jarvis-shell/qml/Desktop.qml) dispatch `app.open` with the
+# `computer:///` and `trash:///` KIO URIs. Without an explicit handler
+# xdg-open has no default for these schemes and silently no-ops — the
+# same class of bug that broke "abrir firefox". Pinning them to Dolphin
+# (which natively serves both via KIO) makes the icons reliably open.
+x-scheme-handler/trash=org.kde.dolphin.desktop
+x-scheme-handler/computer=org.kde.dolphin.desktop

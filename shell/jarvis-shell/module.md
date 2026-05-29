@@ -45,6 +45,13 @@ across `src/` (C++ bridges) and `qml/`.
 | `qml/MicButton.qml` | Push-to-talk button bound to `VoiceBridge`. |
 | `qml/Theme.qml` | Singleton design tokens (colors, radii, animation durations). |
 
+### Desktop surface
+
+| File | Role |
+|---|---|
+| `qml/Desktop.qml` | Second top-level Window (objectName `jarvis-desktop`) holding the desktop icon column. `main.cpp` anchors it to all four output edges on the wlr-layer-shell *bottom* layer — above swaybg's wallpaper, below app windows — with no keyboard focus. Icons activate via `app.open`: Computador → `computer:///`, Lixeira → `trash:///` (both pinned to Dolphin in `iso/assets/xdg/mimeapps.list`), Pasta Pessoal → the `HomePath` context property. |
+| `qml/DesktopIcon.qml` | One labelled desktop icon. Single click selects (accent highlight), double click activates. Theme icon via `image://theme/`, monogram fallback, outlined label for legibility over any wallpaper. |
+
 ### Overlays
 
 | File | Role |

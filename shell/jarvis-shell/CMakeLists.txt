@@ -99,6 +99,8 @@ qt_add_qml_module(jarvis-shell
         qml/FirstBootWizard.qml
         qml/GlassPanel.qml
         qml/LilithPopup.qml
+        qml/Desktop.qml
+        qml/DesktopIcon.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE
