@@ -174,7 +174,20 @@ RUN dnf -y install \
         wine \
         flatpak \
         pamtester \
+        open-vm-tools \
+        qemu-guest-agent \
     && dnf clean all
+
+# Guest-integration daemons for VMs. open-vm-tools (VMware) gives
+# host time-sync + guest info; qemu-guest-agent covers QEMU/KVM.
+# Both are no-ops on bare metal / a non-matching hypervisor, so
+# enabling them unconditionally is safe. The legacy VMware Tools
+# ISO installer can't run on a bootc image (/usr is read-only) —
+# baking the package in is the correct path. Note: desktop auto-
+# resize / clipboard over Wayland is limited (labwc doesn't expose
+# the resize protocol VMware's X resizer used); time-sync + the
+# "VMware Tools running" status are the practical wins.
+RUN systemctl enable vmtoolsd.service qemu-guest-agent.service 2>/dev/null || true
 
 # Flathub remote system-wide so `flatpak install --user flathub <id>`
 # resolves on first call. Adding it at image build time keeps the
