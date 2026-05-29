@@ -133,6 +133,24 @@ Window {
                         onClicked: NetworkBridge.scan()
                     }
                 }
+
+                // Close — explicit affordance (Esc + click-outside
+                // aren't reliable in a VM where focus can lag).
+                Text {
+                    text: "×"
+                    color: closeArea.containsMouse ? Theme.danger : Theme.textDim
+                    font.pixelSize: 20
+                    font.weight: Font.Bold
+                    Layout.alignment: Qt.AlignVCenter
+                    MouseArea {
+                        id: closeArea
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.visible = false
+                    }
+                }
             }
 
             // ── Radio-off state ──────────────────────────────────────
