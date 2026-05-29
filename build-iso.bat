@@ -1,0 +1,76 @@
+@echo off
+REM ============================================================
+REM  Jarvis OS — full ISO build from Windows (drives WSL).
+REM
+REM  Builds the prebuilt builder base (once, ADR 0021 P2), the
+REM  OCI image, then the bootable ISO via bootc-image-builder.
+REM  Everything runs inside WSL where podman + the Linux
+REM  toolchain live.
+REM
+REM  Usage (from this folder, in a terminal):
+REM      build-iso.bat            normal build (reuses builder base)
+REM      build-iso.bat rebuild    force a fresh builder base too
+REM
+REM  Output:
+REM      iso\output\bootiso\install.iso   (Windows-visible — the
+REM      repo lives on the Windows filesystem)
+REM
+REM  Notes:
+REM   - Runs under sudo inside WSL so the OCI image + bootc-image-
+REM     builder share rootful podman storage (rootless splits them
+REM     and the ISO step fails with "image not known"). You'll be
+REM     prompted for your WSL sudo password in the console.
+REM   - First run builds the builder base (~10 min). Later runs
+REM     reuse it; only your crates recompile (~2 min) thanks to the
+REM     cargo cache mounts.
+REM   - bootc-image-builder needs loop devices + --privileged. WSL2
+REM     usually allows this; if the ISO step fails here, the GitHub
+REM     "Build ISO" workflow is the reliable fallback.
+REM ============================================================
+
+setlocal enabledelayedexpansion
+
+set "DISTRO=Ubuntu-24.04"
+
+REM Force a fresh builder base when the first argument is "rebuild".
+set "REBUILD=0"
+if /i "%~1"=="rebuild" set "REBUILD=1"
+
+REM Convert this .bat's own directory to a WSL path so the script is
+REM portable regardless of where the repo sits. %~dp0 ends with a
+REM trailing backslash; wslpath handles it.
+for /f "usebackq delims=" %%i in (`wsl -d %DISTRO% wslpath "%~dp0."`) do set "REPO=%%i"
+
+if "%REPO%"=="" (
+    echo [ERRO] Nao consegui resolver o caminho WSL do repo.
+    echo        Confirme que a distro "%DISTRO%" existe: wsl -l -v
+    exit /b 1
+)
+
+echo.
+echo === Jarvis OS ISO build ===
+echo   Distro : %DISTRO%
+echo   Repo   : %REPO%
+echo   Rebuild builder base: %REBUILD%
+echo.
+echo Voce sera solicitado a senha do sudo do WSL.
+echo.
+
+REM Run the whole pipeline under sudo inside a login shell (login
+REM shell so cargo/podman are on PATH). REBUILD_BUILDER is read by
+REM tools/build-iso.sh.
+wsl -d %DISTRO% bash -lc "cd '%REPO%' && sudo REBUILD_BUILDER=%REBUILD% bash tools/build-iso.sh"
+
+if errorlevel 1 (
+    echo.
+    echo [FALHOU] O build retornou erro. Veja a saida acima.
+    echo   Se quebrou no passo bootc-image-builder, tente o
+    echo   workflow "Build ISO" no GitHub Actions como fallback.
+    exit /b 1
+)
+
+echo.
+echo === Build concluido ===
+echo ISO: %~dp0iso\output\bootiso\install.iso
+echo.
+endlocal
