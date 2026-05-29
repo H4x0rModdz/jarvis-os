@@ -191,6 +191,19 @@ pub async fn set_setting(params: Value) -> Result<Value, BusError> {
     }
 }
 
+async fn settings_proxy() -> Result<Proxy<'static>, BusError> {
+    let conn = Connection::session()
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("session bus: {e}"),
+        })?;
+    Proxy::new(&conn, SETTINGS_SERVICE, SETTINGS_PATH, SETTINGS_IFACE)
+        .await
+        .map_err(|e| BusError::Unavailable {
+            service: format!("Settings proxy: {e}"),
+        })
+}
+
 #[cfg(test)]
 mod power_tests {
     use super::*;
@@ -206,17 +219,4 @@ mod power_tests {
         let r = power(json!({ "op": "self-destruct" })).await;
         assert!(matches!(r, Err(BusError::InvalidParams { .. })));
     }
-}
-
-async fn settings_proxy() -> Result<Proxy<'static>, BusError> {
-    let conn = Connection::session()
-        .await
-        .map_err(|e| BusError::Unavailable {
-            service: format!("session bus: {e}"),
-        })?;
-    Proxy::new(&conn, SETTINGS_SERVICE, SETTINGS_PATH, SETTINGS_IFACE)
-        .await
-        .map_err(|e| BusError::Unavailable {
-            service: format!("Settings proxy: {e}"),
-        })
 }

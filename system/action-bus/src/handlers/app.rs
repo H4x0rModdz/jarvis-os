@@ -71,8 +71,8 @@ pub async fn open(params: Value) -> Result<Value, BusError> {
 }
 
 /// Find the best `.desktop` for an app name across the standard XDG
-/// + Flatpak export dirs. Match priority: exact basename, then the
-/// last dot-segment (org.mozilla.firefox → "firefox"), then any
+/// and Flatpak export dirs. Match priority: exact basename, then the
+/// last dot-segment (org.mozilla.firefox to "firefox"), then any
 /// case-insensitive substring. Returns the file path for `gio launch`.
 fn resolve_desktop(app: &str) -> Option<PathBuf> {
     let needle = app.to_lowercase();
