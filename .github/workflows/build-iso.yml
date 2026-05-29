@@ -48,6 +48,14 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y podman
 
+      - name: Log in to ghcr.io
+        # Needed both to pull the published builder base (P2) and to
+        # push/pull the OCI layer cache (P3). Best-effort: a fork
+        # without packages perms still builds, just without the cache.
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin || true
+
       - name: Resolve builder base
         # ADR 0021 P2: the main image FROMs a prebuilt jarvis-builder
         # (toolchain + whisper + piper + numbat). Pull it from ghcr if
@@ -76,7 +84,30 @@ jobs:
         # bootc-image-builder (also root) reads from in the next step.
         # Otherwise rootless podman puts it in ~/.local/share/containers and
         # bootc-image-builder fails with "image not known".
+        #
+        # ADR 0021 P3: --layers + a registry layer cache. The final
+        # stage's stable, expensive layers — the bootc base, the dnf
+        # runtime install, and the ~2 GB of Flatpak app installs
+        # (Firefox/Dolphin/Zed/KDE runtime) — restore from
+        # ghcr.io/<owner>/jarvis-os-cache instead of re-downloading
+        # every run. cache-from/to are best-effort (|| true keeps a
+        # cacheless run working on forks without packages perms).
+        # Note: the builder stage's cargo `--mount=type=cache` does NOT
+        # round-trip through --cache-to (podman limitation) — that
+        # warming is deferred; the P2 base already removes the heavy
+        # toolchain rebuild, which was the bigger cost.
         run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          CACHE="ghcr.io/${OWNER}/jarvis-os-cache"
+          sudo podman build \
+            --file iso/Containerfile \
+            --layers \
+            --cache-from "$CACHE" \
+            --cache-to "$CACHE" \
+            --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
+            --build-arg "BUILDER_IMAGE=${{ steps.builder.outputs.ref }}" \
+            --tag "jarvis-os:${{ steps.version.outputs.tag }}" \
+            . || \
           sudo podman build \
             --file iso/Containerfile \
             --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \

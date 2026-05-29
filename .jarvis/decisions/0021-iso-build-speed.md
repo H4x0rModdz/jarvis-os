@@ -1,6 +1,6 @@
 # ADR 0021 — ISO build speed: cache mounts now, prebuilt builder next
 
-**Status:** Accepted (P1 implemented). P2/P3 proposed.
+**Status:** Accepted. P1 + P2 + P3 implemented.
 **Date:** 2026-05-21
 
 ## Problem
@@ -56,16 +56,28 @@ Cost: one new workflow (`build-builder.yml`), a second Containerfile
 (`iso/Containerfile.builder`), and a `ghcr.io` push (needs
 `packages: write`, already granted in build-iso.yml).
 
-### P3 — CI cache wiring (PROPOSED, pairs with P2)
+### P3 — CI layer cache (DONE)
 
-Make the CI runner benefit from P1's cache mounts + layer cache:
-- `--cache-from` / `--cache-to` against the ghcr builder + a
-  `jarvis-os:cache` tag so buildah layers restore across runs.
-- `actions/cache` keyed on `Cargo.lock` hash for the cache-mount
-  export dirs if we move to a self-hosted or cache-mount-exporting
-  setup.
+build-iso.yml builds with `--layers --cache-from --cache-to
+ghcr.io/<owner>/jarvis-os-cache`. The final stage's stable,
+expensive layers — the bootc base, the dnf runtime install, and
+the ~2 GB of Flatpak app installs (Firefox / Dolphin / Zed / KDE
+runtime) — restore from the registry cache instead of
+re-downloading every run. A ghcr login step (best-effort) gates
+it; a fork without packages perms falls back to a cacheless build
+via `|| <plain build>`.
 
-Effect: warm CI rebuilds approach the local times.
+Scoped limitation, accepted: the builder stage's cargo
+`--mount=type=cache` does NOT round-trip through `--cache-to`
+(podman/buildah can't export cache mounts to a registry). Warming
+the CI cargo cache would need a self-hosted runner or an
+actions/cache tarball bind, which is fragile and low-ROI now that
+P2's prebuilt base already removed the heavy toolchain + whisper +
+numbat rebuild — the dominant CI cost. Deferred indefinitely.
+
+Effect: warm CI rebuilds skip the ~2 GB Flatpak re-download + the
+dnf runtime install; combined with P2, CI drops from ~30-60 min to
+roughly the compile-our-crates + bootc-image-builder floor.
 
 ## Out of scope / unchanged
 
