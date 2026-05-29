@@ -5,6 +5,7 @@
 #include <QQuickWindow>
 #include <QLoggingCategory>
 #include <QDir>
+#include <QMargins>
 
 #ifdef JARVIS_HAVE_LAYER_SHELL
 #  include <LayerShellQt/Shell>
@@ -59,12 +60,14 @@ int main(int argc, char** argv)
     // qrc:/… URL in Qt 6.10 silently drops the singleton flag on
     // pragma-Singleton QML files — every Theme.* reference then errors with
     // "was a singleton at compile time, but is not a singleton anymore."
+    // Three layer-shell roots, all rendered by this one engine. Each
+    // loadFromModule appends a top-level Window to rootObjects(); the
+    // loop below configures each by objectName:
+    //   Main    → "jarvis-topbar"  (top menu bar)
+    //   Dock    → "jarvis-dock"    (floating bottom dock + Lilith orb)
+    //   Desktop → "jarvis-desktop" (desktop icons, bottom layer)
     engine.loadFromModule("Jarvis.Shell", "Main");
-    // The desktop icon surface (Computador / Pasta Pessoal / Lixeira) is
-    // a second top-level Window; loadFromModule appends it to
-    // rootObjects(). It identifies itself with objectName "jarvis-desktop"
-    // so the layer-shell loop below can give it the full-screen bottom
-    // anchoring the bar must not get.
+    engine.loadFromModule("Jarvis.Shell", "Dock");
     engine.loadFromModule("Jarvis.Shell", "Desktop");
     if (engine.rootObjects().isEmpty()) {
         return 1;
@@ -77,14 +80,14 @@ int main(int argc, char** argv)
         auto* layer = LayerShellQt::Window::get(win);
         if (!layer) continue;
 
+        const QString name = win->objectName();
         // Anchors lacks Q_DECLARE_OPERATORS_FOR_FLAGS in v6.0.0, so every
         // OR is wrapped in an explicit Anchors(...) cast.
-        if (win->objectName() == QLatin1String("jarvis-desktop")) {
+        if (name == QLatin1String("jarvis-desktop")) {
             // Desktop icons: cover the whole output on the *bottom* layer
             // (above swaybg's wallpaper, below app windows so they cover
             // it). Exclusive zone 0 = don't reserve space but DO shrink
-            // around the bar's zone, so icons never hide under the bar.
-            // No keyboard — clicking icons only needs pointer focus.
+            // around the bars' zones. No keyboard — clicks only.
             layer->setLayer(LayerShellQt::Window::LayerBottom);
             layer->setAnchors(LayerShellQt::Window::Anchors(
                 LayerShellQt::Window::AnchorTop
@@ -94,16 +97,28 @@ int main(int argc, char** argv)
             layer->setExclusiveZone(0);
             layer->setScope(QStringLiteral("jarvis-desktop"));
             layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        } else {
-            // The bar: bottom edge of every output, height excluded from
-            // the area ordinary windows can sit in, kept on top.
+        } else if (name == QLatin1String("jarvis-dock")) {
+            // Dock: anchored to the bottom edge only, so the compositor
+            // centers it at its own width. Top layer, exclusive zone 0 —
+            // maximized windows float *under* it, exactly like macOS. A
+            // small bottom margin lifts it off the screen edge.
             layer->setLayer(LayerShellQt::Window::LayerTop);
             layer->setAnchors(LayerShellQt::Window::Anchors(
-                LayerShellQt::Window::AnchorBottom
+                LayerShellQt::Window::AnchorBottom));
+            layer->setExclusiveZone(0);
+            layer->setMargins(QMargins(0, 0, 0, 8));
+            layer->setScope(QStringLiteral("jarvis-dock"));
+            layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+        } else {
+            // Top menu bar: top edge of every output, its height excluded
+            // from the area ordinary windows can sit in, kept on top.
+            layer->setLayer(LayerShellQt::Window::LayerTop);
+            layer->setAnchors(LayerShellQt::Window::Anchors(
+                LayerShellQt::Window::AnchorTop
                 | LayerShellQt::Window::AnchorLeft
                 | LayerShellQt::Window::AnchorRight));
             layer->setExclusiveZone(win->height());
-            layer->setScope(QStringLiteral("jarvis-bar"));
+            layer->setScope(QStringLiteral("jarvis-topbar"));
             layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityOnDemand);
         }
     }

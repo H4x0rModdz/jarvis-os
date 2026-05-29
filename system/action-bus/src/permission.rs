@@ -136,6 +136,9 @@ impl PermissionChecker {
             "system.notify" => "system.notify",
             "system.set_setting" => "settings.modify",
             "system.get_setting" => "settings.read",
+            // Power ops are sensitive: NOT a safe scope, so a non-menu
+            // (e.g. Lilith-initiated) call prompts for confirmation.
+            "system.power" => "system.power",
             _ => "unknown",
         }
     }

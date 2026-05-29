@@ -27,26 +27,61 @@ Window {
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Lilith")
 
-    /// Height of the bar so we can sit just above it without overlap.
-    /// Default matches Theme.barHeight + a small gap; caller can
-    /// override if the bar is custom-sized.
-    property int barHeight: Theme.barHeight + 12
+    /// Gap from the bottom edge so the popup sits just above the dock
+    /// without overlapping it (the floating dock is ~90px tall).
+    property int bottomGap: 104
 
     function requestOpen() {
         if (Qt.application.screens.length > 0) {
             const s = Qt.application.screens[0];
             x = s.virtualX + Math.floor((s.width - width) / 2);
-            y = s.virtualY + s.height - height - barHeight;
+            y = s.virtualY + s.height - height - bottomGap;
         }
         visible = true;
-        // Don't requestActivate — the bar's input field should keep
-        // keyboard focus while the popup observes. activeChanged
-        // would otherwise yank focus away from the user typing.
+        // Auto-open path (busy / proactive) does NOT grab focus — only
+        // an explicit orb click (toggle) activates + focuses the input.
+    }
+
+    /// Orb-click entry point: open + activate + focus the input so the
+    /// user can type immediately. Clicking the orb again closes.
+    function toggle() {
+        if (visible) {
+            hideNow();
+            return;
+        }
+        requestOpen();
+        requestActivate();
+        promptInput.forceActiveFocus();
     }
 
     function hideNow() {
         visible = false;
         fadeTimer.stop();
+    }
+
+    // ── Error surfacing ─────────────────────────────────────────────
+    // The retired bottom bar used to show Lilith/voice errors in its
+    // reply box; that box is gone, so the popup owns errors now. Shows
+    // a red row, pops the popup, and fades on the same timer.
+    property string errorText: ""
+    Connections {
+        target: LilithBridge
+        function onErrorOccurred(message) {
+            root.errorText = qsTr("Erro: ") + message;
+            if (!root.visible) root.requestOpen();
+            fadeTimer.restart();
+        }
+    }
+    Connections {
+        target: VoiceBridge
+        function onLastErrorChanged() {
+            const e = VoiceBridge.lastError;
+            if (e.length > 0) {
+                root.errorText = qsTr("Voz: ") + e;
+                if (!root.visible) root.requestOpen();
+                fadeTimer.restart();
+            }
+        }
     }
 
     // ── Auto-show / auto-fade lifecycle ─────────────────────────────
@@ -158,6 +193,32 @@ Window {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.hideNow()
                     }
+                }
+            }
+
+            // ── Error row ──────────────────────────────────────────
+            // Red strip for Lilith / voice errors (the retired bar's
+            // reply box used to own this). Cleared when the user sends
+            // a new message.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: errLabel.implicitHeight + 16
+                visible: root.errorText.length > 0
+                radius: 10
+                color: Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.16)
+                border.color: Theme.danger
+                border.width: 1
+                Text {
+                    id: errLabel
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
+                    text: root.errorText
+                    color: Theme.text
+                    font.pixelSize: 13
+                    wrapMode: Text.WordWrap
                 }
             }
 
@@ -504,6 +565,50 @@ Window {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
+                }
+            }
+
+            // ── Prompt input ───────────────────────────────────────
+            // The conversation surface is now the only place to type to
+            // Lilith (the always-on bar input is retired). Enter sends
+            // and clears; sending also wipes any error row.
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 40
+                radius: Theme.radius - 4
+                color: Qt.rgba(1, 1, 1, 0.05)
+                border.color: promptInput.activeFocus ? Theme.accent : Theme.border
+                border.width: 1
+                Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
+
+                TextInput {
+                    id: promptInput
+                    anchors.fill: parent
+                    anchors.leftMargin: 14
+                    anchors.rightMargin: 14
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: Theme.text
+                    selectionColor: Theme.accent
+                    selectedTextColor: Theme.text
+                    font.pixelSize: 14
+                    clip: true
+                    enabled: !LilithBridge.busy
+                    onAccepted: {
+                        const t = text.trim();
+                        if (t.length === 0) return;
+                        root.errorText = "";
+                        LilithBridge.send(t);
+                        text = "";
+                    }
+                }
+
+                Text {
+                    anchors.fill: promptInput
+                    verticalAlignment: Text.AlignVCenter
+                    text: qsTr("Pergunte à Lilith…")
+                    color: Theme.textDim
+                    font.pixelSize: 14
+                    visible: promptInput.text.length === 0
                 }
             }
         }

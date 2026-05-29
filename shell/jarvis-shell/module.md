@@ -3,12 +3,13 @@
 ## Purpose
 
 The Jarvis OS desktop shell — a Qt6/QML application that paints the
-always-present bar at the bottom of the screen, the launcher overlay,
-permission approval dialogs, the first-boot updater splash, the
-preferences panel, notification toasts + drawer, and the mic / lock
-glyphs the user clicks to invoke voice or lock the session. Lives in
-user space, talks to every Jarvis daemon via DBus, anchors itself to
-screen edges via the `wlr-layer-shell` Wayland protocol.
+macOS-style **top menu bar**, the floating **bottom dock** (app tiles +
+the Lilith orb), the **desktop icons**, the launcher overlay, permission
+approval dialogs, the first-boot updater splash, the preferences panel,
+notification toasts + drawer, and Lilith's conversation popup. Lives in
+user space, talks to every Jarvis daemon via DBus, and anchors its three
+top-level surfaces to screen edges via the `wlr-layer-shell` Wayland
+protocol. See ADR 0022 for the menu-bar/dock/orb layout decision.
 
 ## Boundaries
 
@@ -30,20 +31,32 @@ screen edges via the `wlr-layer-shell` Wayland protocol.
 The Qt module is registered as `Jarvis.Shell`. Components are split
 across `src/` (C++ bridges) and `qml/`.
 
-### Bar surface
+### Top menu bar
 
 | File | Role |
 |---|---|
-| `qml/Main.qml` | Root layer-shell window holding bar + sibling Windows (Launcher, ApprovalDialog, UpdaterSplash, SettingsPanel, NotificationToast, NotificationDrawer). |
-| `qml/Bar.qml` | The bar surface — hamburger, clock, mic, Lilith input, status LED, bell, gear. |
-| `qml/BarMenuButton.qml` | Hamburger glyph on the left (opens the launcher). |
+| `qml/Main.qml` | Root layer-shell window (objectName `jarvis-topbar`, anchored top). Holds `TopBar` + every sibling popup Window (JarvisMenu, AboutDialog, Launcher, ApprovalDialog, UpdaterSplash, SettingsPanel, DisplayPanel, NotificationToast/Drawer, LilithPopup, ConnectivityPanel, BluetoothPanel, FirstBootWizard). Listens to `ShellBus` for intents from the dock. |
+| `qml/TopBar.qml` | The menu-bar content — Jarvis logo (left, opens the Jarvis menu) + reused wifi/bluetooth/battery/bell/gear indicators + clock (right). |
+| `qml/JarvisMenu.qml` | Apple-menu analogue dropping from the logo: Sobre, Configurações, Atualização, Bloquear/Suspender/Reiniciar/Desligar (the last four dispatch `system.power`). |
+| `qml/AboutDialog.qml` | "Sobre este PC" card. |
 | `qml/BarGearButton.qml` | Gear glyph (opens the settings panel). |
 | `qml/BarBellButton.qml` | Bell glyph (opens the notification drawer). |
 | `qml/Clock.qml` | HH:MM:SS time, updates every second. |
-| `qml/LilithInput.qml` | Conversational text input. Placeholder rotates with `LilithBridge.busy` + `PermissionBridge.hasPending`. |
-| `qml/StatusIndicator.qml` | Pulsing LED dot reflecting `LilithBridge.reachable` / `busy`. |
-| `qml/MicButton.qml` | Push-to-talk button bound to `VoiceBridge`. |
 | `qml/Theme.qml` | Singleton design tokens (colors, radii, animation durations). |
+| `qml/ShellBus.qml` | Singleton signal bus carrying cross-surface UI intents (dock → top-bar popups): `toggleLilith` / `openLauncher` / `openSettings` / `openNotifications`. |
+
+### Dock
+
+| File | Role |
+|---|---|
+| `qml/Dock.qml` | Floating bottom dock (objectName `jarvis-dock`): a glass pill of pinned app tiles + a divider + the Lilith orb. `main.cpp` anchors it to the bottom edge only (compositor-centered), Top layer, no exclusive zone — maximized windows float under it. App tiles dispatch `app.open`; the Launchpad tile and orb route through `ShellBus`. |
+| `qml/DockIcon.qml` | One dock tile — theme/path icon with hover magnification + monogram fallback. |
+| `qml/LilithOrb.qml` | Lilith's dock presence. Glyph encodes state — `◉` idle, `◎` listening, `◌◌◌` thinking, `◉◉◉` speaking (from `VoiceBridge.state` + `LilithBridge.busy`). Click → `ShellBus.toggleLilith`; press-and-hold → `VoiceBridge.toggle` (push-to-talk). Subsumes the retired status LED + mic button. |
+
+> **Retired:** `Bar.qml` (the old single bottom bar) and its bar-only
+> `LilithInput` / `MicButton` / `StatusIndicator` / `BarMenuButton` are
+> no longer instantiated (see ADR 0022). The files remain in the module
+> until a follow-up cleanup removes them.
 
 ### Desktop surface
 

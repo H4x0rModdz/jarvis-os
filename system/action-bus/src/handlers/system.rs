@@ -67,6 +67,49 @@ pub async fn notify(params: Value) -> Result<Value, BusError> {
     Ok(json!({ "sent": true, "id": id }))
 }
 
+/// Power management: shut down, reboot, suspend, or lock the session.
+///
+/// `op` is one of `poweroff` / `reboot` / `suspend` / `lock`. The first
+/// three go through `systemctl` (logind grants an active local session
+/// these via polkit without sudo); `lock` goes through
+/// `loginctl lock-session`, which jarvis-lock picks up the same way the
+/// idle auto-lock does. This is the backend for the Jarvis menu's power
+/// items — the shell can't shell out itself (Action Bus boundary), so it
+/// dispatches here.
+///
+/// The scope is `system.power`, deliberately NOT on the safe list, so a
+/// stray Lilith call would prompt for confirmation. The menu items are
+/// already an explicit user gesture, so the shell dispatches them
+/// directly.
+pub async fn power(params: Value) -> Result<Value, BusError> {
+    let op = params["op"].as_str().ok_or_else(|| BusError::InvalidParams {
+        message: "missing required param 'op' (poweroff|reboot|suspend|lock)".into(),
+    })?;
+
+    // (binary, args) per op. Unknown ops are rejected before we spawn so
+    // we never hand an arbitrary verb to systemctl.
+    let (bin, args): (&str, &[&str]) = match op {
+        "poweroff" => ("systemctl", &["poweroff"]),
+        "reboot" => ("systemctl", &["reboot"]),
+        "suspend" => ("systemctl", &["suspend"]),
+        "lock" => ("loginctl", &["lock-session"]),
+        other => {
+            return Err(BusError::InvalidParams {
+                message: format!("unknown power op '{other}' (poweroff|reboot|suspend|lock)"),
+            })
+        }
+    };
+
+    let child = tokio::process::Command::new(bin)
+        .args(args)
+        .spawn()
+        .map_err(|e| BusError::ExecutionFailed {
+            message: format!("spawn {bin} {}: {e}", args.join(" ")),
+        })?;
+
+    Ok(json!({ "ok": true, "op": op, "pid": child.id() }))
+}
+
 /// Read a setting from the Settings daemon.
 ///
 /// Accepts `key` and an optional `default` (any JSON value). When the
@@ -143,6 +186,23 @@ pub async fn set_setting(params: Value) -> Result<Value, BusError> {
             .unwrap_or("unknown error")
             .to_string();
         Err(BusError::ExecutionFailed { message: msg })
+    }
+}
+
+#[cfg(test)]
+mod power_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn power_requires_op() {
+        let r = power(json!({})).await;
+        assert!(matches!(r, Err(BusError::InvalidParams { .. })));
+    }
+
+    #[tokio::test]
+    async fn power_rejects_unknown_op() {
+        let r = power(json!({ "op": "self-destruct" })).await;
+        assert!(matches!(r, Err(BusError::InvalidParams { .. })));
     }
 }
 

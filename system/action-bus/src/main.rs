@@ -123,6 +123,7 @@ fn build_registry() -> Registry {
     reg!("system.notify", handlers::system::notify);
     reg!("system.set_setting", handlers::system::set_setting);
     reg!("system.get_setting", handlers::system::get_setting);
+    reg!("system.power", handlers::system::power);
 
     reg!("browser.open", handlers::browser::open);
 

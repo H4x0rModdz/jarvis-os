@@ -19,6 +19,7 @@ QtObject {
     readonly property color danger:        "#ff5c7c"
 
     readonly property int   barHeight:     64
+    readonly property int   topBarHeight:  30
     readonly property int   radius:        12
     readonly property int   gap:           12
     readonly property int   pad:           14

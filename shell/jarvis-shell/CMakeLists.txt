@@ -62,9 +62,10 @@ qt_add_executable(jarvis-shell
 # Qt's qmltype registration generator includes our headers by short name.
 target_include_directories(jarvis-shell PRIVATE src)
 
-# Theme is `pragma Singleton` — tell the QML toolchain so importing
-# `Jarvis.Shell` exposes Theme as a singleton object.
-set_source_files_properties(qml/Theme.qml PROPERTIES
+# Theme and ShellBus are `pragma Singleton` — tell the QML toolchain so
+# importing `Jarvis.Shell` exposes them as singleton objects. (ShellBus
+# carries cross-surface UI intents between the top-bar / dock roots.)
+set_source_files_properties(qml/Theme.qml qml/ShellBus.qml PROPERTIES
     QT_QML_SINGLETON_TYPE TRUE
 )
 
@@ -101,6 +102,13 @@ qt_add_qml_module(jarvis-shell
         qml/LilithPopup.qml
         qml/Desktop.qml
         qml/DesktopIcon.qml
+        qml/ShellBus.qml
+        qml/TopBar.qml
+        qml/JarvisMenu.qml
+        qml/AboutDialog.qml
+        qml/Dock.qml
+        qml/DockIcon.qml
+        qml/LilithOrb.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE
