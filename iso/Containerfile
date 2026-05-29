@@ -131,7 +131,12 @@ RUN cmake -S shell/jarvis-lock -B /build/lock -G Ninja \
 RUN cp /build/lock/jarvis-lock-window /out/bin/ \
     && cp /build/shell/jarvis-shell    /out/bin/ \
     && cp /build/greeter/jarvis-greeter /out/bin/ \
-    && strip /out/bin/*
+    # Per-file strip that tolerates non-ELF entries: when
+    # BUILD_COMPOSITOR=0, /out/bin/jarvis-compositor is a shell-script
+    # stub (created in the compositor RUN above), and `strip` on a
+    # text file errors out "file format not recognized" and fails the
+    # whole RUN. Skip anything strip can't handle.
+    && for f in /out/bin/*; do strip "$f" 2>/dev/null || true; done
 
 # ──────────────────────────── Stage 2: final  ────────────────────────────
 FROM quay.io/fedora/fedora-bootc:42

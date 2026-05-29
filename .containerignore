@@ -1,0 +1,35 @@
+# Build context exclusions for `podman build` (iso/Containerfile).
+#
+# Without this, `COPY . .` ships the ENTIRE repo into the build —
+# including target/ (~13 GB of host cargo artifacts from local test
+# runs) and iso/output/ (built ISOs/images). That made the COPY step
+# transfer gigabytes of junk the build never uses: the builder
+# compiles into /build/rust via a cache mount, not the host target/.
+#
+# Keep only source. The COPY drops from ~13 GB to tens of MB.
+
+# Rust build artifacts (host toolchain — irrelevant to the image build)
+target/
+**/target/
+
+# ISO build outputs + any local images
+iso/output/
+*.iso
+
+# VCS + editor noise
+.git/
+.gitignore
+*.swp
+.DS_Store
+
+# Local cmake build dirs (the Containerfile builds out-of-tree anyway)
+build/
+**/build/
+/tmp/
+
+# Node / misc if ever added
+node_modules/
+
+# The container build files themselves don't need to be in the context
+# they're invoked from, but harmless to keep — left in so the image can
+# self-document if needed.
