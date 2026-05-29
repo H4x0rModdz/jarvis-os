@@ -29,6 +29,21 @@ int main(int argc, char** argv)
     app.setApplicationName(QStringLiteral("jarvis-shell"));
 
     QQmlApplicationEngine engine;
+
+    // Dev loop: set JARVIS_QML_PATH to a directory that contains the
+    // built `Jarvis/Shell/` module tree (the cmake build dir works —
+    // qt_add_qml_module drops the qmldir + .qml files there). With it
+    // set we prepend that dir to the engine's import paths so the
+    // on-disk QML shadows the qrc-compiled copies. Edit a .qml,
+    // restart jarvis-shell, see the change — no C++/cmake rebuild.
+    // Unset (production) → falls straight through to the embedded
+    // module. tools/dev-deploy.sh wires this automatically.
+    const QByteArray devQmlPath = qgetenv("JARVIS_QML_PATH");
+    if (!devQmlPath.isEmpty()) {
+        engine.addImportPath(QString::fromLocal8Bit(devQmlPath));
+        qInfo("jarvis-shell: dev QML path active: %s", devQmlPath.constData());
+    }
+
     // Qt 6.5+ idiom: resolve the entry point through the QML module so the
     // engine reads the generated qmldir (including `singleton Theme`) and
     // registers types with their correct semantics. Loading via a raw
