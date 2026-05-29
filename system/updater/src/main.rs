@@ -403,35 +403,61 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    // Probe bootc for a staged OS upgrade. Independent of the model
-    // pull — the splash can show both states at once. We never apply
-    // automatically here; the user clicks Install on the splash, which
-    // routes back into `ApplyOsUpgrade`.
-    match bootc::check_update().await {
-        Ok(info) if info.available => {
-            let object_server = conn.object_server();
-            let iface_ref = object_server
-                .interface::<_, UpdaterService>("/com/jarvis/Updater")
-                .await?;
-            let ctx = iface_ref.signal_context().clone();
-            let version = info
-                .version
-                .unwrap_or_else(|| "(no version reported)".into());
-            tracing::info!(%version, "bootc OS update available");
-            if let Err(e) = UpdaterService::os_update_available(&ctx, &version).await {
-                tracing::warn!("Failed to emit OSUpdateAvailable signal: {e}");
+    // Watch bootc for staged OS upgrades, forever. Probes immediately,
+    // then every interval — the daemon finds updates on its own; the
+    // user is only ever *notified*, never auto-rebooted (a reboot mid-
+    // work is the dangerous part, so it stays an explicit gesture). This
+    // call loops and never returns, which also keeps the daemon alive.
+    os_update_watch(&conn).await?;
+    Ok(())
+}
+
+/// Periodic OS-update probe. Replaces the old one-shot check + idle
+/// loop (the "Phase 2 periodic check" the self-trigger comment promised).
+///
+/// Every `JARVIS_UPDATER_OS_CHECK_SECS` (default 3600) we ask bootc
+/// whether a newer image is staged upstream and emit `os_update_available`
+/// — but only when the available version *changes*, so a user who defers
+/// an update isn't re-nudged every hour for the same one. When bootc
+/// reports nothing staged we clear the memory, so a later update
+/// re-notifies. We never apply here; the shell surfaces the chip and the
+/// user confirms via `ApplyOSUpgrade`.
+async fn os_update_watch(conn: &zbus::Connection) -> zbus::Result<()> {
+    let interval = std::env::var("JARVIS_UPDATER_OS_CHECK_SECS")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(3600);
+
+    let object_server = conn.object_server();
+    let iface_ref = object_server
+        .interface::<_, UpdaterService>("/com/jarvis/Updater")
+        .await?;
+    let ctx = iface_ref.signal_context().clone();
+
+    let mut last_notified: Option<String> = None;
+    loop {
+        match bootc::check_update().await {
+            Ok(info) if info.available => {
+                let version = info
+                    .version
+                    .unwrap_or_else(|| "(no version reported)".into());
+                if last_notified.as_deref() != Some(version.as_str()) {
+                    tracing::info!(%version, "bootc OS update available");
+                    if let Err(e) = UpdaterService::os_update_available(&ctx, &version).await {
+                        tracing::warn!("Failed to emit OSUpdateAvailable signal: {e}");
+                    }
+                    last_notified = Some(version);
+                }
+            }
+            Ok(_) => {
+                tracing::debug!("bootc reports no OS update available");
+                last_notified = None; // a future update should re-notify
+            }
+            Err(e) => {
+                tracing::debug!(error = %e, "bootc probe skipped");
             }
         }
-        Ok(_) => {
-            tracing::info!("bootc reports no OS update available");
-        }
-        Err(e) => {
-            tracing::debug!(error = %e, "bootc probe skipped");
-        }
-    }
-
-    loop {
-        tokio::time::sleep(Duration::from_secs(3600)).await;
+        tokio::time::sleep(Duration::from_secs(interval)).await;
     }
 }
 
