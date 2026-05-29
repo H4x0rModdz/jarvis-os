@@ -53,7 +53,8 @@ ARG WHISPER_VERSION=v1.7.4
 # friends along — those wouldn't survive the COPY --from=builder line
 # in stage 2 without explicit support, and the daemon would crash-loop
 # with `exit 127` (loader can't find shared deps).
-RUN git clone --depth 1 --branch ${WHISPER_VERSION} \
+RUN --mount=type=cache,target=/build/whisper,id=whisper-build \
+    git clone --depth 1 --branch ${WHISPER_VERSION} \
         https://github.com/ggml-org/whisper.cpp.git /src/whisper.cpp \
     && cmake -S /src/whisper.cpp -B /build/whisper -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
@@ -98,7 +99,10 @@ RUN mkdir -p /out/piper /out/piper-voices \
 # Pinned to a known-good version — bump deliberately, the same way
 # we pin WHISPER_VERSION above.
 ARG NUMBAT_VERSION=1.16.0
-RUN CARGO_TARGET_DIR=/build/numbat cargo install \
+RUN --mount=type=cache,target=/build/numbat,id=numbat-target \
+    --mount=type=cache,target=/root/.cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/root/.cargo/git,id=cargo-git \
+    CARGO_TARGET_DIR=/build/numbat cargo install \
         --root /out/numbat \
         --locked \
         --version ${NUMBAT_VERSION} \
@@ -111,7 +115,19 @@ COPY . .
 # stub for now and pulls in smithay + libseat-sys + a long tail of Wayland
 # build deps that would balloon the ISO image. The ISO uses labwc as its
 # compositor; our own lands in a later release.
-RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
+# Cache mounts (build-speed, see ADR 0021): the cargo target dir +
+# the cargo registry/git persist ACROSS builds without landing in any
+# image layer. A source-only edit then recompiles just our crates —
+# the whole dependency tree (tokio, zbus, reqwest, rusqlite, rustfft,
+# …) stays warm. Local rebuilds drop from ~15 min to ~2 min.
+#
+# Because the target dir is a cache mount (gone once the RUN ends), we
+# copy the binaries we want into the real /out tree IN THE SAME RUN —
+# a later "collect" step can't read a cache mount.
+RUN --mount=type=cache,target=/build/rust,id=jarvis-rust-target \
+    --mount=type=cache,target=/root/.cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/root/.cargo/git,id=cargo-git \
+    CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-action-bus \
         -p jarvis-permission \
         -p jarvis-settings \
@@ -126,16 +142,43 @@ RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-lock \
         -p jarvis-lock-ctl \
         -p jarvis-voiceprint-ctl \
-        -p pam-jarvis
+        -p pam-jarvis \
+    && mkdir -p /out/bin /out/pam \
+    && cp /build/rust/release/jarvis-action-bus     /out/bin/ \
+    && cp /build/rust/release/jarvis-permission     /out/bin/ \
+    && cp /build/rust/release/jarvis-settings       /out/bin/ \
+    && cp /build/rust/release/jarvis-notifications  /out/bin/ \
+    && cp /build/rust/release/jarvis-lilith         /out/bin/ \
+    && cp /build/rust/release/jarvis-updater        /out/bin/ \
+    && cp /build/rust/release/jarvis-voice          /out/bin/ \
+    && cp /build/rust/release/jarvis-voice-ctl      /out/bin/ \
+    && cp /build/rust/release/jarvis-app            /out/bin/ \
+    && cp /build/rust/release/sdk-hello             /out/bin/ \
+    && cp /build/rust/release/jarvis-compat         /out/bin/ \
+    && cp /build/rust/release/jarvis-lock           /out/bin/ \
+    && cp /build/rust/release/jarvis-lock-ctl       /out/bin/ \
+    && cp /build/rust/release/jarvis-voiceprint-ctl /out/bin/ \
+    && cp /build/rust/release/libpam_jarvis.so      /out/pam/pam_jarvis.so \
+    && cp /build/rust/release/jarvis-pam-helper     /out/bin/
 
 # Optional: build the Jarvis Smithay compositor when BUILD_COMPOSITOR=1.
-# Kept as a separate RUN so the cargo cache from above is reused and so
-# the much-longer Smithay link step doesn't poison non-compositor
-# rebuilds.
-RUN if [ "$BUILD_COMPOSITOR" = "1" ]; then \
-        CARGO_TARGET_DIR=/build/rust cargo build --release \
-            -p jarvis-compositor; \
-    fi
+# Self-contained (both branches land /out/bin/jarvis-compositor) so the
+# collect step below doesn't need to read the cache-mounted target dir.
+# Shares the same cache mounts so the dep tree from above is reused.
+RUN --mount=type=cache,target=/build/rust,id=jarvis-rust-target \
+    --mount=type=cache,target=/root/.cargo/registry,id=cargo-registry \
+    --mount=type=cache,target=/root/.cargo/git,id=cargo-git \
+    mkdir -p /out/bin \
+    && if [ "$BUILD_COMPOSITOR" = "1" ]; then \
+           CARGO_TARGET_DIR=/build/rust cargo build --release \
+               -p jarvis-compositor \
+           && cp /build/rust/release/jarvis-compositor /out/bin/ \
+           && strip /out/bin/jarvis-compositor; \
+       else \
+           printf '#!/bin/sh\necho "jarvis-compositor was not built into this image (BUILD_COMPOSITOR=0). See shell/compositor/module.md." >&2\nexit 127\n' \
+               > /out/bin/jarvis-compositor \
+           && chmod +x /out/bin/jarvis-compositor; \
+       fi
 
 # Qt shell — separate cmake build out-of-tree.
 RUN cmake -S shell/jarvis-shell -B /build/shell -G Ninja \
@@ -156,41 +199,16 @@ RUN cmake -S shell/jarvis-lock -B /build/lock -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /build/lock -j
 
-# Collect everything that ends up on the final image.
-RUN mkdir -p /out/bin \
-    && cp /build/rust/release/jarvis-action-bus    /out/bin/ \
-    && cp /build/rust/release/jarvis-permission    /out/bin/ \
-    && cp /build/rust/release/jarvis-settings      /out/bin/ \
-    && cp /build/rust/release/jarvis-notifications /out/bin/ \
-    && cp /build/rust/release/jarvis-lilith        /out/bin/ \
-    && cp /build/rust/release/jarvis-updater       /out/bin/ \
-    && cp /build/rust/release/jarvis-voice         /out/bin/ \
-    && cp /build/rust/release/jarvis-voice-ctl     /out/bin/ \
-    && cp /build/rust/release/jarvis-app           /out/bin/ \
-    && cp /build/rust/release/sdk-hello            /out/bin/ \
-    && cp /build/rust/release/jarvis-compat        /out/bin/ \
-    && cp /build/rust/release/jarvis-lock          /out/bin/ \
-    && cp /build/rust/release/jarvis-lock-ctl      /out/bin/ \
-    && cp /build/rust/release/jarvis-voiceprint-ctl /out/bin/ \
-    && mkdir -p /out/pam \
-    && cp /build/rust/release/libpam_jarvis.so     /out/pam/pam_jarvis.so \
-    && cp /build/rust/release/jarvis-pam-helper    /out/bin/ \
-    && cp /build/lock/jarvis-lock-window           /out/bin/ \
-    && cp /build/shell/jarvis-shell                /out/bin/ \
-    && cp /build/greeter/jarvis-greeter            /out/bin/ \
-    && strip /out/bin/* \
-    # Always materialise /out/bin/jarvis-compositor so the COPY in
-    # stage 2 succeeds regardless of BUILD_COMPOSITOR. When the build
-    # was skipped, the stub prints a clear message and exits 127.
-    && if [ "$BUILD_COMPOSITOR" = "1" ] \
-            && [ -f /build/rust/release/jarvis-compositor ]; then \
-           cp /build/rust/release/jarvis-compositor /out/bin/ \
-           && strip /out/bin/jarvis-compositor; \
-       else \
-           printf '#!/bin/sh\necho "jarvis-compositor was not built into this image (BUILD_COMPOSITOR=0). See shell/compositor/module.md." >&2\nexit 127\n' \
-               > /out/bin/jarvis-compositor \
-           && chmod +x /out/bin/jarvis-compositor; \
-       fi
+# Collect the cmake outputs (the Rust binaries + pam + compositor are
+# already in /out from their own cache-mounted RUNs above — those
+# build dirs are cache mounts and can't be read here). The cmake
+# /build/{lock,shell,greeter} dirs are ordinary layers, so they're
+# readable. strip everything in /out/bin in one pass — picks up the
+# Rust + compositor binaries that landed earlier too.
+RUN cp /build/lock/jarvis-lock-window /out/bin/ \
+    && cp /build/shell/jarvis-shell    /out/bin/ \
+    && cp /build/greeter/jarvis-greeter /out/bin/ \
+    && strip /out/bin/*
 
 # ──────────────────────────── Stage 2: final  ────────────────────────────
 FROM quay.io/fedora/fedora-bootc:42
