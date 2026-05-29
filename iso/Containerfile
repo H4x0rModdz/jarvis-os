@@ -164,6 +164,8 @@ RUN dnf -y install \
         mesa-dri-drivers \
         wl-clipboard grim slurp \
         swayidle \
+        swaybg \
+        glib2 \
         wlr-randr \
         pulseaudio-utils \
         brightnessctl \
@@ -441,6 +443,12 @@ RUN mkdir -p /etc/skel/.config/labwc
 COPY iso/assets/labwc/autostart    /etc/skel/.config/labwc/autostart
 COPY iso/assets/labwc/rc.xml       /etc/skel/.config/labwc/rc.xml
 COPY iso/assets/labwc/environment  /etc/skel/.config/labwc/environment
+
+# Default wallpaper — swaybg (launched from the labwc autostart)
+# reads it from here. on disk under /usr/share so the session can
+# paint the live desktop.
+RUN mkdir -p /usr/share/backgrounds/jarvis
+COPY home-bg.jpg /usr/share/backgrounds/jarvis/wallpaper.jpg
 
 # Default filesystem for the installed system. Without this, bootc-image-
 # builder refuses to build an ISO and demands `--rootfs <fs>` on the

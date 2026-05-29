@@ -23,6 +23,14 @@ echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unset}"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
+# Wallpaper. labwc paints a flat grey background on its own — without
+# this the desktop looks broken/empty. swaybg reads our shipped PNG
+# and stays running as the background surface. `-m fill` crops to the
+# output. Backgrounded so the rest of autostart proceeds.
+if command -v swaybg >/dev/null 2>&1; then
+    swaybg -m fill -i /usr/share/backgrounds/jarvis/wallpaper.jpg &
+fi
+
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
     state=$(systemctl --user is-system-running 2>/dev/null || echo "unknown")
     echo "attempt ${attempt}: user systemd state=${state}"
