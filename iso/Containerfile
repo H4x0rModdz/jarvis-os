@@ -411,6 +411,17 @@ COPY iso/assets/greetd/config.toml /etc/greetd/config.toml
 RUN systemctl enable greetd.service \
     && systemctl set-default graphical.target
 
+# SSH for the dev loop (tools/dev-deploy.sh). openssh-server ships in
+# the fedora-bootc base; we explicitly enable sshd + allow password
+# auth so `dev-deploy.sh` can push fresh binaries into a running VM
+# (jarvis/jarvis, member of wheel → sudo). This is a DEV convenience —
+# a production build would disable password auth + ship keys only.
+RUN dnf -y install openssh-server && dnf clean all \
+    && systemctl enable sshd.service \
+    && mkdir -p /etc/ssh/sshd_config.d \
+    && printf 'PasswordAuthentication yes\nPermitRootLogin no\n' \
+        > /etc/ssh/sshd_config.d/10-jarvis-dev.conf
+
 # labwc skeleton: every newly-created user inherits this autostart and
 # config from /etc/skel.
 RUN mkdir -p /etc/skel/.config/labwc
