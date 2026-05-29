@@ -1,7 +1,12 @@
-name: Build ISO
+name: Build OS image + ISO
 
 on:
   push:
+    # Every push to main builds + publishes the OS image to ghcr — the
+    # OTA target `bootc upgrade` pulls (no ISO, no reinstall). Tag pushes
+    # additionally cut the installer ISO + a release.
+    branches:
+      - main
     tags:
       - "v*.*.*"
   workflow_dispatch:
@@ -37,10 +42,14 @@ jobs:
       - name: Set version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "tag=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-          else
+          elif [ -n "${{ github.event.inputs.version }}" ]; then
             echo "tag=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            # Branch push (main): a moving dev version. The image still
+            # publishes as :latest, which is what bootc upgrade tracks.
+            echo "tag=0.0.0-dev" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install podman
@@ -99,6 +108,11 @@ jobs:
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           CACHE="ghcr.io/${OWNER}/jarvis-os-cache"
+          IMG="ghcr.io/${OWNER}/jarvis-os"
+          # Tag with the registry ref (not localhost) so the installed
+          # system's bootc origin points at ghcr — i.e. it knows where to
+          # `bootc upgrade` from. :latest is the moving OTA tag; the
+          # version tag is an immutable record of this build.
           sudo podman build \
             --file iso/Containerfile \
             --layers \
@@ -106,17 +120,37 @@ jobs:
             --cache-to "$CACHE" \
             --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
             --build-arg "BUILDER_IMAGE=${{ steps.builder.outputs.ref }}" \
-            --tag "jarvis-os:${{ steps.version.outputs.tag }}" \
+            --tag "${IMG}:latest" \
+            --tag "${IMG}:${{ steps.version.outputs.tag }}" \
             . || \
           sudo podman build \
             --file iso/Containerfile \
             --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
             --build-arg "BUILDER_IMAGE=${{ steps.builder.outputs.ref }}" \
-            --tag "jarvis-os:${{ steps.version.outputs.tag }}" \
+            --tag "${IMG}:latest" \
+            --tag "${IMG}:${{ steps.version.outputs.tag }}" \
             .
 
-      - name: Convert OCI to ISO
+      - name: Push OS image to ghcr (OTA target)
+        # This is what makes `bootc upgrade` work without a reinstall:
+        # installed systems track ghcr.io/<owner>/jarvis-os:latest and
+        # pull the new image from here. Runs on every build (main pushes
+        # included) so the OTA channel is always current.
         run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMG="ghcr.io/${OWNER}/jarvis-os"
+          sudo podman push "${IMG}:latest"
+          sudo podman push "${IMG}:${{ steps.version.outputs.tag }}"
+          echo "Published ${IMG}:latest — VMs can now 'bootc upgrade'."
+
+      # ── Installer ISO — only on tags / manual dispatch ───────────────
+      # The ISO is just the first-install medium; routine updates go OTA
+      # via the pushed image above, so we don't spend ~Anaconda time on
+      # every main push.
+      - name: Convert OCI to ISO
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           mkdir -p iso/output
           sudo podman run --rm \
             --privileged \
@@ -129,10 +163,11 @@ jobs:
             --type iso \
             --rootfs btrfs \
             --config /config.toml \
-            "localhost/jarvis-os:${{ steps.version.outputs.tag }}"
+            "ghcr.io/${OWNER}/jarvis-os:latest"
 
       - name: Locate ISO
         id: iso
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         run: |
           ISO=$(find iso/output -name "*.iso" | head -1)
           test -n "$ISO" || { echo "no iso produced"; exit 1; }
@@ -140,6 +175,7 @@ jobs:
           echo "path=$ISO" >> "$GITHUB_OUTPUT"
 
       - name: Upload as workflow artifact
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: jarvis-os-${{ steps.version.outputs.tag }}.iso
@@ -147,7 +183,7 @@ jobs:
           if-no-files-found: error
 
       - name: Attach to release (tag pushes only)
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ steps.iso.outputs.path }}
