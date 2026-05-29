@@ -45,7 +45,15 @@ Item {
         smooth: true
         cache: true
         asynchronous: true
-        source: !root.spritesAvailable ? "" : {
+        source: {
+            // Empty source = no load attempt = no "Cannot open"
+            // warning while the PNGs aren't bundled yet. Early
+            // return keeps this a valid QML binding function body
+            // (a `? :` ternary in front of the switch block would
+            // make the {} parse as an object literal, not a body).
+            if (!root.spritesAvailable) {
+                return "";
+            }
             switch (root.state) {
                 case "talking":   return "qrc:/avatar/lilith-talking.png";
                 case "listening": return "qrc:/avatar/lilith-listening.png";
