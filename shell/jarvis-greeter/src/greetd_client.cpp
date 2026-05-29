@@ -122,9 +122,16 @@ void GreetdClient::handleResponse(const QByteArray& json)
             QCoreApplication::quit();
             return;
         }
-        // success after create_session / post_auth_message_response means
-        // auth is done; advance to start_session.
-        requestStartSession();
+        if (m_state == QStringLiteral("checking")) {
+            // success after post_auth_message_response → auth passed;
+            // advance to start_session.
+            requestStartSession();
+            return;
+        }
+        // Any other success (notably the reply to a cancel_session we
+        // sent after a failed auth) is just an ack — do NOT start a
+        // session off it, or a wrong password would still launch one.
+        qCDebug(lcGreet) << "ignoring success in state" << m_state;
         return;
     }
 
@@ -140,6 +147,13 @@ void GreetdClient::handleResponse(const QByteArray& json)
         const QString desc = obj.value(QStringLiteral("description")).toString();
         const QString kind = obj.value(QStringLiteral("error_type")).toString();
         qCWarning(lcGreet) << "greetd error:" << kind << desc;
+        // A failed auth (wrong password) leaves greetd's session in the
+        // "created" state. If we just go idle, the NEXT login sends
+        // create_session again and greetd rejects it with "a session is
+        // already being configured". Send cancel_session to reset
+        // greetd's side so the retry starts clean. cancel() also sets
+        // idle, but we override its error text with the real message.
+        cancel();
         setState(QStringLiteral("idle"), {}, false,
                  desc.isEmpty() ? tr("Falha na autenticação") : desc);
         return;
