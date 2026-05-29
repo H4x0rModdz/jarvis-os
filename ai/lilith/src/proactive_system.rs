@@ -29,7 +29,15 @@ impl Probe for SystemProbe {
             Some((free, _total, swap)) => (Some(free), swap),
             None => (None, None),
         };
-        let disk_root_free_pct = statvfs_free_pct("/");
+        // Probe /var, NOT "/". On a bootc/ostree system "/" is a
+        // read-only composefs image (the packed /usr) that sits at
+        // ~100% full BY DESIGN — statvfs("/") there reports near-zero
+        // free and fired a false "disk crítico". The real writable
+        // space (user data, containers, logs) lives on /var, which is
+        // the actual backing filesystem. Fall back to "/" only if
+        // /var can't be stat'd (non-ostree host).
+        let disk_root_free_pct =
+            statvfs_free_pct("/var").or_else(|| statvfs_free_pct("/"));
         Signals {
             mem_free_pct,
             swap_used_pct,
