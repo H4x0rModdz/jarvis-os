@@ -48,6 +48,29 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y podman
 
+      - name: Resolve builder base
+        # ADR 0021 P2: the main image FROMs a prebuilt jarvis-builder
+        # (toolchain + whisper + piper + numbat). Pull it from ghcr if
+        # build-builder.yml has published it; otherwise build it locally
+        # so this workflow stays self-sufficient (first run, or a fork
+        # without the published base). Either way BUILDER_IMAGE points
+        # at a tag in local podman storage for the OCI build.
+        id: builder
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REF="ghcr.io/${OWNER}/jarvis-builder:latest"
+          if sudo podman pull "$REF" 2>/dev/null; then
+            echo "using published builder: $REF"
+            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "no published builder — building locally"
+            sudo podman build \
+              --file iso/Containerfile.builder \
+              --tag localhost/jarvis-builder:local \
+              .
+            echo "ref=localhost/jarvis-builder:local" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build OCI image
         # Must run as root so the image lands in the same storage that
         # bootc-image-builder (also root) reads from in the next step.
@@ -57,6 +80,7 @@ jobs:
           sudo podman build \
             --file iso/Containerfile \
             --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
+            --build-arg "BUILDER_IMAGE=${{ steps.builder.outputs.ref }}" \
             --tag "jarvis-os:${{ steps.version.outputs.tag }}" \
             .
 

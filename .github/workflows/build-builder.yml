@@ -1,0 +1,67 @@
+name: Build builder base
+
+# Builds + pushes the jarvis-builder base image (ADR 0021 P2) to
+# ghcr.io. The main ISO build (build-iso.yml) FROMs this image, so it
+# skips the Fedora toolchain install + whisper/piper/numbat builds —
+# ~8-12 min off every ISO build.
+#
+# Run this:
+#   - automatically when iso/Containerfile.builder changes on main
+#   - manually (workflow_dispatch) after bumping a pinned tool version
+#
+# The image is rebuilt RARELY — only on toolchain / whisper / piper /
+# numbat bumps — so this workflow's own runtime doesn't gate normal
+# development.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "iso/Containerfile.builder"
+      - ".github/workflows/build-builder.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-builder:
+    name: Build + push jarvis-builder
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Install podman
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y podman
+
+      - name: Log in to ghcr.io
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build builder base
+        run: |
+          # Lowercase the owner — ghcr refuses uppercase in image paths.
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          sudo podman build \
+            --file iso/Containerfile.builder \
+            --tag "ghcr.io/${OWNER}/jarvis-builder:latest" \
+            .
+
+      - name: Push builder base
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          sudo podman push "ghcr.io/${OWNER}/jarvis-builder:latest"
