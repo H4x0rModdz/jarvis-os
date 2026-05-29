@@ -16,6 +16,16 @@
 
 set -euo pipefail
 
+# Tee everything to a log next to the repo (Windows-visible since the
+# repo lives on /mnt/c). When the build dies — including a hard crash
+# that closes the terminal — the full output survives in build-iso.log
+# for diagnosis. LOG= overrides the path; LOG=/dev/null disables.
+LOG="${LOG:-$(pwd)/build-iso.log}"
+if [ "$LOG" != "/dev/null" ]; then
+    exec > >(tee "$LOG") 2>&1
+    echo "─── log: $LOG ───"
+fi
+
 IMAGE_TAG="${IMAGE_TAG:-jarvis-os:dev}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/iso/output}"
 JARVIS_VERSION="${JARVIS_VERSION:-0.0.1}"

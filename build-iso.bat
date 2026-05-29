@@ -60,17 +60,24 @@ REM Run the whole pipeline under sudo inside a login shell (login
 REM shell so cargo/podman are on PATH). REBUILD_BUILDER is read by
 REM tools/build-iso.sh.
 wsl -d %DISTRO% bash -lc "cd '%REPO%' && sudo REBUILD_BUILDER=%REBUILD% bash tools/build-iso.sh"
-
-if errorlevel 1 (
-    echo.
-    echo [FALHOU] O build retornou erro. Veja a saida acima.
-    echo   Se quebrou no passo bootc-image-builder, tente o
-    echo   workflow "Build ISO" no GitHub Actions como fallback.
-    exit /b 1
-)
+set "RC=%errorlevel%"
 
 echo.
+echo Log completo salvo em: %~dp0build-iso.log
+echo.
+
+if not "%RC%"=="0" (
+    echo [FALHOU] O build retornou erro ^(codigo %RC%^).
+    echo   Abra build-iso.log para ver onde quebrou.
+    echo   Se foi no passo bootc-image-builder, o workflow
+    echo   "Build ISO" no GitHub Actions e o fallback.
+    echo.
+    pause
+    exit /b %RC%
+)
+
 echo === Build concluido ===
 echo ISO: %~dp0iso\output\bootiso\install.iso
 echo.
+pause
 endlocal

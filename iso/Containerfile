@@ -229,10 +229,22 @@ COPY iso/assets/xdg/mimeapps.list /etc/xdg/mimeapps.list
 # run the script, and the layer keeps the cloned repos out (the
 # script cleans its tmp dir).
 COPY iso/assets/theme/install-whitesur.sh /tmp/install-whitesur.sh
-RUN dnf -y install git \
-    && bash /tmp/install-whitesur.sh \
+# git for the clones; sass + glib2 for the GTK4/libadwaita theme
+# build (WhiteSur's install.sh compiles gtk4 CSS with sass and runs
+# glib-compile-resources). Missing sass is the usual reason the
+# install dies mid-run.
+#
+# The WhiteSur step is NON-FATAL: it's purely cosmetic, so a failure
+# (network hiccup, OOM on the huge icon repo, upstream script change)
+# logs a warning and ships the ISO without the theme rather than
+# killing a 10-minute build. The gtk-settings.ini below names
+# WhiteSur-Dark; if the theme is absent GTK silently falls back to
+# its default, which is harmless.
+RUN dnf -y install git sass glib2 \
+    && ( bash /tmp/install-whitesur.sh \
+         || echo "WARN: WhiteSur install failed — shipping without the theme" ) \
     && rm -f /tmp/install-whitesur.sh \
-    && dnf -y remove git \
+    && dnf -y remove git sass \
     && dnf clean all
 
 # System-wide GTK defaults so GTK apps pick up WhiteSur + the icon

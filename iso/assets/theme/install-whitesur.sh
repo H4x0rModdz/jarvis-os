@@ -53,13 +53,13 @@ git clone --depth 1 --branch "$GTK_REF" "$GTK_REPO" "$work/gtk"
 
 echo "─── WhiteSur icon theme (${ICON_REF}, accent=${ACCENT}) ───"
 git clone --depth 1 --branch "$ICON_REF" "$ICON_REPO" "$work/icons"
-# -d: system dest. -t purple: one accent variant (the full set with
-# every color is ~hundreds of MB; we ship one). -b: also install the
-# bold "folder" set used by file managers.
+# -d: system dest. -t purple: one accent variant. We deliberately
+# DON'T pass --bold: the bold folder set roughly doubles the install
+# (the icon repo is already the heaviest part) and was the likely
+# OOM trigger on a memory-constrained WSL build.
 "$work/icons/install.sh" \
     --dest /usr/share/icons \
-    --theme "$ACCENT" \
-    --bold
+    --theme "$ACCENT"
 
 echo "─── WhiteSur cursors (${CURSOR_REF}) ───"
 git clone --depth 1 --branch "$CURSOR_REF" "$CURSOR_REPO" "$work/cursors"
