@@ -230,8 +230,7 @@ impl LilithService {
             let forwarder = tokio::spawn(async move {
                 const FLUSH_MS: u64 = 50;
                 let mut pending = String::new();
-                let mut tick = tokio::time::interval(
-                    std::time::Duration::from_millis(FLUSH_MS));
+                let mut tick = tokio::time::interval(std::time::Duration::from_millis(FLUSH_MS));
                 loop {
                     tokio::select! {
                         maybe_chunk = chunk_rx.recv() => match maybe_chunk {
