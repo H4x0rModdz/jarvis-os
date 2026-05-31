@@ -127,9 +127,15 @@ target_link_libraries(jarvis-shell PRIVATE
     Qt6::DBus
     Qt6::QuickControls2
     Qt6::WaylandClient
-    # QWaylandClientExtension lives in the WaylandClient private module.
-    Qt6::WaylandClientPrivate
 )
+
+# QWaylandClientExtension is exported from the public WaylandClient lib, but
+# on some Qt builds its header sits behind the private module target. Link it
+# only when the distro actually ships that target — otherwise the public
+# component above is enough and a hard dependency would break the build.
+if(TARGET Qt6::WaylandClientPrivate)
+    target_link_libraries(jarvis-shell PRIVATE Qt6::WaylandClientPrivate)
+endif()
 
 if(LayerShellQt_FOUND)
     target_compile_definitions(jarvis-shell PRIVATE JARVIS_HAVE_LAYER_SHELL)
