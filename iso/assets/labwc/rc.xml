@@ -6,13 +6,30 @@
 <labwc_config>
   <theme>
     <name>Default</name>
-    <cornerRadius>0</cornerRadius>
+    <cornerRadius>10</cornerRadius>
     <dropShadows>yes</dropShadows>
+    <!-- macOS-style: close / minimize / maximize on the LEFT, nothing on
+         the right. labwc button ids: close, iconify (minimize), max. The
+         colon splits left:right; the empty right side keeps the titlebar
+         clean like macOS. (See ADR 0024.) -->
+    <titlebar>
+      <layout>close,iconify,max:</layout>
+    </titlebar>
   </theme>
 
   <core>
     <gap>0</gap>
   </core>
+
+  <windowRules>
+    <!-- foot ships no titlebar of its own (CSD-none), so it has no
+         close/min/max buttons at all. Force labwc's server-side
+         decoration just for it so it gets working window controls like
+         every other window. We deliberately do NOT use identifier="*":
+         that would also slap a titlebar on the shell's own frameless
+         popups (Launcher, dialogs, the Jarvis menu). See ADR 0024. -->
+    <windowRule identifier="foot" serverDecoration="yes" />
+  </windowRules>
 
   <keyboard>
     <!-- Super (W) alone toggles voice input — the canonical "press to
@@ -53,5 +70,17 @@
   <mouse>
     <!-- Click-to-focus matches every other modern desktop. -->
     <context name="Root"><mousebind button="Left" action="Press"><action name="Focus"/></mousebind></context>
+    <!-- macOS feel: drag the titlebar to move, double-click it to toggle
+         maximize. Alt+drag moves / Alt+right-drag resizes from anywhere on
+         the window frame, so even an undecorated client can be moved. These
+         augment labwc's built-in mouse defaults. -->
+    <context name="TitleBar">
+      <mousebind button="Left" action="Drag"><action name="Move"/></mousebind>
+      <mousebind button="Left" action="DoubleClick"><action name="ToggleMaximize"/></mousebind>
+    </context>
+    <context name="Frame">
+      <mousebind button="A-Left" action="Drag"><action name="Move"/></mousebind>
+      <mousebind button="A-Right" action="Drag"><action name="Resize"/></mousebind>
+    </context>
   </mouse>
 </labwc_config>
