@@ -9,6 +9,19 @@ on:
       - main
     tags:
       - "v*.*.*"
+    # Docs-only commits don't change the OS image (README / docs / .jarvis
+    # aren't copied into it), but `COPY . .` in the Containerfile would
+    # bust the build cache and republish an identical :latest — a wasted
+    # ~10 min build and a meaningless "update available" on every VM. Skip
+    # the build when a push touches ONLY these paths; a mixed code+docs
+    # push still builds. (Path filters also apply to tag pushes, so cut
+    # release tags from a commit that includes real changes, or re-run via
+    # workflow_dispatch.)
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".jarvis/**"
+      - "LICENSE"
   workflow_dispatch:
     inputs:
       version:
