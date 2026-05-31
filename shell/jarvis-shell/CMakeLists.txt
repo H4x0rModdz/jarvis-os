@@ -14,7 +14,7 @@ set(CMAKE_AUTORCC ON)
 # Enable QML compile-time tooling and warnings.
 set(CMAKE_AUTOUIC OFF)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Quick Qml DBus QuickControls2)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Quick Qml DBus QuickControls2 WaylandClient)
 
 # LayerShellQt is built out-of-tree against KDE's repo (see
 # .jarvis-os/memory) and installed alongside Qt. The find_package call below
@@ -57,10 +57,19 @@ qt_add_executable(jarvis-shell
     src/audio_bridge.h
     src/display_bridge.cpp
     src/display_bridge.h
+    src/foreign_toplevel.cpp
+    src/foreign_toplevel.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
 target_include_directories(jarvis-shell PRIVATE src)
+
+# Generate the wlr-foreign-toplevel-management client bindings (qtwayland
+# scanner) and compile them into the shell. This drives the dock's
+# running-app awareness — see src/foreign_toplevel.* and ADR 0024.
+qt6_generate_wayland_protocol_client_sources(jarvis-shell
+    FILES ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-foreign-toplevel-management-unstable-v1.xml
+)
 
 # Theme and ShellBus are `pragma Singleton` — tell the QML toolchain so
 # importing `Jarvis.Shell` exposes them as singleton objects. (ShellBus
@@ -117,6 +126,9 @@ target_link_libraries(jarvis-shell PRIVATE
     Qt6::Qml
     Qt6::DBus
     Qt6::QuickControls2
+    Qt6::WaylandClient
+    # QWaylandClientExtension lives in the WaylandClient private module.
+    Qt6::WaylandClientPrivate
 )
 
 if(LayerShellQt_FOUND)

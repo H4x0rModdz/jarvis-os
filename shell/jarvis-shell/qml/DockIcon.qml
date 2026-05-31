@@ -12,6 +12,7 @@ Item {
 
     property string iconName: ""   // freedesktop theme name OR absolute path
     property string label: ""
+    property bool running: false   // a window for this app is open (macOS dot)
     signal activated()
 
     Image {
@@ -51,6 +52,19 @@ Item {
             font.pixelSize: 20
             font.weight: Font.Bold
         }
+    }
+
+    // Running indicator — the macOS dot under an open app.
+    Rectangle {
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 1
+        width: 4
+        height: 4
+        radius: 2
+        color: Theme.accent
+        visible: root.running
+        opacity: 0.9
     }
 
     // Hover tooltip above the dock.

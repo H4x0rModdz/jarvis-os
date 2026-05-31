@@ -35,6 +35,11 @@ Window {
         { label: qsTr("Terminal"), icon: "utilities-terminal",      desktopId: "foot" }
     ]
 
+    // Running-window awareness (Phase B, ADR 0024). Fed by the compositor
+    // via wlr-foreign-toplevel; drives the running dot under each tile and
+    // click-to-focus instead of relaunching.
+    RunningAppsModel { id: running }
+
     GlassPanel {
         id: pill
         anchors.centerIn: parent
@@ -51,9 +56,19 @@ Window {
                 delegate: DockIcon {
                     iconName: modelData.icon
                     label: modelData.label
+                    // Referencing running.revision makes this re-evaluate as
+                    // windows open/close — isRunning() is a method, not a
+                    // notifying property.
+                    running: modelData.launcher === true
+                             ? false
+                             : (running.revision >= 0 && running.isRunning(modelData.desktopId))
                     onActivated: {
                         if (modelData.launcher === true) {
                             ShellBus.openLauncher();
+                        } else if (running.isRunning(modelData.desktopId)) {
+                            // Already open — focus / restore it instead of
+                            // launching a second copy (macOS dock behaviour).
+                            running.activateApp(modelData.desktopId);
                         } else {
                             ActionBusBridge.dispatch(
                                 "app.open", JSON.stringify({ "app": modelData.desktopId }));
