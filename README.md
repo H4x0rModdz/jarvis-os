@@ -37,40 +37,7 @@ If the answer to "what stops someone from doing this in an afternoon with `dnf i
 
 ## Architecture
 
-```
-                    ┌──────────────────────────────────┐
-                    │      jarvis-shell (Qt6/QML)      │
-                    │   bar · launcher · approvals     │
-                    │  notification drawer · settings  │
-                    │     · updater splash             │
-                    └────┬──────┬───────────┬──────────┘
-                         │      │           │
-                  DBus   │      │           │
-                         │      │           │
-              ┌──────────┘      │           └───────────┐
-              ▼                 ▼                       ▼
-   ┌─────────────────┐  ┌───────────────┐  ┌─────────────────────┐
-   │   Lilith        │  │ Permission    │  │     Updater         │
-   │  (jarvis-       │  │  System       │  │ (jarvis-updater)    │
-   │   lilith)       │  │ (jarvis-      │  │  pulls Ollama       │
-   │ Ollama + tools  │  │  permission)  │  │  model, OS bootc    │
-   │ intent parser   │  │ scope policy  │  │  upgrades, splash   │
-   │ SQLite memory   │  │ + approvals   │  │                     │
-   └────────┬────────┘  └───────┬───────┘  └──────────┬──────────┘
-            │ Dispatch          │ Check               │ progress
-            ▼                   │                     │
-   ┌─────────────────────────────────────────────────────────────┐
-   │                  Jarvis Action Bus                           │
-   │            com.jarvis.ActionBus.Dispatch                     │
-   │   38 actions + SDK · permission-gated · audit-logged         │
-   └─────────────────────────────────────────────────────────────┘
-            │
-            ▼
-   handlers/ — xdg-open · pkill · gio trash · wl-copy · grim · pactl ·
-              flatpak · wine (com.jarvis.Compat) · notify (com.jarvis.Notifications) ·
-              updater (com.jarvis.Updater) · settings (com.jarvis.Settings) ·
-              lock (com.jarvis.Lock) · voice (com.jarvis.Voice)
-```
+![Jarvis OS architecture — jarvis-shell talks over DBus to Lilith, the Permission System and the Updater, which all flow through the Jarvis Action Bus (permission-gated, audit-logged) down to the handlers. Includes the design token colour palette.](docs/architecture.png)
 
 Pre-session: **greetd** spawns [`shell/jarvis-greeter/`](./shell/jarvis-greeter/module.md) (Qt overlay under `cage`). Post-login: the **labwc** compositor brings up the shell, the per-user daemons (voice, notifications, compat, lock), and Lilith. The custom Smithay-based `jarvis-compositor` is parked as a Phase 4 placeholder in [`shell/compositor/`](./shell/compositor/module.md).
 
