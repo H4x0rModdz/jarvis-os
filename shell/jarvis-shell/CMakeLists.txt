@@ -69,27 +69,13 @@ target_include_directories(jarvis-shell PRIVATE src)
 # Generate the wlr-foreign-toplevel-management client bindings (qtwayland
 # scanner) and compile them into the shell. This drives the dock's
 # running-app awareness — see src/foreign_toplevel.* and ADR 0024.
+# Generates the C++ wrappers AND a C protocol source carrying the
+# wl_interface definitions. That C file only compiles because the project
+# enables the C language above — without it CMake silently skips the file and
+# the link fails with "undefined reference to *_interface".
 qt6_generate_wayland_protocol_client_sources(jarvis-shell
     FILES ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-foreign-toplevel-management-unstable-v1.xml
 )
-
-# qt6_generate_wayland_protocol_client_sources emits the C++ wrappers and the
-# client header, but NOT the wl_interface symbol definitions those wrappers
-# reference (zwlr_foreign_toplevel_{manager,handle}_v1_interface). Generate
-# them with wayland-scanner and compile them in, or the link fails with
-# "undefined reference to *_interface".
-find_program(WAYLAND_SCANNER_EXECUTABLE NAMES wayland-scanner REQUIRED)
-set(_ftl_protocol_xml
-    ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-foreign-toplevel-management-unstable-v1.xml)
-set(_ftl_protocol_code
-    ${CMAKE_CURRENT_BINARY_DIR}/wlr-foreign-toplevel-management-unstable-v1-protocol.c)
-add_custom_command(
-    OUTPUT ${_ftl_protocol_code}
-    COMMAND ${WAYLAND_SCANNER_EXECUTABLE} private-code ${_ftl_protocol_xml} ${_ftl_protocol_code}
-    DEPENDS ${_ftl_protocol_xml}
-    VERBATIM
-)
-target_sources(jarvis-shell PRIVATE ${_ftl_protocol_code})
 
 # Theme and ShellBus are `pragma Singleton` — tell the QML toolchain so
 # importing `Jarvis.Shell` exposes them as singleton objects. (ShellBus
