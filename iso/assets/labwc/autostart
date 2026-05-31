@@ -58,6 +58,25 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
     echo "dbus-update-activation-environment: exit=$?"
 fi
 
+# Force Flatpak apps onto Wayland. This session ships no working
+# XWayland/DISPLAY, so Flatpaks that default to X11 (Firefox, Dolphin,
+# Zed, ...) die at launch with "no DISPLAY" / "xcb could not connect to
+# display" — which is why nothing opened from the dock or the desktop
+# icons even though the apps are installed and the MIME routing is fine.
+# A --user override sets the Wayland backend env + grants the wayland
+# socket. Idempotent (cheap to re-run each login). Unlike the image's
+# /var system override, this reaches an already-installed VM through an
+# OTA autostart update — no reinstall.
+if command -v flatpak >/dev/null 2>&1; then
+    flatpak override --user \
+        --socket=wayland \
+        --env=QT_QPA_PLATFORM=wayland \
+        --env=GDK_BACKEND=wayland \
+        --env=MOZ_ENABLE_WAYLAND=1 2>/dev/null \
+        && echo "flatpak wayland override: applied" \
+        || echo "flatpak wayland override: failed"
+fi
+
 systemctl --user start jarvis-session.target
 echo "jarvis-session.target start: exit=$?"
 

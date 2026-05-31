@@ -273,11 +273,23 @@ COPY iso/assets/theme/gtk-settings.ini /etc/gtk-4.0/settings.ini
 # host theme dirs + sets GTK_THEME inside the sandbox. Applies to
 # every Flatpak (current + future), so Dolphin/Zed inherit the
 # icon + cursor too even though their widget toolkits differ.
+#
+# The Wayland bits (--socket=wayland + QT_QPA_PLATFORM/GDK_BACKEND/
+# MOZ_ENABLE_WAYLAND) force Flatpaks onto Wayland: this session has no
+# working XWayland/DISPLAY, so apps that default to X11 fail at launch.
+# NOTE: --system overrides live under /var, which bootc only seeds on
+# install — an OTA upgrade does NOT refresh them. The labwc autostart
+# re-applies the same --user override each login so existing VMs get it
+# without a reinstall; this block covers fresh installs.
 RUN flatpak override --system \
         --filesystem=/usr/share/themes:ro \
         --filesystem=/usr/share/icons:ro \
         --env=GTK_THEME=WhiteSur-Dark \
-        --env=XCURSOR_THEME=WhiteSur-cursors
+        --env=XCURSOR_THEME=WhiteSur-cursors \
+        --socket=wayland \
+        --env=QT_QPA_PLATFORM=wayland \
+        --env=GDK_BACKEND=wayland \
+        --env=MOZ_ENABLE_WAYLAND=1
 
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.

@@ -29,6 +29,20 @@ pub async fn open(params: Value) -> Result<Value, BusError> {
         || app.starts_with('~')
         || Path::new(app).exists();
     if is_target {
+        // Prefer `gio open` over `xdg-open`. On the Jarvis session
+        // `xdg-open`'s desktop detection doesn't recognise our DE, so it
+        // falls through to a text-browser chain (www-browser, lynx, …)
+        // and fails to open folders/URLs — it never consults the MIME
+        // defaults. `gio open` reads the same mimeapps.list defaults
+        // directly (folders → Dolphin, http → Firefox) and routes
+        // correctly. xdg-open stays as the fallback for hosts without gio.
+        if let Ok(c) = tokio::process::Command::new("gio")
+            .arg("open")
+            .arg(app)
+            .spawn()
+        {
+            return Ok(json!({ "launched": true, "pid": c.id(), "via": "gio-open" }));
+        }
         let child = tokio::process::Command::new("xdg-open")
             .arg(app)
             .spawn()

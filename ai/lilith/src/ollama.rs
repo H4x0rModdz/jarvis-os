@@ -92,12 +92,22 @@ impl OllamaClient {
     ) -> Result<OllamaReply, LilithError> {
         use futures_util::StreamExt;
 
+        // Leave one core for the rest of the system. On a VM the
+        // compositor renders in software (pixman), so an Ollama run that
+        // grabs every core starves labwc + the shell and the whole
+        // desktop stutters while Lilith thinks. Reserving a core caps the
+        // inference hit at ~1/N while keeping the UI responsive. Falls
+        // back to 1 thread if the core count can't be read.
+        let num_thread = std::thread::available_parallelism()
+            .map(|n| n.get().saturating_sub(1).max(1))
+            .unwrap_or(1);
         let url = format!("{}/api/chat", self.host);
         let body = json!({
             "model": self.model,
             "messages": messages,
             "tools": ollama_tools_payload(tools),
             "stream": true,
+            "options": { "num_thread": num_thread },
         });
 
         let resp = self
