@@ -218,9 +218,44 @@ impl LilithService {
             let (chunk_tx, mut chunk_rx) = tokio::sync::mpsc::unbounded_channel::<String>();
             let sink_for_forwarder = signals.clone();
             let step_idx = step as u32;
+            // Coalesce tokens into ~20 signals/sec instead of one DBus
+            // signal per token. Ollama streams a chunk per token (dozens
+            // per second); emitting a PartialReply for each one floods the
+            // session bus and pins the shell's main thread re-laying-out
+            // the streaming text on every token — the whole desktop feels
+            // sluggish while Lilith "thinks". Buffering on a 50 ms tick
+            // preserves the full streamed text (chunks are concatenated in
+            // order) while capping the signal rate. Same throttling
+            // discipline the updater applies to its progress signals.
             let forwarder = tokio::spawn(async move {
-                while let Some(chunk) = chunk_rx.recv().await {
-                    sink_for_forwarder.partial_reply(step_idx, &chunk).await;
+                const FLUSH_MS: u64 = 50;
+                let mut pending = String::new();
+                let mut tick = tokio::time::interval(
+                    std::time::Duration::from_millis(FLUSH_MS));
+                loop {
+                    tokio::select! {
+                        maybe_chunk = chunk_rx.recv() => match maybe_chunk {
+                            Some(chunk) => pending.push_str(&chunk),
+                            // Sender dropped (chat_messages returned) —
+                            // flush the tail and finish.
+                            None => {
+                                if !pending.is_empty() {
+                                    sink_for_forwarder
+                                        .partial_reply(step_idx, &pending)
+                                        .await;
+                                }
+                                break;
+                            }
+                        },
+                        _ = tick.tick() => {
+                            if !pending.is_empty() {
+                                sink_for_forwarder
+                                    .partial_reply(step_idx, &pending)
+                                    .await;
+                                pending.clear();
+                            }
+                        }
+                    }
                 }
             });
 

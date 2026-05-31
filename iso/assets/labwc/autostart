@@ -42,6 +42,22 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
     sleep 1
 done
 
+# Make the live Wayland session reachable to the user systemd manager and
+# to DBus-activated services BEFORE the daemons start. The Jarvis daemons
+# run as systemd --user services; without WAYLAND_DISPLAY (and the rest of
+# the graphical env) in their environment, any GUI app they spawn —
+# xdg-open for folders, `gio launch` for Flatpaks like Firefox — has no
+# compositor to connect to and silently fails to appear, even though the
+# spawn itself "succeeds". labwc exports these into our env; we hand them
+# off so the daemons inherit them.
+GRAPHICAL_ENV="WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_DATA_DIRS DISPLAY"
+systemctl --user import-environment $GRAPHICAL_ENV
+echo "import-environment: exit=$?"
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment --systemd $GRAPHICAL_ENV
+    echo "dbus-update-activation-environment: exit=$?"
+fi
+
 systemctl --user start jarvis-session.target
 echo "jarvis-session.target start: exit=$?"
 

@@ -38,7 +38,14 @@ public:
 
     /// Start the auth flow with `username`. Transitions through the
     /// auth-message loop until greetd's PAM stack signals success.
-    Q_INVOKABLE void beginLogin(const QString& username);
+    ///
+    /// `password` is optional. When provided, it is held just long
+    /// enough to answer greetd's first `secret` prompt automatically —
+    /// so a user who typed their password and clicked UNLOCK logs in on
+    /// that single click instead of having to click again once the
+    /// prompt arrives. It is cleared the instant it leaves the socket.
+    Q_INVOKABLE void beginLogin(const QString& username,
+                                const QString& password = QString());
 
     /// Send the user's response to the current auth prompt.
     Q_INVOKABLE void answerPrompt(const QString& response);
@@ -69,4 +76,8 @@ private:
     bool m_secret = false;
     QString m_error;
     QString m_username;
+    // Password queued by beginLogin, consumed by the first secret
+    // prompt. Held only across the create_session round-trip.
+    QString m_pendingSecret;
+    bool m_havePendingSecret = false;
 };

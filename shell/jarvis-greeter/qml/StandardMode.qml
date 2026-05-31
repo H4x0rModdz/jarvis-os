@@ -166,6 +166,7 @@ Item {
             return;
         }
         GreeterState.persist();
-        GreetdClient.beginLogin(root.username);
+        GreetdClient.beginLogin(root.username, pwField.text);
+        pwField.text = "";
     }
 }

@@ -16,7 +16,12 @@ Window {
     width: 240
     height: col.implicitHeight + 16
     color: "transparent"
-    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    // Qt.Dialog (not Qt.Tool): under labwc a Tool window is treated as
+    // non-activatable, so it never receives focus — which means neither
+    // the Escape Shortcut nor the click-outside (onActiveChanged → !active)
+    // dismiss ever fires and the menu gets stuck open. Qt.Dialog gets the
+    // same activation the Launcher relies on to close on focus loss.
+    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     visible: false
 
     signal aboutRequested()
@@ -115,7 +120,7 @@ Window {
                                 switch (modelData.kind) {
                                 case "about":    root.aboutRequested(); break;
                                 case "settings": root.settingsRequested(); break;
-                                case "update":   ActionBusBridge.dispatch("updater.check", "{}"); break;
+                                case "update":   UpdaterBridge.checkNow(); break;
                                 case "power":
                                     ActionBusBridge.dispatch(
                                         "system.power",

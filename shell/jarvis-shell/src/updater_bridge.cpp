@@ -1,6 +1,11 @@
 #include "updater_bridge.h"
 
 #include <QDBusConnection>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLoggingCategory>
 
 namespace {
@@ -53,6 +58,35 @@ void UpdaterBridge::applyOSUpgrade()
     if (!m_iface) return;
     qCInfo(lcUpd) << "ApplyOSUpgrade requested by UI";
     m_iface->asyncCall(QStringLiteral("ApplyOSUpgrade"));
+}
+
+void UpdaterBridge::checkNow()
+{
+    if (!m_iface) {
+        emit checkFailed(tr("Updater indisponível"));
+        return;
+    }
+    qCInfo(lcUpd) << "User-initiated update check";
+    auto pending = m_iface->asyncCall(QStringLiteral("Check"));
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            w->deleteLater();
+            if (reply.isError()) {
+                qCWarning(lcUpd) << "Check failed:" << reply.error().message();
+                emit checkFailed(reply.error().message());
+                return;
+            }
+            const auto doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            const auto obj = doc.object();
+            // os_update_available is bool|null — only true means staged.
+            if (obj.value(QStringLiteral("os_update_available")).toBool(false)) {
+                onOSUpdateAvailable(obj.value(QStringLiteral("os_version")).toString());
+            } else {
+                emit upToDate();
+            }
+        });
 }
 
 void UpdaterBridge::onProgress(const QString& stage, int percent, const QString& message)

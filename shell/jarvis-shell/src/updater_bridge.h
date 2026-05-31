@@ -49,9 +49,20 @@ public:
     /// Ask the daemon to apply the pending bootc OS upgrade.
     Q_INVOKABLE void applyOSUpgrade();
 
+    /// User-initiated update check (the Jarvis-menu "Atualização do
+    /// sistema" item). Calls the daemon's Check(); when an OS update is
+    /// staged it flips `osUpdateAvailable` so the splash surfaces the
+    /// install prompt, otherwise it emits `upToDate` so the UI can tell
+    /// the user nothing is pending. `checkFailed` fires if the daemon is
+    /// unreachable. Without this the menu item dispatched a fire-and-
+    /// forget action and the user saw no response at all.
+    Q_INVOKABLE void checkNow();
+
 signals:
     void stateChanged();
     void osUpdateChanged();
+    void upToDate();
+    void checkFailed(const QString& message);
 
 private slots:
     void onProgress(const QString& stage, int percent, const QString& message);

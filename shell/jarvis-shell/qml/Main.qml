@@ -43,6 +43,28 @@ Window {
         function onOpenNotifications() { notificationDrawer.requestOpen(); }
     }
 
+    // ── Update-check feedback ─────────────────────────────────────────
+    // The Jarvis menu's "Atualização do sistema" calls
+    // UpdaterBridge.checkNow(). When an update is staged the splash
+    // surfaces it via osUpdateAvailable; the no-update / error cases have
+    // no splash state, so we tell the user through a notification toast —
+    // otherwise the click looks like it did nothing.
+    Connections {
+        target: UpdaterBridge
+        function onUpToDate() {
+            ActionBusBridge.dispatch("system.notify", JSON.stringify({
+                "title": "Jarvis OS",
+                "body": qsTr("Seu sistema já está atualizado.")
+            }));
+        }
+        function onCheckFailed(message) {
+            ActionBusBridge.dispatch("system.notify", JSON.stringify({
+                "title": "Jarvis OS",
+                "body": qsTr("Não foi possível verificar atualizações.")
+            }));
+        }
+    }
+
     // ── Voice → Lilith ────────────────────────────────────────────────
     // Wake-word and push-to-talk transcripts feed Lilith as if typed —
     // same audit path, same permission gating, same popup. (Errors are

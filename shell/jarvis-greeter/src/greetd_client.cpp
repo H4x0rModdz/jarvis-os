@@ -39,13 +39,28 @@ void GreetdClient::connectSocket()
     }
 }
 
-void GreetdClient::beginLogin(const QString& username)
+void GreetdClient::beginLogin(const QString& username, const QString& password)
 {
+    // Ignore a re-entrant submit — a login is already being negotiated.
+    // Without this, a second click (or Enter) during the brief
+    // create_session → auth_message window starts a parallel session and
+    // greetd rejects the retry with "a session is already being
+    // configured".
+    if (m_state != QStringLiteral("idle") && m_state != QStringLiteral("error")) {
+        qCDebug(lcGreet) << "beginLogin ignored, state=" << m_state;
+        return;
+    }
     m_username = username;
+    m_pendingSecret = password;
+    m_havePendingSecret = !password.isEmpty();
     m_inBuffer.clear();
     setState(QStringLiteral("creating_session"), {}, false, {});
     connectSocket();
-    if (m_state == QStringLiteral("error")) return;
+    if (m_state == QStringLiteral("error")) {
+        m_pendingSecret.clear();
+        m_havePendingSecret = false;
+        return;
+    }
 
     QJsonObject msg;
     msg.insert(QStringLiteral("type"), QStringLiteral("create_session"));
@@ -64,6 +79,10 @@ void GreetdClient::answerPrompt(const QString& response)
 
 void GreetdClient::cancel()
 {
+    // Drop any queued password — it must never survive into a later
+    // prompt (e.g. after a wrong-password reset).
+    m_havePendingSecret = false;
+    m_pendingSecret.clear();
     QJsonObject msg;
     msg.insert(QStringLiteral("type"), QStringLiteral("cancel_session"));
     sendMessage(QJsonDocument(msg).toJson(QJsonDocument::Compact));
@@ -139,6 +158,17 @@ void GreetdClient::handleResponse(const QByteArray& json)
         const QString prompt = obj.value(QStringLiteral("auth_message")).toString();
         const QString kind = obj.value(QStringLiteral("auth_message_type")).toString();
         const bool secret = kind == QStringLiteral("secret");
+        // If the user already typed their password before submitting,
+        // answer the first secret prompt for them — that's what makes
+        // a single click log in. Any further prompts (e.g. a 2FA PAM
+        // stack) fall through to the manual awaiting_response path.
+        if (secret && m_havePendingSecret) {
+            m_havePendingSecret = false;
+            const QString pw = m_pendingSecret;
+            m_pendingSecret.clear();
+            answerPrompt(pw);
+            return;
+        }
         setState(QStringLiteral("awaiting_response"), prompt, secret, {});
         return;
     }
