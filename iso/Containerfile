@@ -431,6 +431,12 @@ COPY iso/assets/systemd/logind.conf.d/jarvis.conf \
 COPY iso/assets/launchers/jarvis-session-launch /usr/libexec/jarvis-session-launch
 RUN chmod 0755 /usr/libexec/jarvis-session-launch
 
+# polkit rule: let the per-user updater run `bootc` via pkexec without a
+# password prompt (wheel users only, /usr/bin/bootc only). Without it the
+# user-session updater can't reach `bootc upgrade --check` and the UI
+# wrongly reports "system up to date". See system/updater/src/bootc.rs.
+COPY iso/assets/polkit/49-jarvis-bootc.rules /usr/share/polkit-1/rules.d/49-jarvis-bootc.rules
+
 # greetd: autologin as `jarvis` and exec labwc through the wrapper.
 # Anaconda creates the user from build.toml so the name matches at
 # install time.

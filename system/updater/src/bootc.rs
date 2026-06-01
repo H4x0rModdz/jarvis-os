@@ -11,19 +11,46 @@
 //!   user (or a future post-completion confirm dialog) is the one to
 //!   decide when to reboot.
 //!
+//! Privilege: `bootc` requires root. The updater is a per-user daemon,
+//! so it cannot call `bootc` directly — the call exits non-zero with
+//! "This command must be executed as the root user", which is NOT 0 and
+//! NOT 77, so it used to surface as an error and the UI wrongly reported
+//! "system up to date". We invoke `bootc` through `pkexec` (gated by the
+//! `com.jarvis.updater.bootc` polkit rule, which lets the `jarvis` /
+//! wheel user run it without a password prompt — see
+//! iso/assets/polkit/). `JARVIS_UPDATER_NO_PKEXEC=1` runs `bootc`
+//! directly (for tests / a daemon that already runs as root).
+//!
 //! Env override:
-//!   JARVIS_UPDATER_BOOTC   path to the `bootc` binary (default
-//!                          `/usr/bin/bootc`)
+//!   JARVIS_UPDATER_BOOTC      path to the `bootc` binary (default
+//!                             `/usr/bin/bootc`)
+//!   JARVIS_UPDATER_NO_PKEXEC  skip the pkexec wrapper when set
 
 use anyhow::{anyhow, Context, Result};
 use std::path::PathBuf;
 use tokio::process::Command;
 
 pub const DEFAULT_BOOTC: &str = "/usr/bin/bootc";
+const PKEXEC: &str = "/usr/bin/pkexec";
 
 /// bootc's documented "an update is available" exit code from
 /// `upgrade --check`. Anything else we treat as "no update".
 const BOOTC_UPDATE_AVAILABLE: i32 = 77;
+
+/// Build a `Command` that runs `bootc <args…>` with privilege. Wraps in
+/// `pkexec` unless `JARVIS_UPDATER_NO_PKEXEC` is set (tests / root daemon).
+fn bootc_command(binary: &PathBuf, args: &[&str]) -> Command {
+    if std::env::var_os("JARVIS_UPDATER_NO_PKEXEC").is_some() {
+        let mut cmd = Command::new(binary);
+        cmd.args(args);
+        cmd
+    } else {
+        let mut cmd = Command::new(PKEXEC);
+        cmd.arg(binary);
+        cmd.args(args);
+        cmd
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OsUpdateInfo {
@@ -47,8 +74,7 @@ pub async fn check_update() -> Result<OsUpdateInfo> {
         ));
     }
 
-    let output = Command::new(&binary)
-        .args(["upgrade", "--check"])
+    let output = bootc_command(&binary, &["upgrade", "--check"])
         .output()
         .await
         .with_context(|| format!("spawn {}", binary.display()))?;
@@ -95,8 +121,7 @@ pub async fn apply_upgrade() -> Result<()> {
         ));
     }
 
-    let status = Command::new(&binary)
-        .arg("upgrade")
+    let status = bootc_command(&binary, &["upgrade"])
         .status()
         .await
         .with_context(|| format!("spawn {}", binary.display()))?;

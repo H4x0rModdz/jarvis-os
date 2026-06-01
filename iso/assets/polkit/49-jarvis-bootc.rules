@@ -1,0 +1,22 @@
+// Let the per-user Jarvis updater run `bootc` through pkexec without an
+// interactive password prompt.
+//
+// The updater daemon (com.jarvis.Updater) runs as the logged-in user, but
+// `bootc upgrade` / `bootc upgrade --check` require root. The daemon calls
+// them via `pkexec /usr/bin/bootc …`; pkexec asks polkit to authorise the
+// org.freedesktop.policykit.exec action. Without a rule, polkit pops a
+// password dialog the headless daemon can never answer — so the check
+// silently fails and the UI wrongly reports "system up to date".
+//
+// We authorise it only for members of the `wheel` group (the `jarvis`
+// admin user), and only when the program being exec'd is exactly
+// /usr/bin/bootc. Everything else falls through to the default policy.
+//
+// See system/updater/src/bootc.rs and ADR 0023 (OTA via ghcr).
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "/usr/bin/bootc" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});
