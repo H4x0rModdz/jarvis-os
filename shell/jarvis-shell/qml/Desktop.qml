@@ -52,8 +52,11 @@ Window {
             iconName: "computer"
             selected: icons.selected === label
             onSelectRequested: icons.selected = label
+            // Open the filesystem root. The GVfs `computer:///` URI is a
+            // GNOME/Nautilus scheme that Dolphin (our file manager) rejects
+            // with "Invalid protocol 'computer'", so we open a real path.
             onActivated: ActionBusBridge.dispatch(
-                "app.open", JSON.stringify({ "app": "computer:///" }))
+                "app.open", JSON.stringify({ "app": "/" }))
         }
 
         DesktopIcon {

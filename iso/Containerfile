@@ -455,12 +455,23 @@ RUN dnf -y install openssh-server && dnf clean all \
     && printf 'PasswordAuthentication yes\nPermitRootLogin no\n' \
         > /etc/ssh/sshd_config.d/10-jarvis-dev.conf
 
-# labwc skeleton: every newly-created user inherits this autostart and
-# config from /etc/skel.
-RUN mkdir -p /etc/skel/.config/labwc
-COPY iso/assets/labwc/autostart    /etc/skel/.config/labwc/autostart
-COPY iso/assets/labwc/rc.xml       /etc/skel/.config/labwc/rc.xml
-COPY iso/assets/labwc/environment  /etc/skel/.config/labwc/environment
+# labwc config — system-wide under /etc/xdg/labwc, NOT /etc/skel.
+#
+# Why not /etc/skel: skel is copied into ~/.config ONCE at user creation
+# and then frozen. labwc reads ~/.config/labwc/rc.xml first and stops, so
+# that frozen copy permanently shadows any later version — and bootc never
+# touches /home, so an OTA upgrade can't refresh it. The result is that
+# rc.xml / autostart / environment changes never reach an existing user.
+#
+# /etc/xdg/labwc is labwc's system config dir (read when the user has no
+# ~/.config/labwc copy), lives in the image, and therefore updates on
+# every `bootc upgrade`. Existing users who still carry a stale
+# ~/.config/labwc must remove it once so this takes over (see release notes).
+RUN mkdir -p /etc/xdg/labwc
+COPY iso/assets/labwc/autostart    /etc/xdg/labwc/autostart
+COPY iso/assets/labwc/rc.xml       /etc/xdg/labwc/rc.xml
+COPY iso/assets/labwc/environment  /etc/xdg/labwc/environment
+RUN chmod 0755 /etc/xdg/labwc/autostart
 
 # Default wallpaper — swaybg (launched from the labwc autostart)
 # reads it from here. on disk under /usr/share so the session can
