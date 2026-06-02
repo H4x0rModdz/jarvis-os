@@ -41,6 +41,10 @@ Makefile
 # Claude Code / tooling (not part of the project)
 .agents/
 .claude/
-skills/
+# Root-only: ignores a tooling-generated /skills/ at the repo root WITHOUT
+# swallowing .jarvis/skills/ (the project's behavioural-guideline skills,
+# which ARE versioned). A bare `skills/` matched at every depth and silently
+# stopped git from tracking edits under .jarvis/skills/.
+/skills/
 skills-lock.json
 iso/output/
