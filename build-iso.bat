@@ -36,6 +36,22 @@ REM Force a fresh builder base when the first argument is "rebuild".
 set "REBUILD=0"
 if /i "%~1"=="rebuild" set "REBUILD=1"
 
+REM ── Preflight doctor ────────────────────────────────────────────────
+REM Runs BEFORE any wsl call (the wslpath below already needs a live WSL).
+REM Idempotent: when the environment is healthy it returns in ~2s and we
+REM fall straight through. When something is off it reports, fixes (only
+REM after you confirm), and tells you to reboot. See tools\preflight-doctor.ps1.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\preflight-doctor.ps1" -Distro "%DISTRO%"
+if errorlevel 1 (
+    echo.
+    echo [PREFLIGHT] Ambiente ainda nao esta pronto para o build.
+    echo            Siga as instrucoes acima ^(corrigir / reiniciar^) e
+    echo            rode build-iso.bat de novo.
+    echo.
+    pause
+    exit /b 1
+)
+
 REM Convert this .bat's own directory to a WSL path so the script is
 REM portable regardless of where the repo sits. %~dp0 ends with a
 REM trailing backslash; wslpath handles it.
