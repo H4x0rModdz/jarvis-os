@@ -6,67 +6,53 @@ Keep a multi-subsystem repository navigable, consistent, and contributor-friendl
 
 ## Repository Structure
 
+The canonical, current layout (kept in sync with
+`.jarvis/standards/folder-structure.md`):
+
 ```
 jarvis-os/
-  .jarvis/              ← AI context, skills, architecture docs
+  .jarvis/              ← AI context, skills, standards, ADRs
   ai/
-    lilith-core/
-    voice-pipeline/
-    memory-store/
+    lilith/             ← AI assistant daemon (Rust)
   shell/
-    compositor/
-    window-manager/
-    taskbar/
+    jarvis-shell/       ← bar / dock / launcher / dialogs (Qt6/QML)
+    jarvis-greeter/     ← greetd login UI (Qt6/QML)
+    jarvis-lock/        ← lock overlay (Qt6/QML)
+    compositor/         ← Smithay scaffold (opt-in build)
   system/
-    action-bus/
-    permission-system/
-    automation-engine/
-  compatibility/
-    wine-runner/
-    proton-integration/
-    flatpak-support/
+    action-bus/         ← central orchestration daemon (Rust)
+    permission/         ← scope policy + approval flow (Rust)
+    settings/ updater/ voice/ notifications/ compat/ lock/ pam-jarvis/
   sdk/
-    api/
-    bindings/
-    examples/
-  apps/
-    terminal/
-    file-manager/
-    settings/
-    app-store/
+    jarvis-sdk-types/   ← manifest schema (shared crate)
+  tools/                ← build-iso.sh, lock-ctl, voice-ctl, …
+  iso/                  ← Containerfile + assets + build.toml
   docs/
-  tools/
-    build/
-    scripts/
-    ci/
 ```
 
 ## Module Ownership
 
 Every top-level module has:
 
-- An owner (`OWNERS` file or CODEOWNERS entry)
 - A `module.md` at its root
-- Its own changelog section
 - Its own test suite
 
-## RFC Process
+## Architecture Decisions (ADR — not RFC)
 
-Significant changes require an RFC before implementation:
+Significant or hard-to-reverse changes require an **ADR before
+implementation**. There is no separate RFC process — the ADR is both the
+proposal and the record.
 
 ```
-docs/rfcs/
-  0001-action-bus-design.md
-  0002-lilith-memory-architecture.md
-  0003-wine-prefix-isolation.md
+.jarvis/decisions/
+  0001-linux-base.md
+  0004-action-bus.md
+  0023-ota-updates-via-ghcr.md
+  0024-macos-window-management-on-labwc.md
 ```
 
-RFC format:
-1. Problem statement
-2. Proposed solution
-3. Alternatives considered
-4. Impact on other modules
-5. Migration plan (if breaking)
+ADR format: **Context · Decision · Consequences · Alternatives rejected.**
+Check existing ADRs before re-deciding. See `CONTRIBUTING.md`.
 
 ## Dependency Management
 
@@ -78,24 +64,28 @@ RFC format:
 ## Branching Strategy
 
 ```
-main          ← always stable, always releasable
-dev           ← integration branch
-feature/<name>
-fix/<name>
-rfc/<number>
+main              ← always stable, always releasable; protected; OTA source
+feature/<name>    ← a new capability
+fix/<name>        ← a bug fix
+adr/<NNNN>-<slug> ← an architecture decision
 ```
 
-Never commit directly to `main`. All merges go through `dev` first.
+`main` is protected — every push builds + publishes the OS image to ghcr
+(the OTA channel, ADR 0023), so it must always be releasable. **Nobody
+commits to `main` directly, maintainers included.** All changes land via PR
+with green CI + one approving review. Maintainers squash-merge. The full
+flow lives in `CONTRIBUTING.md`.
 
 ## CI/CD Requirements
 
-Every PR must pass:
+Every PR must pass (`.github/workflows/ci.yml`):
 
-- Build for all target architectures
-- Unit tests for changed modules
-- Integration tests for affected subsystems
-- Lint and formatting checks
-- `module.md` presence check (if new module added)
+- `cargo fmt --all -- --check`
+- `cargo clippy --workspace --all-targets -- -D warnings`
+- `cargo build --workspace`
+- `cargo test` for each crate
+- JSON Schema validation for Action Bus action schemas
+- `module.md` present for any new module (review-enforced)
 
 ## Versioning
 

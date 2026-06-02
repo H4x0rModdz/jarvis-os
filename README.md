@@ -144,9 +144,18 @@ Every module has a `module.md` documenting its boundaries, interface, and failur
 
 Open source, license TBD. Treat it as "look, learn, fork, don't ship as your own product" until a real license file lands.
 
+## Contributing
+
+Want to build the AI-native desktop with us? Start with
+[`CONTRIBUTING.md`](./CONTRIBUTING.md) — branch/PR flow, the ground rules
+(every module gets a `module.md`, all actions go through the Action Bus, …),
+and the ADR process for architecture decisions. `main` is protected; changes
+land via PR with green CI.
+
 ## Pointers
 
 - Architecture and rationale: [`.jarvis/jarvis-core-context.md`](./.jarvis/jarvis-core-context.md)
+- How to contribute: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 - Decisions log: [`.jarvis/decisions/`](./.jarvis/decisions/)
 - Current goals: [`.jarvis/contexts/current-goals.md`](./.jarvis/contexts/current-goals.md)
 - Engineering rules (no `utils.rs`, no `helpers/`, etc.): [`.jarvis/skills/`](./.jarvis/skills/)
