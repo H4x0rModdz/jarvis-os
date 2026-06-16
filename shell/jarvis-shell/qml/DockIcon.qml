@@ -1,10 +1,11 @@
 import QtQuick
+import QtQuick.Controls
 import Jarvis.Shell
 
-/// One dock tile. Hover lifts + scales the icon (macOS-style
-/// magnification, lite) without reflowing the row; click fires
-/// `activated`. Icon resolves via the theme provider (or an absolute
-/// path) with a monogram fallback — same resolution AppCell uses.
+/// One dock tile. Hover lifts + scales the icon (macOS-style magnification,
+/// lite); LEFT click fires `activated`, RIGHT click opens a context menu
+/// (open/focus, pin/unpin, close). The running indicator under the tile
+/// distinguishes an open app (filled dot) from a minimized one (hollow ring).
 Item {
     id: root
     implicitWidth: 52
@@ -12,8 +13,17 @@ Item {
 
     property string iconName: ""   // freedesktop theme name OR absolute path
     property string label: ""
-    property bool running: false   // a window for this app is open (macOS dot)
+    property string desktopId: ""
+    /// 0 = not running, 1 = open (a visible window), 2 = running but minimized.
+    property int runStateValue: 0
+    /// Whether this app is pinned (drives the menu's pin/unpin label).
+    property bool isPinned: true
+    /// The launcher tile is special — no running state, no context menu.
+    property bool isLauncher: false
+
     signal activated()
+    signal pinToggle()
+    signal quitRequested()
 
     Image {
         id: img
@@ -54,17 +64,20 @@ Item {
         }
     }
 
-    // Running indicator — the macOS dot under an open app.
+    // Running indicator. Open app → a filled accent dot; minimized app →
+    // a hollow accent ring (same footprint, clearly different state).
     Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 1
-        width: 4
-        height: 4
-        radius: 2
-        color: Theme.accent
-        visible: root.running
-        opacity: 0.9
+        width: 5
+        height: 5
+        radius: 2.5
+        visible: root.runStateValue > 0
+        color: root.runStateValue === 1 ? Theme.accent : "transparent"
+        border.color: Theme.accent
+        border.width: root.runStateValue === 2 ? 1 : 0
+        opacity: root.runStateValue === 1 ? 0.95 : 0.7
     }
 
     // Hover tooltip above the dock.
@@ -75,7 +88,7 @@ Item {
         text: root.label
         color: Theme.text
         font.pixelSize: 10
-        visible: area.containsMouse
+        visible: area.containsMouse && !contextMenu.visible
         style: Text.Outline
         styleColor: Qt.rgba(0, 0, 0, 0.6)
     }
@@ -84,7 +97,38 @@ Item {
         id: area
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
-        onClicked: root.activated()
+        onClicked: function(mouse) {
+            if (mouse.button === Qt.RightButton) {
+                if (!root.isLauncher) {
+                    contextMenu.popup();
+                }
+            } else {
+                root.activated();
+            }
+        }
+    }
+
+    // Right-click context menu. The launcher tile never opens it.
+    Menu {
+        id: contextMenu
+        MenuItem {
+            text: root.runStateValue === 2 ? qsTr("Restaurar")
+                : root.runStateValue === 1 ? qsTr("Focar")
+                : qsTr("Abrir")
+            onTriggered: root.activated()
+        }
+        MenuItem {
+            text: root.isPinned ? qsTr("Desafixar do dock") : qsTr("Fixar no dock")
+            onTriggered: root.pinToggle()
+        }
+        MenuSeparator { visible: root.runStateValue > 0 }
+        MenuItem {
+            text: qsTr("Fechar")
+            enabled: root.runStateValue > 0
+            visible: root.runStateValue > 0
+            onTriggered: root.quitRequested()
+        }
     }
 }
