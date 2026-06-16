@@ -16,7 +16,12 @@
 #                               protocol's focus model and Qt Quick's
 #                               surface-per-Window model disagree — Qt
 #                               recovers, but only after spamming stderr.
+# XDG_CURRENT_DESKTOP            Identifies the session to xdg-desktop-portal
+#                               (selects labwc-portals.conf → wlr ScreenCast +
+#                               gtk FileChooser, ADR 0026) and to apps that
+#                               branch on the desktop name.
 WLR_RENDERER=pixman
 LIBGL_ALWAYS_SOFTWARE=1
 WLR_NO_HARDWARE_CURSORS=1
 QT_LOGGING_RULES=qt.qpa.wayland.textinput.warning=false
+XDG_CURRENT_DESKTOP=labwc:wlroots
