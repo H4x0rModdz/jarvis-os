@@ -26,7 +26,15 @@ if [ "$LOG" != "/dev/null" ]; then
     echo "─── log: $LOG ───"
 fi
 
-IMAGE_TAG="${IMAGE_TAG:-jarvis-os:dev}"
+# The image reference baked into the installed system as its bootc origin —
+# i.e. where `bootc upgrade` (and the in-shell "system update") pulls from.
+# Default to the ghcr OTA channel that CI publishes, so an OS installed from a
+# LOCALLY-built ISO tracks the SAME updates as everyone else instead of a
+# dead localhost tag. The ISO still ships YOUR local build (see --pull=never
+# below); only the *origin* points at ghcr, so the first `bootc upgrade`
+# converges onto CI's published image. Override with IMAGE=... for a pure
+# local image that never auto-updates. (ghcr requires a lowercase owner.)
+IMAGE="${IMAGE:-ghcr.io/h4x0rmoddz/jarvis-os:latest}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)/iso/output}"
 JARVIS_VERSION="${JARVIS_VERSION:-0.0.1}"
 # Builder base (ADR 0021 P2). The main Containerfile defaults to the
@@ -51,18 +59,23 @@ else
     echo "─── Reusing builder base: $BUILDER_IMAGE (REBUILD_BUILDER=1 to force) ───"
 fi
 
-echo "─── Building OCI image: $IMAGE_TAG ───"
+echo "─── Building OCI image: $IMAGE ───"
 podman build \
     --file iso/Containerfile \
     --build-arg "JARVIS_VERSION=$JARVIS_VERSION" \
     --build-arg "BUILDER_IMAGE=$BUILDER_IMAGE" \
-    --tag "$IMAGE_TAG" \
+    --tag "$IMAGE" \
     .
 
 echo "─── Converting to ISO via bootc-image-builder ───"
+# --pull=never: use the image we JUST built in local (rootful) storage as the
+# ISO payload, NOT whatever is on ghcr. The installed system's origin is still
+# the ghcr ref ("$IMAGE"), so it OTA-upgrades from ghcr later — but the ISO
+# itself carries your local build. (CI does the opposite: it pushes first,
+# then pulls, because there the registry copy IS the source of truth.)
 podman run --rm -it \
     --privileged \
-    --pull=newer \
+    --pull=never \
     --security-opt label=type:unconfined_t \
     -v "$OUTPUT_DIR":/output \
     -v ./iso/build.toml:/config.toml:ro \
@@ -71,7 +84,7 @@ podman run --rm -it \
     --type iso \
     --rootfs btrfs \
     --config /config.toml \
-    "localhost/$IMAGE_TAG"
+    "$IMAGE"
 
 echo "─── Done ───"
 echo "ISO:"
