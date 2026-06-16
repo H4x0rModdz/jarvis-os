@@ -4,6 +4,24 @@ use serde::Serialize;
 use std::path::Path;
 use std::sync::Mutex;
 
+/// Lock down a freshly-created SQLite DB so its contents (which can hold
+/// personal conversation context / user facts) stay owner-only even if the
+/// home directory's perms are loosened. The 0700 on the parent also covers
+/// the transient `-wal` / `-shm` siblings. Best-effort + Unix-only — a
+/// failure here must never block the daemon from starting (ADR 0027).
+pub(crate) fn harden_db_permissions(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
 /// Persistent key-value fact store backed by SQLite.
 ///
 /// One row per user fact. Keys are matched case-insensitively on read so that
@@ -31,6 +49,7 @@ impl FactStore {
         }
         let conn = Connection::open(path)
             .map_err(|e| LilithError::Io(std::io::Error::other(e.to_string())))?;
+        harden_db_permissions(path);
         Self::init_schema(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),

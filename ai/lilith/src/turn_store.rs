@@ -56,6 +56,7 @@ impl TurnStore {
         }
         let conn = Connection::open(path)
             .map_err(|e| LilithError::Io(std::io::Error::other(e.to_string())))?;
+        crate::persistent::harden_db_permissions(path);
         // WAL keeps reads fast while one writer is appending — matches
         // the notifications/facts store pattern.
         conn.execute_batch("PRAGMA journal_mode = WAL;")

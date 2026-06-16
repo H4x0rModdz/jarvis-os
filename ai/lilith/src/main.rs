@@ -270,8 +270,23 @@ impl LilithService {
             let reply = match reply_result {
                 Ok(r) => r,
                 Err(e) => {
-                    tracing::warn!(step, "Ollama unreachable: {e}");
-                    let fallback = "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'.";
+                    tracing::warn!(step, "Ollama call failed: {e}");
+                    // Distinguish "the AI model is offline" from "I didn't
+                    // understand you". The rule parser already handled direct
+                    // commands above, so reaching here with Ollama down means
+                    // the model — not the user's phrasing — is the problem;
+                    // saying "não entendi" wrongly blames the user (P002).
+                    let fallback = match e {
+                        error::LilithError::OllamaUnreachable(_)
+                        | error::LilithError::OllamaInvalid(_) => {
+                            "Não consigo falar com o modelo de IA agora (Ollama offline). \
+                             Comandos diretos ainda funcionam — ex.: 'abrir firefox', \
+                             'minimizar', 'tira um print'."
+                        }
+                        _ => {
+                            "Não entendi o comando. Diga, por exemplo: 'abrir vscode' ou 'fechar firefox'."
+                        }
+                    };
                     self.audit.write(text, None, None, fallback).await;
                     self.memory.record(Turn {
                         user_text: text.into(),
@@ -1351,8 +1366,10 @@ mod tests {
 
         let resp = service.process("comando aleatório", sink).await;
 
-        // Fallback path returns the canned "não entendi" reply.
-        assert!(resp["reply"].as_str().unwrap_or("").contains("Não entendi"));
+        // Ollama-down path gives the offline-specific message (P002), not the
+        // misleading "não entendi" that would blame the user's phrasing.
+        let reply = resp["reply"].as_str().unwrap_or("");
+        assert!(reply.contains("Ollama offline"), "got: {reply}");
         assert_eq!(resp["action"], Value::Null);
         assert!(bus.calls().is_empty());
     }
