@@ -1,6 +1,12 @@
 # Roadmap
 
-## Stage 1 — Architecture & Foundation (Current)
+> **Where we actually are:** Stages 1–6 are substantially built (core runtime,
+> shell, AI, voice, compat, SDK all ship). We're in **Stage 7 — Public Alpha**:
+> installable ISO + OTA exist; the active work is daily-driver hardening
+> (see `current-goals.md` and ADRs 0025–0027) and the Smithay compositor
+> (P001). The stage list below is the original coarse plan, kept for reference.
+
+## Stage 1 — Architecture & Foundation
 
 - System architecture documentation
 - Repository structure and standards
