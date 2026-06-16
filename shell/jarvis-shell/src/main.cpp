@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QMargins>
 #include <QDBusConnection>
+#include <QDBusError>
 
 #include "window_control_service.h"
 
