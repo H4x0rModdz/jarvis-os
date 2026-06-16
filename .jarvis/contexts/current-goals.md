@@ -4,9 +4,26 @@
 
 ## Current Phase
 
-**Between phases — Phase 10 closed.** The voice + biometric + AI
-loops are end-to-end. Picking the next arc is open; see "Phase 11
-candidates" below.
+**Daily-driver hardening arc (post-Phase-10 reality).** The codebase is far
+past the "Phase 10" the history table below records — the macOS-style shell
+(top bar + dock + Lilith popup), WiFi/Bluetooth/audio/battery/display panels,
+first-boot wizard, proactive AI, OTA, and ~52 actions all ship. The active
+work is closing the gap from "impressive demo" to "you can live in it":
+
+- **Arc 1 — AI controls windows (ADR 0025, PR #2).** `window.{focus,minimize,
+  maximize,close}` now work on labwc via the shell's `com.jarvis.Shell`
+  service (wlr-foreign-toplevel); selected by a `target` string. Geometry /
+  snap / workspaces stay deferred to the Smithay compositor.
+- **Arc 2 — desktop plumbing (ADR 0026, PR #3).** xdg-desktop-portal (+wlr/gtk)
+  for screen-share & file dialogs, udisks2 + udiskie for removable media,
+  CUPS + Avahi for printing.
+- **Arc 3 — reliability + security (ADR 0027, PR #4).** Graceful AI-offline
+  degradation (P002), owner-only memory DBs + LUKS-as-the-at-rest-boundary
+  (P003); service auto-restart already in place.
+- **Arc 4 — this docs refresh** (current-goals / roadmap / active-problems).
+
+Verification note: `ci.yml` builds only Rust. The Qt shell (Arc 1 C++) and
+the image (Arc 2) are proven by `build-iso.yml`, which runs on merge to main.
 
 ## Decisions Locked
 
@@ -66,36 +83,32 @@ candidates" below.
   `compat.run_proton` (per-app data dir). Lifecycle tracked;
   `compat.list_running` / `compat.terminate` available.
 
-## Phase 11 candidates
+## Next candidates (after the daily-driver arcs)
 
-Pick one or two of these; the loop above is solid, so further work
-is about depth (compositor, anti-spoof) or polish (UX, smoke
-tests, docs).
+Already shipped since this list was first written: the Lilith popup with
+streaming + chain-step view, and the macOS shell layout (ADR 0022/0024).
+What's left, roughly in priority order for "usable OS":
 
-1. **Lilith popup with full streaming view.** The bar input
-   placeholder is fine for the one-line case; a real conversation
-   surface (history of replies, chain-step badges, expandable
-   tool results) would let the user see what's happening when a
-   chain runs longer.
-2. **openWakeWord ONNX hotword.** Replace sliding-window Whisper
-   with a dedicated wake-word model. Latency drops <300 ms; CPU
-   ~5 %. Needs `ort` crate + an "oi lilith" model (training or
-   substitution).
-3. **x-vector / d-vector voiceprint.** Anti-spoofing replacement
-   for the MFCC+DTW matcher. ONNX-based, ~10 MB model.
-4. **Smithay compositor — real surfaces.** Phase 4 left the
-   scaffold compiling; Phase 11 candidate: input handling, output
-   management, xdg-shell surfaces, single-monitor parity with
-   labwc. Multi-week.
-5. **Voice at the greeter (pre-login).** Cached voiceprints at
-   `/var/lib/jarvis-auth/<user>/` or a system-bus parallel
-   interface on the voice daemon so PAM-from-greetd can reach
-   biometric verification before the session bus exists.
-6. **Lilith test harness.** Mock Ollama; cover the chain loop,
-   the rule parser, the audit emission. Confidence > 0; today
-   it's "compiles + ad-hoc tested on a VM".
-7. **Documentation pass beyond docs.** Pull the action catalogue
-   into a generated reference; ADR cross-links; SDK author guide.
+0. **Land the open PRs.** Merge #2/#3/#4 to main so `build-iso.yml` compiles
+   the Qt shell (proves Arc 1's C++) and builds the image with the new
+   plumbing (proves Arc 2). This is the real verification gate.
+1. **Smithay compositor — real surfaces (P001, still open — needs an ADR).**
+   The prime mover: it unblocks the `window.{move,resize,snap_*}` +
+   `workspace.*` actions Arc 1 deferred, plus compositor-controlled blur.
+   Input/output management, xdg-shell, single-monitor parity with labwc.
+   Multi-week.
+2. **Multi-monitor + HiDPI scaling depth.** `DisplayPanel` exists; confirm
+   2+ monitor arrangement and fractional scaling actually work on labwc
+   (notebook + external monitor is the common case).
+3. **Installer: LUKS + user creation.** Ties off ADR 0027's at-rest
+   decision — disk encryption is the real privacy boundary; a release build
+   also needs to drop the dev `jarvis/jarvis` default.
+4. **openWakeWord ONNX hotword** — dedicated wake model, <300 ms latency.
+5. **x-vector / d-vector voiceprint** — anti-spoofing over MFCC+DTW.
+6. **Voice at the greeter (pre-login)** — biometric verify before the
+   session bus exists.
+7. **Test-harness + generated docs** — broaden coverage beyond lilith/voice;
+   generate the action catalogue reference; SDK author guide.
 
 ## Success criterion for whatever is picked
 

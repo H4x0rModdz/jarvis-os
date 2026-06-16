@@ -17,26 +17,21 @@
 ---
 
 ### P002 — LLM Offline Fallback Quality
-**Problem:** When Ollama is unavailable or the model is too small for the task, Lilith's capabilities degrade severely.
-
-**Tradeoffs:**
-- Rule-based fallback: reliable but limited capability
-- Require minimum hardware spec: simpler but excludes users
-- Tiered capability system: complex but graceful
-
-**Status:** Undecided
+**RESOLVED** — See ADR 0027.
+Decision: the rule-based intent parser handles direct commands fully offline,
+and when Ollama is unreachable Lilith returns an honest "modelo de IA offline —
+comandos diretos ainda funcionam" message instead of a misleading "não entendi".
+Graceful degradation is treated as a UX contract. (Tiered LLM capability by
+hardware tier remains a future nicety, not a blocker.)
 
 ---
 
 ### P003 — AI Memory Privacy Model
-**Problem:** Persistent memory makes Lilith more useful but creates a local privacy risk if the device is compromised.
-
-**Options:**
-- Plain SQLite: simple, fast, no protection
-- Encrypted SQLite (SQLCipher): strong protection, key management complexity
-- OS keychain integration: best UX, platform-dependent
-
-**Status:** Undecided
+**RESOLVED** — See ADR 0027.
+Decision: the at-rest boundary is LUKS full-disk encryption (installer), NOT
+app-level SQLCipher — on an autologin single-user box the key would live
+locally, making app-level crypto security theatre. Lilith's SQLite stores
+(facts.db, lilith.db) are chmod 0600 + parent 0700 as defense-in-depth.
 
 ---
 
