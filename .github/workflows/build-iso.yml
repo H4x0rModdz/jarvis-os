@@ -20,12 +20,22 @@ on:
       - "docs/**"
       - ".jarvis/**"
       - "LICENSE"
+      # Windows-side build tooling — never copied into the OS image, so a
+      # change here can't affect what gets published.
+      - "tools/**"
   workflow_dispatch:
     inputs:
       version:
         description: "Version tag for this build (e.g. 0.0.1-dev)"
         required: true
         default: "0.0.1-dev"
+
+# A newer push to the same ref cancels the in-flight image build — only the
+# latest matters for the OTA channel, so we don't burn ~tens of minutes
+# finishing a build that's already superseded.
+concurrency:
+  group: build-iso-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write   # for release upload
