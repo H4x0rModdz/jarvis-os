@@ -116,30 +116,28 @@ pub fn all_tools() -> Vec<Tool> {
         // ── windows ─────────────────────────────────────────────────────
         Tool {
             action: "window.focus",
-            description: "Bring a window to the front and focus it.",
-            schema: window_id_schema(),
+            description: "Bring a window to the front and focus it. `target` \
+                          picks the window: \"active\" (default) for the focused \
+                          one, an app name like \"firefox\", or a title substring.",
+            schema: window_target_schema(),
         },
         Tool {
             action: "window.minimize",
-            description: "Minimize a window.",
-            schema: window_id_schema(),
+            description: "Minimize a window. `target`: \"active\" (default), an \
+                          app name, or a title substring.",
+            schema: window_target_schema(),
         },
         Tool {
             action: "window.maximize",
-            description: "Maximize a window.",
-            schema: window_id_schema(),
+            description: "Maximize a window. `target`: \"active\" (default), an \
+                          app name, or a title substring.",
+            schema: window_target_schema(),
         },
         Tool {
             action: "window.close",
-            description: "Close a window. If force=true, kill the owning process.",
-            schema: json!({
-                "type": "object",
-                "properties": {
-                    "window_id": { "type": "integer" },
-                    "force": { "type": "boolean" }
-                },
-                "required": ["window_id"]
-            }),
+            description: "Close a window. `target`: \"active\" (default), an app \
+                          name, or a title substring.",
+            schema: window_target_schema(),
         },
         Tool {
             action: "window.move",
@@ -646,6 +644,22 @@ fn window_id_schema() -> Value {
         "type": "object",
         "properties": { "window_id": { "type": "integer" } },
         "required": ["window_id"]
+    })
+}
+
+/// Selector schema for the foreign-toplevel-backed window actions (ADR
+/// 0025). `target` is a string — "active"/"focused" for the focused
+/// window, an app name (matched against app_id), or a title substring.
+/// Optional: omitting it defaults to the focused window.
+fn window_target_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "target": {
+                "type": "string",
+                "description": "\"active\" for the focused window, an app name (e.g. \"firefox\"), or a title substring."
+            }
+        }
     })
 }
 

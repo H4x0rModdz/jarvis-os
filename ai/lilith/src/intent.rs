@@ -163,33 +163,50 @@ static RULES: Lazy<Vec<Rule>> = Lazy::new(|| {
                 params: json!({ "app": &c["app"] }),
             },
         },
-        // ── window control (numeric id) ────────────────────────────────
+        // ── window control (foreign-toplevel selector, ADR 0025) ─────────
+        // Target defaults to the focused window; an app name or title
+        // substring after the verb (optionally "window"/"janela") targets a
+        // specific one. window.close requires the noun so it doesn't poach
+        // "fechar <app>" (that's app.close above). snap/move below stay
+        // numeric and are deferred to the Smithay compositor.
         Rule {
-            pattern: Regex::new(r"^(?:focus|focar)\s+window\s+(?P<id>\d+)$").unwrap(),
+            pattern: Regex::new(
+                r"^(?:focus|focar)(?:\s+(?:a\s+)?(?:window|janela))?(?:\s+(?P<t>.+))?$",
+            )
+            .unwrap(),
             build: |c| ToolCall {
                 action: "window.focus".into(),
-                params: json!({ "window_id": parse_id(&c["id"]) }),
+                params: window_target_params(c.name("t").map(|m| m.as_str())),
             },
         },
         Rule {
-            pattern: Regex::new(r"^(?:minimize|minimizar?)\s+window\s+(?P<id>\d+)$").unwrap(),
+            pattern: Regex::new(
+                r"^(?:minimize|minimizar?)(?:\s+(?:a\s+)?(?:window|janela))?(?:\s+(?P<t>.+))?$",
+            )
+            .unwrap(),
             build: |c| ToolCall {
                 action: "window.minimize".into(),
-                params: json!({ "window_id": parse_id(&c["id"]) }),
+                params: window_target_params(c.name("t").map(|m| m.as_str())),
             },
         },
         Rule {
-            pattern: Regex::new(r"^(?:maximize|maximizar?)\s+window\s+(?P<id>\d+)$").unwrap(),
+            pattern: Regex::new(
+                r"^(?:maximize|maximizar?)(?:\s+(?:a\s+)?(?:window|janela))?(?:\s+(?P<t>.+))?$",
+            )
+            .unwrap(),
             build: |c| ToolCall {
                 action: "window.maximize".into(),
-                params: json!({ "window_id": parse_id(&c["id"]) }),
+                params: window_target_params(c.name("t").map(|m| m.as_str())),
             },
         },
         Rule {
-            pattern: Regex::new(r"^(?:close|fechar?)\s+window\s+(?P<id>\d+)$").unwrap(),
+            pattern: Regex::new(
+                r"^(?:close|fechar?)\s+(?:a\s+)?(?:window|janela)(?:\s+(?P<t>.+))?$",
+            )
+            .unwrap(),
             build: |c| ToolCall {
                 action: "window.close".into(),
-                params: json!({ "window_id": parse_id(&c["id"]) }),
+                params: window_target_params(c.name("t").map(|m| m.as_str())),
             },
         },
         Rule {
@@ -374,6 +391,16 @@ fn parse_id(s: &str) -> u64 {
     s.parse().unwrap_or(0)
 }
 
+/// Build params for a foreign-toplevel window action (ADR 0025). A trimmed,
+/// non-empty captured token becomes `{"target": ...}`; otherwise empty
+/// params, which the handler reads as the focused ("active") window.
+fn window_target_params(t: Option<&str>) -> serde_json::Value {
+    match t.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(s) => json!({ "target": s }),
+        None => json!({}),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,10 +511,26 @@ mod tests {
     }
 
     #[test]
-    fn parses_window_minimize() {
-        let call = parse("minimize window 42").unwrap();
+    fn parses_window_minimize_by_name() {
+        let call = parse("minimizar firefox").unwrap();
         assert_eq!(call.action, "window.minimize");
-        assert_eq!(call.params["window_id"], 42);
+        assert_eq!(call.params["target"], "firefox");
+    }
+
+    #[test]
+    fn parses_window_minimize_bare_targets_active() {
+        let call = parse("minimize").unwrap();
+        assert_eq!(call.action, "window.minimize");
+        // No target captured -> handler defaults to the focused window.
+        assert!(call.params.get("target").is_none());
+    }
+
+    #[test]
+    fn close_app_still_beats_window_close() {
+        // "fechar <app>" must remain app.close (kills the app), not
+        // window.close (which needs the noun "janela"/"window").
+        let call = parse("fechar slack").unwrap();
+        assert_eq!(call.action, "app.close");
     }
 
     #[test]

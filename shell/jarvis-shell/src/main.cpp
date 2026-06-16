@@ -6,6 +6,9 @@
 #include <QLoggingCategory>
 #include <QDir>
 #include <QMargins>
+#include <QDBusConnection>
+
+#include "window_control_service.h"
 
 #ifdef JARVIS_HAVE_LAYER_SHELL
 #  include <LayerShellQt/Shell>
@@ -123,6 +126,21 @@ int main(int argc, char** argv)
         }
     }
 #endif
+
+    // Window control service (ADR 0025). Owns a wlr-foreign-toplevel client
+    // and serves com.jarvis.Shell so the Action Bus can focus/minimize/
+    // maximize/close windows on labwc. Best-effort: if the name is already
+    // taken (a second shell instance) we log and carry on — the desktop UI
+    // doesn't depend on owning it.
+    auto* windowControl = new WindowControlService(&app);
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.registerService(QStringLiteral("com.jarvis.Shell"))) {
+        qWarning("jarvis-shell: could not own com.jarvis.Shell — window control disabled (%s)",
+                 qPrintable(bus.lastError().message()));
+    } else if (!bus.registerObject(QStringLiteral("/com/jarvis/Shell"), windowControl,
+                                   QDBusConnection::ExportAllSlots)) {
+        qWarning("jarvis-shell: could not export /com/jarvis/Shell — window control disabled");
+    }
 
     return app.exec();
 }

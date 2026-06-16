@@ -51,8 +51,9 @@ stubs return `UNAVAILABLE` so callers don't silently no-op.
 | `app.*`        | `open`, `close`                                      | ✅ working (xdg-open / pkill) |
 | `app.*`        | `install`, `uninstall`                               | ✅ working (Flatpak/Flathub, `--user` install) |
 | `file.*`       | `move`, `copy`, `delete`                             | ✅ working (`gio trash` by default; `permanent: true` skips the trash) |
-| `window.*`     | `focus`, `minimize`, `maximize`, `close`, `move`, `resize`, `snap_left`, `snap_right` | ⏸ stub — the Jarvis compositor (Phase 3) will register real handlers |
-| `workspace.*`  | `switch`, `move_window`, `create`                    | ⏸ stub — same as above |
+| `window.*`     | `focus`, `minimize`, `maximize`, `close`             | ✅ working on labwc — forwarded to `com.jarvis.Shell` (foreign-toplevel), selected by `target` string (ADR 0025) |
+| `window.*`     | `move`, `resize`, `snap_left`, `snap_right`          | ⏸ deferred — need compositor geometry control (Smithay) |
+| `workspace.*`  | `switch`, `move_window`, `create`                    | ⏸ deferred — labwc exposes no IPC; lands with the Jarvis compositor |
 | `system.*`     | `notify`                                             | ✅ working (DBus client of `org.freedesktop.Notifications` — owned by `jarvis-notifications`) |
 | `system.*`     | `set_setting`, `get_setting`                         | ✅ working (DBus client of `com.jarvis.Settings`) |
 | `browser.*`    | `open`                                               | ✅ working (xdg-open, http/https/mailto only) |
@@ -98,8 +99,13 @@ the system doesn't brick itself when the daemon hiccups. See
 
 ## Known Limitations
 
-- Window and workspace actions return `UNAVAILABLE` until the Jarvis
-  compositor lands and registers its own handlers (the registry supports
-  per-handler override).
+- `window.{focus,minimize,maximize,close}` work on labwc by forwarding to
+  the shell's `com.jarvis.Shell` service (foreign-toplevel, ADR 0025);
+  windows are selected by a `target` string ("active" | app name | title
+  substring), not a numeric id.
+- `window.{move,resize,snap_*}` and all `workspace.*` actions return
+  `UNAVAILABLE` — they need compositor-level geometry/workspace control
+  that the Jarvis (Smithay) compositor will provide and register here (the
+  registry supports per-handler override).
 - Async dispatch (fire-and-forget with `ActionCompleted` signal) is
   designed in the schema but not implemented.

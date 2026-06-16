@@ -18,9 +18,13 @@ protocol. See ADR 0022 for the menu-bar/dock/orb layout decision.
   `com.jarvis.ActionBus.Dispatch` (direct path — e.g. the launcher
   clicking an app tile). We never shell out to xdg-open / notify-send
   / pactl ourselves; those are Action Bus handler concerns.
-- jarvis-shell **does not** manage windows. The compositor does. We
-  display window state via DBus events but never call into Wayland
-  ourselves.
+- jarvis-shell is the **de-facto window manager on labwc** (ADR 0024/0025).
+  It speaks `wlr-foreign-toplevel-management-v1` directly: the dock reflects
+  running windows, and `WindowControlService` serves `com.jarvis.Shell` so
+  the Action Bus can focus/minimize/maximize/close windows. Geometry,
+  snapping and workspaces stay with the future Smithay compositor — when it
+  lands it registers real `window.*` handlers and this Wayland path is
+  removed.
 - jarvis-shell **must** degrade gracefully when any daemon is offline:
   the Lilith LED turns red, but the bar still renders, the clock still
   ticks, the launcher still opens (it dispatches via the Action Bus
@@ -93,7 +97,17 @@ across `src/` (C++ bridges) and `qml/`.
 
 ## DBus Surface
 
-This module is a *client*, not a server. It consumes:
+It **serves** one interface (window management on labwc, ADR 0025):
+
+```
+com.jarvis.Shell  /com/jarvis/Shell  iface com.jarvis.Shell.Windows
+  method Focus(target) / Minimize(target) / Maximize(target) / Close(target) -> bool
+  method List() -> json   [{app_id,title,activated,minimized}]
+  // target: "active"/"focused" | app name | title substring
+  // backed by WindowControlService (its own wlr-foreign-toplevel client)
+```
+
+As a *client*, it consumes:
 
 ```
 com.jarvis.Lilith.Command(text)             primary input path (bar)

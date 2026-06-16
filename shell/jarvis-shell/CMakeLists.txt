@@ -61,6 +61,8 @@ qt_add_executable(jarvis-shell
     src/display_bridge.h
     src/foreign_toplevel.cpp
     src/foreign_toplevel.h
+    src/window_control_service.cpp
+    src/window_control_service.h
 )
 
 # Qt's qmltype registration generator includes our headers by short name.
