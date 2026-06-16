@@ -139,6 +139,48 @@ impl PermissionChecker {
             // Power ops are sensitive: NOT a safe scope, so a non-menu
             // (e.g. Lilith-initiated) call prompts for confirmation.
             "system.power" => "system.power",
+
+            // Opening a URL in the browser is the same trust class as
+            // launching an app.
+            "browser.open" => "app.launch",
+
+            // Writing the clipboard is safe; reading it can leak secrets.
+            "clipboard.set" => "clipboard.write",
+            "clipboard.get" => "clipboard.read",
+
+            // Capturing the screen is privacy-sensitive (passwords, private
+            // messages) — same class as reading the clipboard: prompt.
+            "screenshot.capture" => "screen.read",
+
+            // Audio output changes are reversible by the user.
+            "audio.set_volume" | "audio.adjust_volume" | "audio.toggle_mute"
+            | "audio.list_sinks" | "audio.set_default_sink" => "audio.control",
+
+            // Scanning/listing networks is read-only; connecting / toggling
+            // the radio is device control that prompts.
+            "network.scan" | "network.list" => "network.read",
+            "network.connect" | "network.disconnect" | "network.set_enabled" => {
+                "network.control"
+            }
+
+            // Same split for Bluetooth: discovery is read-only, pairing /
+            // connecting / powering is control.
+            "bluetooth.scan" | "bluetooth.list_paired" | "bluetooth.list_nearby" => {
+                "bluetooth.read"
+            }
+            "bluetooth.pair" | "bluetooth.unpair" | "bluetooth.connect"
+            | "bluetooth.disconnect" | "bluetooth.set_enabled" => "bluetooth.control",
+
+            // Update check is read-only; applying an OS upgrade is destructive.
+            "updater.check" => "updater.read",
+            "updater.apply_os" => "updater.apply",
+
+            // Anything that runs a Windows binary / mutates a prefix is the
+            // `compat.run` trust class (prompts).
+            "compat.run_exe" | "compat.run_exe_in" | "compat.run_proton"
+            | "compat.install_proton" | "compat.create_prefix" | "compat.list_prefixes"
+            | "compat.list_running" | "compat.terminate" => "compat.run",
+
             _ => "unknown",
         }
     }
@@ -153,8 +195,65 @@ impl PermissionChecker {
             "system.notify",
             "settings.read",
             "filesystem.read",
+            "audio.control",
+            "clipboard.write",
+            "updater.read",
+            "network.read",
+            "bluetooth.read",
         ];
         SAFE.iter()
             .any(|prefix| scope == *prefix || scope.starts_with(&format!("{prefix}.")))
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+
+    #[test]
+    fn known_actions_map_to_real_scopes() {
+        assert_eq!(PermissionChecker::required_scope("screenshot.capture"), "screen.read");
+        assert_eq!(PermissionChecker::required_scope("clipboard.get"), "clipboard.read");
+        assert_eq!(PermissionChecker::required_scope("clipboard.set"), "clipboard.write");
+        assert_eq!(PermissionChecker::required_scope("browser.open"), "app.launch");
+        assert_eq!(PermissionChecker::required_scope("audio.set_volume"), "audio.control");
+        assert_eq!(PermissionChecker::required_scope("network.scan"), "network.read");
+        assert_eq!(PermissionChecker::required_scope("network.connect"), "network.control");
+        assert_eq!(PermissionChecker::required_scope("bluetooth.pair"), "bluetooth.control");
+        assert_eq!(PermissionChecker::required_scope("updater.check"), "updater.read");
+        assert_eq!(PermissionChecker::required_scope("compat.run_exe"), "compat.run");
+    }
+
+    /// Every action the bus registers must resolve to a real scope. A stray
+    /// "unknown" is a policy DENY — exactly how screenshot.capture silently
+    /// broke. If you add an action, add it here (and to required_scope).
+    #[test]
+    fn no_current_action_is_unknown() {
+        for action in [
+            "app.open", "app.close", "app.install", "app.uninstall",
+            "file.move", "file.copy", "file.delete",
+            "window.focus", "window.minimize", "window.maximize", "window.close",
+            "window.move", "window.resize", "window.snap_left", "window.snap_right",
+            "workspace.switch", "workspace.move_window", "workspace.create",
+            "system.notify", "system.set_setting", "system.get_setting", "system.power",
+            "browser.open", "clipboard.set", "clipboard.get", "screenshot.capture",
+            "audio.set_volume", "audio.adjust_volume", "audio.toggle_mute",
+            "audio.list_sinks", "audio.set_default_sink",
+            "network.scan", "network.list", "network.connect", "network.disconnect",
+            "network.set_enabled",
+            "bluetooth.scan", "bluetooth.list_paired", "bluetooth.list_nearby",
+            "bluetooth.pair", "bluetooth.unpair", "bluetooth.connect",
+            "bluetooth.disconnect", "bluetooth.set_enabled",
+            "updater.check", "updater.apply_os",
+            "compat.run_exe", "compat.run_exe_in", "compat.run_proton",
+            "compat.install_proton", "compat.create_prefix", "compat.list_prefixes",
+            "compat.list_running", "compat.terminate",
+        ] {
+            assert_ne!(
+                PermissionChecker::required_scope(action),
+                "unknown",
+                "action {action} has no scope mapping"
+            );
+        }
     }
 }
