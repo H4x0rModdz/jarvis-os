@@ -2,28 +2,28 @@
 //!
 //! Two flows:
 //!
-//! - **Check** — `bootc upgrade --check` exits 77 when a newer image
-//!   has been staged in the registry, 0 when up-to-date. We translate
-//!   that into a structured `OsUpdateInfo`.
-//! - **Apply** — `bootc upgrade` pulls + stages the new image. A reboot
-//!   is required to actually boot into it; bootc itself never reboots
-//!   without an explicit `--reboot` flag, which we don't pass — the
-//!   user (or a future post-completion confirm dialog) is the one to
-//!   decide when to reboot.
+//! - **Check** — refresh the registry view with `bootc upgrade --check`, then
+//!   read `bootc status --format json` and compare the **booted image digest**
+//!   against the **staged / cached-update digest**. An update is available
+//!   when a different digest is staged (reboot pending) or cached (ready to
+//!   pull). We deliberately do NOT trust `bootc upgrade --check`'s exit code:
+//!   contrary to an earlier assumption it does NOT exit 77 for "update
+//!   available" — it exits 0 even when one exists, which made the UI
+//!   permanently report "system up to date" while `bootc status` clearly
+//!   showed a newer digest. Digest comparison is the version/locale-stable
+//!   source of truth (and version strings can't be compared — dev builds all
+//!   read `0.0.0-dev`).
+//! - **Apply** — `bootc upgrade` pulls + stages the new image. A reboot is
+//!   required to actually boot into it; bootc never reboots without
+//!   `--reboot`, which we don't pass — the user decides when.
 //!
-//! Privilege: `bootc` requires root. The updater is a per-user daemon,
-//! so it cannot call `bootc` directly — the call exits non-zero with
-//! "This command must be executed as the root user", which is NOT 0 and
-//! NOT 77, so it used to surface as an error and the UI wrongly reported
-//! "system up to date". We invoke `bootc` through `pkexec` (gated by the
-//! `com.jarvis.updater.bootc` polkit rule, which lets the `jarvis` /
-//! wheel user run it without a password prompt — see
-//! iso/assets/polkit/). `JARVIS_UPDATER_NO_PKEXEC=1` runs `bootc`
-//! directly (for tests / a daemon that already runs as root).
+//! Privilege: `bootc` requires root. The updater is a per-user daemon, so we
+//! invoke `bootc` through `pkexec` (gated by the `com.jarvis.updater.bootc`
+//! polkit rule — see iso/assets/polkit/). `JARVIS_UPDATER_NO_PKEXEC=1` runs
+//! `bootc` directly (tests / a daemon already running as root).
 //!
 //! Env override:
-//!   JARVIS_UPDATER_BOOTC      path to the `bootc` binary (default
-//!                             `/usr/bin/bootc`)
+//!   JARVIS_UPDATER_BOOTC      path to the `bootc` binary (default /usr/bin/bootc)
 //!   JARVIS_UPDATER_NO_PKEXEC  skip the pkexec wrapper when set
 
 use anyhow::{anyhow, Context, Result};
@@ -32,10 +32,6 @@ use tokio::process::Command;
 
 pub const DEFAULT_BOOTC: &str = "/usr/bin/bootc";
 const PKEXEC: &str = "/usr/bin/pkexec";
-
-/// bootc's documented "an update is available" exit code from
-/// `upgrade --check`. Anything else we treat as "no update".
-const BOOTC_UPDATE_AVAILABLE: i32 = 77;
 
 /// Build a `Command` that runs `bootc <args…>` with privilege. Wraps in
 /// `pkexec` unless `JARVIS_UPDATER_NO_PKEXEC` is set (tests / root daemon).
@@ -55,16 +51,15 @@ fn bootc_command(binary: &PathBuf, args: &[&str]) -> Command {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OsUpdateInfo {
     pub available: bool,
-    /// Best-effort short description of what bootc reported. Often
-    /// includes the image digest or version; opaque enough that we
-    /// surface it verbatim to the user.
+    /// Best-effort short description of the available image — the candidate's
+    /// version, or a short digest when versions are uninformative. Surfaced
+    /// verbatim to the user.
     pub version: Option<String>,
 }
 
-/// Probe whether a bootc OS update is staged. Errors when the bootc
-/// binary itself is unreachable (which is a Phase 3 concern — we
-/// degrade gracefully, the model-pull half of the updater keeps
-/// working).
+/// Probe whether a bootc OS update is available. Errors when the bootc binary
+/// is unreachable or `bootc status` fails — callers degrade gracefully (the
+/// model-pull half of the updater keeps working).
 pub async fn check_update() -> Result<OsUpdateInfo> {
     let binary = env_path("JARVIS_UPDATER_BOOTC", DEFAULT_BOOTC);
     if !binary.exists() {
@@ -74,44 +69,82 @@ pub async fn check_update() -> Result<OsUpdateInfo> {
         ));
     }
 
-    let output = bootc_command(&binary, &["upgrade", "--check"])
+    // Best-effort: refresh the registry view so `booted.cachedUpdate` reflects
+    // the latest remote. Its exit code is unreliable across bootc versions, so
+    // we ignore it and read the truth from `bootc status` below. A failure
+    // here (offline, etc.) just means we compare against the last cached check.
+    let _ = bootc_command(&binary, &["upgrade", "--check"])
+        .output()
+        .await;
+
+    let output = bootc_command(&binary, &["status", "--format", "json"])
         .output()
         .await
-        .with_context(|| format!("spawn {}", binary.display()))?;
+        .with_context(|| format!("spawn {} status", binary.display()))?;
 
-    let code = output.status.code().unwrap_or(-1);
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-
-    match code {
-        0 => Ok(OsUpdateInfo {
-            available: false,
-            version: None,
-        }),
-        BOOTC_UPDATE_AVAILABLE => {
-            // bootc prints something like "Update available: ..." — pull
-            // out the most informative non-empty line as version, fallback
-            // to the whole stdout.
-            let version = stdout
-                .lines()
-                .map(str::trim)
-                .find(|l| !l.is_empty())
-                .map(String::from);
-            Ok(OsUpdateInfo {
-                available: true,
-                version,
-            })
-        }
-        other => Err(anyhow!(
-            "bootc upgrade --check exited with {other}: {}",
-            stderr.trim()
-        )),
+    if !output.status.success() {
+        return Err(anyhow!(
+            "bootc status --format json exited with {}: {}",
+            output.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
     }
+
+    parse_status(&String::from_utf8_lossy(&output.stdout))
 }
 
-/// Run `bootc upgrade`. Pulls + stages the new image; the user reboots
-/// to apply. We deliberately do NOT pass `--reboot` — that's the user's
-/// decision, surfaced after `Completed`.
+/// Decide "is an update available?" from `bootc status --format json` by
+/// comparing image digests — independent of any exit-code convention.
+///
+/// A staged image (already pulled, reboot pending) wins over a cached update
+/// (seen at the registry, not yet pulled); either counts as available when its
+/// digest differs from the booted one. Missing/null fields resolve to JSON
+/// null, whose `.as_str()` is `None`, so this is robust to absent sections.
+fn parse_status(json: &str) -> Result<OsUpdateInfo> {
+    let v: serde_json::Value =
+        serde_json::from_str(json).context("parsing `bootc status --format json`")?;
+    let status = &v["status"];
+
+    let booted_digest = status["booted"]["image"]["imageDigest"]
+        .as_str()
+        .unwrap_or_default();
+
+    // Best update candidate: staged (reboot pending) first, else the cached
+    // registry check on the booted deployment.
+    let staged = &status["staged"]["image"];
+    let cached = &status["booted"]["cachedUpdate"];
+    let (cand_digest, cand_version) = if let Some(d) = staged["imageDigest"].as_str() {
+        (Some(d), staged["version"].as_str())
+    } else if let Some(d) = cached["imageDigest"].as_str() {
+        (Some(d), cached["version"].as_str())
+    } else {
+        (None, None)
+    };
+
+    let available = matches!(cand_digest, Some(d) if !d.is_empty() && d != booted_digest);
+    let version = if available {
+        cand_version
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| cand_digest.map(short_digest))
+    } else {
+        None
+    };
+
+    Ok(OsUpdateInfo { available, version })
+}
+
+/// `"sha256:0123456789abcdef…"` -> `"0123456789ab"` for a compact UI label.
+fn short_digest(d: &str) -> String {
+    d.strip_prefix("sha256:")
+        .unwrap_or(d)
+        .chars()
+        .take(12)
+        .collect()
+}
+
+/// Run `bootc upgrade`. Pulls + stages the new image; the user reboots to
+/// apply. We deliberately do NOT pass `--reboot`.
 pub async fn apply_upgrade() -> Result<()> {
     let binary = env_path("JARVIS_UPDATER_BOOTC", DEFAULT_BOOTC);
     if !binary.exists() {
@@ -159,5 +192,64 @@ mod tests {
         };
         assert!(info.available);
         assert_eq!(info.version.as_deref(), Some("digest:abc"));
+    }
+
+    #[test]
+    fn parse_status_detects_staged_update() {
+        // Real shape: a staged image whose digest differs from booted means an
+        // update is ready (reboot pending) — even though both report the same
+        // "0.0.0-dev" version. This is exactly the case the old exit-code path
+        // mis-reported as "up to date".
+        let json = r#"{ "status": {
+            "booted": {
+                "image": { "imageDigest": "sha256:AAAAAAAAAAAA", "version": "0.0.0-dev" },
+                "cachedUpdate": { "imageDigest": "sha256:BBBBBBBBBBBB", "version": "0.0.0-dev" }
+            },
+            "staged": { "image": { "imageDigest": "sha256:BBBBBBBBBBBB", "version": "0.0.0-dev" } }
+        }}"#;
+        let info = parse_status(json).unwrap();
+        assert!(info.available);
+        assert_eq!(info.version.as_deref(), Some("0.0.0-dev"));
+    }
+
+    #[test]
+    fn parse_status_cached_only_update() {
+        // No staged deployment yet, but the registry check cached a newer
+        // digest -> available (ready to pull).
+        let json = r#"{ "status": {
+            "booted": {
+                "image": { "imageDigest": "sha256:AAAAAAAAAAAA", "version": "0.0.0-dev" },
+                "cachedUpdate": { "imageDigest": "sha256:CCCCCCCCCCCC", "version": "0.0.0-dev" }
+            },
+            "staged": null
+        }}"#;
+        let info = parse_status(json).unwrap();
+        assert!(info.available);
+    }
+
+    #[test]
+    fn parse_status_up_to_date_when_no_candidate() {
+        let json = r#"{ "status": {
+            "booted": { "image": { "imageDigest": "sha256:AAAAAAAAAAAA" }, "cachedUpdate": null },
+            "staged": null
+        }}"#;
+        let info = parse_status(json).unwrap();
+        assert!(!info.available);
+        assert!(info.version.is_none());
+    }
+
+    #[test]
+    fn parse_status_same_digest_is_not_an_update() {
+        // The bug guard: a cached entry with the SAME digest as booted (and the
+        // same version string) must NOT count as an update.
+        let json = r#"{ "status": {
+            "booted": {
+                "image": { "imageDigest": "sha256:AAAAAAAAAAAA", "version": "0.0.0-dev" },
+                "cachedUpdate": { "imageDigest": "sha256:AAAAAAAAAAAA", "version": "0.0.0-dev" }
+            },
+            "staged": null
+        }}"#;
+        let info = parse_status(json).unwrap();
+        assert!(!info.available);
     }
 }
