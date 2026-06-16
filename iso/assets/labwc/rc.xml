@@ -29,6 +29,12 @@
          that would also slap a titlebar on the shell's own frameless
          popups (Launcher, dialogs, the Jarvis menu). See ADR 0024. -->
     <windowRule identifier="foot" serverDecoration="yes" />
+    <!-- Dolphin (org.kde.dolphin, Flatpak) opens from the desktop icons
+         (Computador / Pasta Pessoal / Lixeira). Force labwc's server-side
+         decoration so it gets the same working titlebar + buttons as every
+         other window, instead of relying on KDE client-side decorations
+         that may not render/respond on a non-KDE wlroots session. -->
+    <windowRule identifier="org.kde.dolphin" serverDecoration="yes" />
   </windowRules>
 
   <keyboard>
@@ -81,6 +87,21 @@
     <context name="Frame">
       <mousebind button="A-Left" action="Drag"><action name="Move"/></mousebind>
       <mousebind button="A-Right" action="Drag"><action name="Resize"/></mousebind>
+    </context>
+    <!-- Titlebar button actions. The buttons are their own labwc contexts
+         (Close / Iconify / Maximize); once a custom <mouse> section is
+         defined, their click bindings must be declared explicitly or the
+         buttons render but do nothing — which is why minimize/maximize/close
+         on Dolphin folder windows did nothing. (Fixes ADR 0024 phase A.) -->
+    <context name="Close">
+      <mousebind button="Left" action="Click"><action name="Close"/></mousebind>
+    </context>
+    <context name="Iconify">
+      <mousebind button="Left" action="Click"><action name="Iconify"/></mousebind>
+    </context>
+    <context name="Maximize">
+      <mousebind button="Left" action="Click"><action name="ToggleMaximize"/></mousebind>
+      <mousebind button="Right" action="Click"><action name="ToggleMaximize" direction="horizontal"/></mousebind>
     </context>
   </mouse>
 </labwc_config>
