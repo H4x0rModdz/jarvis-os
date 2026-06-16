@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 #include <qqmlintegration.h>
 
@@ -117,6 +118,16 @@ public:
 
     /// Focus (and unminimize) the first window matching this desktop id.
     Q_INVOKABLE void activateApp(const QString& desktopId);
+
+    /// Open/minimized state for a pinned dock tile:
+    ///   0 = no window for this app, 1 = at least one visible window,
+    ///   2 = running but every matching window is minimized.
+    /// Drives the dock's open-vs-minimized indicator.
+    Q_INVOKABLE int runState(const QString& desktopId) const;
+
+    /// Distinct app_ids of every running toplevel, so the dock can surface
+    /// running apps that aren't pinned.
+    Q_INVOKABLE QStringList runningAppIds() const;
 
 signals:
     void changed();

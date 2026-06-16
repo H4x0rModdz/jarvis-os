@@ -163,6 +163,33 @@ void RunningAppsModel::activateApp(const QString& desktopId)
     }
 }
 
+int RunningAppsModel::runState(const QString& desktopId) const
+{
+    bool anyRunning = false;
+    for (const ForeignToplevelHandle* h : m_handles) {
+        if (matches(h->appId(), desktopId)) {
+            anyRunning = true;
+            if (!h->isMinimized()) {
+                return 1; // at least one visible window — "open"
+            }
+        }
+    }
+    // Running with no visible window means every match was minimized.
+    return anyRunning ? 2 : 0;
+}
+
+QStringList RunningAppsModel::runningAppIds() const
+{
+    QStringList ids;
+    for (const ForeignToplevelHandle* h : m_handles) {
+        const QString a = h->appId();
+        if (!a.isEmpty() && !ids.contains(a)) {
+            ids.append(a);
+        }
+    }
+    return ids;
+}
+
 void RunningAppsModel::onToplevelCreated(ForeignToplevelHandle* handle)
 {
     connect(handle, &ForeignToplevelHandle::changed,
