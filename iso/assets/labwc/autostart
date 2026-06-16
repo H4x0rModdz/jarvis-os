@@ -31,6 +31,14 @@ if command -v swaybg >/dev/null 2>&1; then
     swaybg -m fill -i /usr/share/backgrounds/jarvis/wallpaper.jpg &
 fi
 
+# Automount removable media + a desktop notification when a drive is
+# plugged in (udisks2 does the mounting; udiskie drives it). --no-tray:
+# this session has no system tray, so we want only the automount + notify
+# behaviour, not the menu. (ADR 0026)
+if command -v udiskie >/dev/null 2>&1; then
+    udiskie --no-tray &
+fi
+
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
     state=$(systemctl --user is-system-running 2>/dev/null || echo "unknown")
     echo "attempt ${attempt}: user systemd state=${state}"

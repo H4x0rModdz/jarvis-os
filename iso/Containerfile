@@ -191,6 +191,47 @@ RUN dnf -y install \
 # "VMware Tools running" status are the practical wins.
 RUN systemctl enable vmtoolsd.service qemu-guest-agent.service 2>/dev/null || true
 
+# ── Daily-driver plumbing (ADR 0026) ────────────────────────────────────
+# Three gaps that make a desktop actually usable, none present in the base:
+#   - Portals: xdg-desktop-portal + the wlroots backend (ScreenCast /
+#     Screenshot — so browser screen-share and video calls work) + the GTK
+#     backend (FileChooser, Settings, ...; the wlr backend has neither).
+#     The PipeWire stack is what the ScreenCast portal streams over.
+#   - Removable media: udisks2 (mount engine — Dolphin mounts through it) +
+#     udiskie (automount + notify, started from the labwc autostart).
+#   - Printing: CUPS + filters + the polkit helper + a printer-admin GUI,
+#     and Avahi so driverless (IPP Everywhere) network printers are found
+#     automatically (CUPS' dnssd backend queries Avahi directly).
+RUN dnf -y install \
+        xdg-desktop-portal \
+        xdg-desktop-portal-wlr \
+        xdg-desktop-portal-gtk \
+        pipewire \
+        wireplumber \
+        pipewire-pulseaudio \
+        udisks2 \
+        udiskie \
+        cups \
+        cups-filters \
+        cups-pk-helper \
+        system-config-printer \
+        avahi \
+    && dnf clean all
+
+# Route the portal interfaces: ScreenCast/Screenshot to the wlroots backend,
+# everything else (FileChooser, Settings, ...) to GTK. Keyed to
+# XDG_CURRENT_DESKTOP=labwc (set in iso/assets/labwc/environment).
+COPY iso/assets/xdg-desktop-portal/labwc-portals.conf \
+     /usr/share/xdg-desktop-portal/labwc-portals.conf
+
+# Socket-activated printing + mDNS discovery. udisks2 and
+# xdg-desktop-portal are D-Bus activated (no enable needed).
+RUN systemctl enable cups.socket avahi-daemon.service
+# PipeWire user units enabled --global so every session gets audio +
+# screencast. Guarded: exact unit names vary across releases, and the base
+# may already enable them via preset.
+RUN systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
+
 # Flathub remote system-wide so `flatpak install --user flathub <id>`
 # resolves on first call. Adding it at image build time keeps the
 # first-boot path zero-config — Lilith can install Firefox before
