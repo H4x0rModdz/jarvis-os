@@ -36,29 +36,20 @@ pub async fn open(params: Value) -> Result<Value, BusError> {
         // defaults. `gio open` reads the same mimeapps.list defaults
         // directly (folders → Dolphin, http → Firefox) and routes
         // correctly. xdg-open stays as the fallback for hosts without gio.
-        if let Ok(c) = tokio::process::Command::new("gio")
-            .arg("open")
-            .arg(app)
-            .spawn()
-        {
+        if let Ok(c) = session_command("gio").arg("open").arg(app).spawn() {
             return Ok(json!({ "launched": true, "pid": c.id(), "via": "gio-open" }));
         }
-        let child = tokio::process::Command::new("xdg-open")
-            .arg(app)
-            .spawn()
-            .map_err(|e| BusError::ExecutionFailed {
+        let child = session_command("xdg-open").arg(app).spawn().map_err(|e| {
+            BusError::ExecutionFailed {
                 message: format!("xdg-open '{app}': {e}"),
-            })?;
+            }
+        })?;
         return Ok(json!({ "launched": true, "pid": child.id(), "via": "xdg-open" }));
     }
 
     // 2. App name → resolve a .desktop, launch via gio (Flatpak-aware).
     if let Some(desktop) = resolve_desktop(app) {
-        if let Ok(c) = tokio::process::Command::new("gio")
-            .arg("launch")
-            .arg(&desktop)
-            .spawn()
-        {
+        if let Ok(c) = session_command("gio").arg("launch").arg(&desktop).spawn() {
             return Ok(json!({
                 "launched": true,
                 "pid": c.id(),
@@ -68,20 +59,53 @@ pub async fn open(params: Value) -> Result<Value, BusError> {
         }
         // gio absent → try gtk-launch by desktop id.
         if let Some(id) = desktop.file_stem().and_then(|s| s.to_str()) {
-            if let Ok(c) = tokio::process::Command::new("gtk-launch").arg(id).spawn() {
+            if let Ok(c) = session_command("gtk-launch").arg(id).spawn() {
                 return Ok(json!({ "launched": true, "pid": c.id(), "via": "gtk-launch" }));
             }
         }
     }
 
     // 3. Last resort: a real binary on PATH.
-    let child =
-        tokio::process::Command::new(app)
-            .spawn()
-            .map_err(|e| BusError::ExecutionFailed {
-                message: format!("Failed to launch '{app}': {e}"),
-            })?;
+    let child = session_command(app)
+        .spawn()
+        .map_err(|e| BusError::ExecutionFailed {
+            message: format!("Failed to launch '{app}': {e}"),
+        })?;
     Ok(json!({ "launched": true, "pid": child.id(), "via": "exec" }))
+}
+
+/// Build a launch command pre-seeded with the graphical-session environment
+/// that GUI apps need.
+///
+/// jarvis-action-bus is a systemd *user* service that usually starts before
+/// labwc imports `WAYLAND_DISPLAY` into the user manager, so the daemon's own
+/// environment lacks it. An app launched without `WAYLAND_DISPLAY` falls back
+/// to X11, finds no `DISPLAY`, and dies on a headless Wayland session —
+/// exactly why Firefox did nothing from the dock yet opened fine from a shell
+/// that had the var exported. The child still inherits everything else
+/// (incl. `XDG_RUNTIME_DIR`, which systemd does set); we only fill the gap.
+fn session_command(program: &str) -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new(program);
+    if std::env::var_os("WAYLAND_DISPLAY").is_none() {
+        if let Some(display) = detect_wayland_display() {
+            cmd.env("WAYLAND_DISPLAY", display);
+        }
+    }
+    cmd
+}
+
+/// Find the Wayland socket name under `XDG_RUNTIME_DIR` — `wayland-0` in the
+/// common case, else the first `wayland-N` present (ignoring the `.lock`).
+fn detect_wayland_display() -> Option<String> {
+    let rt = std::env::var_os("XDG_RUNTIME_DIR")?;
+    let dir = std::path::Path::new(&rt);
+    if dir.join("wayland-0").exists() {
+        return Some("wayland-0".to_string());
+    }
+    std::fs::read_dir(dir).ok()?.flatten().find_map(|e| {
+        let name = e.file_name().into_string().ok()?;
+        (name.starts_with("wayland-") && !name.ends_with(".lock")).then_some(name)
+    })
 }
 
 /// Find the best `.desktop` for an app name across the standard XDG
