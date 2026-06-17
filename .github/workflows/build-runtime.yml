@@ -1,0 +1,73 @@
+name: Build runtime base
+
+# Builds + pushes the jarvis-runtime base image (ADR 0021 P2, runtime half)
+# to ghcr.io. The main image build (build-iso.yml) does `FROM` this image for
+# its final stage, so it skips the ~30 min of desktop dnf installs + Flatpak
+# app downloads (Firefox/Dolphin/Zed ~2.5 GB) + WhiteSur theme build + Ollama
+# install on every per-merge update.
+#
+# Run this:
+#   - automatically when iso/Containerfile.runtime or one of the assets it
+#     bakes changes on main
+#   - manually (workflow_dispatch) to refresh the pinned Flatpak apps / theme
+#
+# Rebuilt RARELY — only when packages / apps / theme change — so its own
+# runtime doesn't gate normal development. While it rebuilds, the main build
+# keeps using the previous runtime base.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "iso/Containerfile.runtime"
+      - ".github/workflows/build-runtime.yml"
+      - "iso/assets/theme/**"
+      - "iso/assets/xdg/mimeapps.list"
+      - "iso/assets/xdg-desktop-portal/labwc-portals.conf"
+      - "iso/assets/sysctl/99-jarvis-userns.conf"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-runtime:
+    name: Build + push jarvis-runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo docker image prune --all --force || true
+          df -h /
+
+      - name: Install podman
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y podman
+
+      - name: Log in to ghcr.io
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build runtime base
+        run: |
+          # Lowercase the owner — ghcr refuses uppercase in image paths.
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          sudo podman build \
+            --file iso/Containerfile.runtime \
+            --tag "ghcr.io/${OWNER}/jarvis-runtime:latest" \
+            .
+
+      - name: Push runtime base
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          sudo podman push "ghcr.io/${OWNER}/jarvis-runtime:latest"

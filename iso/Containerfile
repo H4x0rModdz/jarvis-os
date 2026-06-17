@@ -7,13 +7,13 @@
 #      which already carries the Fedora toolchain + Qt6 headers +
 #      whisper-cli + piper + numbat under /out. This stage only
 #      compiles OUR crates + the Qt shell.
-#   2. Final  — Official Fedora bootc image (quay.io/fedora/fedora-bootc).
-#      We layer labwc + greetd + Qt6 runtime + LayerShellQt + Ollama +
-#      our compiled binaries + systemd units.
+#   2. Final  — FROM the prebuilt jarvis-runtime base (ADR 0021 P2), which
+#      already carries the desktop runtime + Flatpak apps + WhiteSur +
+#      Ollama. This stage only layers our compiled binaries + configs.
 #
-# The builder base is built by iso/Containerfile.builder (CI:
-# build-builder.yml; local: tools/build-iso.sh builds it on demand
-# when the image isn't present). BUILDER_IMAGE overrides the ref.
+# Both bases are built rarely (iso/Containerfile.builder + .runtime via
+# build-builder.yml / build-runtime.yml; locally tools/build-iso.sh builds
+# them on demand). BUILDER_IMAGE / RUNTIME_IMAGE override the refs.
 #
 # Output is an OCI image for `bootc-image-builder` to turn into an
 # ISO. See iso/README.md.
@@ -136,7 +136,12 @@ RUN cp /build/lock/jarvis-lock-window /out/bin/ \
     && for f in /out/bin/*; do strip "$f" 2>/dev/null || true; done
 
 # ──────────────────────────── Stage 2: final  ────────────────────────────
-FROM quay.io/fedora/fedora-bootc:42
+# FROM the prebuilt runtime base — desktop packages, Flatpak apps, WhiteSur
+# theme and Ollama already baked in (none of it depends on our source). This
+# stage only layers our compiled binaries + Jarvis configs, so a per-merge
+# build is fast. See iso/Containerfile.runtime.
+ARG RUNTIME_IMAGE=ghcr.io/h4x0rmoddz/jarvis-runtime:latest
+FROM ${RUNTIME_IMAGE}
 
 ARG JARVIS_VERSION=0.0.1
 # Repeat from stage 1 — Containerfile ARGs don't cross stages.
@@ -145,197 +150,6 @@ LABEL org.opencontainers.image.title="Jarvis OS"
 LABEL org.opencontainers.image.description="AI-native desktop OS, built on Fedora Atomic + labwc"
 LABEL org.opencontainers.image.version="${JARVIS_VERSION}"
 LABEL org.opencontainers.image.source="https://github.com/H4x0rModdz/jarvis-os"
-
-# Desktop runtime: labwc compositor, foot terminal (default keybind),
-# greetd for autologin into the wayland session, Qt 6 + LayerShellQt for
-# the shell, the usual user-facing helpers, and Ollama (no model baked in
-# — the post-first-boot updater pulls the LLM weights).
-RUN dnf -y install \
-        labwc foot cage \
-        greetd \
-        xorg-x11-server-Xwayland \
-        qt6-qtbase qt6-qtdeclarative qt6-qtwayland qt6-qtquickcontrols2 \
-        layer-shell-qt \
-        sqlite libnotify xdg-utils jq curl \
-        seatd polkit NetworkManager \
-        mesa-dri-drivers \
-        wl-clipboard grim slurp \
-        swayidle \
-        swaybg \
-        glib2 \
-        wlr-randr \
-        pulseaudio-utils \
-        brightnessctl \
-        playerctl \
-        upower \
-        bluez \
-        alsa-lib \
-        wine \
-        flatpak \
-        pamtester \
-        open-vm-tools \
-        qemu-guest-agent \
-    && dnf clean all
-
-# Guest-integration daemons for VMs. open-vm-tools (VMware) gives
-# host time-sync + guest info; qemu-guest-agent covers QEMU/KVM.
-# Both are no-ops on bare metal / a non-matching hypervisor, so
-# enabling them unconditionally is safe. The legacy VMware Tools
-# ISO installer can't run on a bootc image (/usr is read-only) —
-# baking the package in is the correct path. Note: desktop auto-
-# resize / clipboard over Wayland is limited (labwc doesn't expose
-# the resize protocol VMware's X resizer used); time-sync + the
-# "VMware Tools running" status are the practical wins.
-RUN systemctl enable vmtoolsd.service qemu-guest-agent.service 2>/dev/null || true
-
-# ── Daily-driver plumbing (ADR 0026) ────────────────────────────────────
-# Three gaps that make a desktop actually usable, none present in the base:
-#   - Portals: xdg-desktop-portal + the wlroots backend (ScreenCast /
-#     Screenshot — so browser screen-share and video calls work) + the GTK
-#     backend (FileChooser, Settings, ...; the wlr backend has neither).
-#     The PipeWire stack is what the ScreenCast portal streams over.
-#   - Removable media: udisks2 (mount engine — Dolphin mounts through it) +
-#     udiskie (automount + notify, started from the labwc autostart).
-#   - Printing: CUPS + filters + the polkit helper + a printer-admin GUI,
-#     and Avahi so driverless (IPP Everywhere) network printers are found
-#     automatically (CUPS' dnssd backend queries Avahi directly).
-RUN dnf -y install \
-        xdg-desktop-portal \
-        xdg-desktop-portal-wlr \
-        xdg-desktop-portal-gtk \
-        pipewire \
-        wireplumber \
-        pipewire-pulseaudio \
-        udisks2 \
-        udiskie \
-        cups \
-        cups-filters \
-        cups-pk-helper \
-        system-config-printer \
-        avahi \
-    && dnf clean all
-
-# Route the portal interfaces: ScreenCast/Screenshot to the wlroots backend,
-# everything else (FileChooser, Settings, ...) to GTK. Keyed to
-# XDG_CURRENT_DESKTOP=labwc (set in iso/assets/labwc/environment).
-COPY iso/assets/xdg-desktop-portal/labwc-portals.conf \
-     /usr/share/xdg-desktop-portal/labwc-portals.conf
-
-# Socket-activated printing + mDNS discovery. udisks2 and
-# xdg-desktop-portal are D-Bus activated (no enable needed).
-RUN systemctl enable cups.socket avahi-daemon.service
-# PipeWire user units enabled --global so every session gets audio +
-# screencast. Guarded: exact unit names vary across releases, and the base
-# may already enable them via preset.
-RUN systemctl --global enable pipewire.socket pipewire-pulse.socket wireplumber.service 2>/dev/null || true
-
-# Flathub remote system-wide so `flatpak install --user flathub <id>`
-# resolves on first call. Adding it at image build time keeps the
-# first-boot path zero-config — Lilith can install Firefox before
-# the user has typed anything else.
-RUN flatpak remote-add --if-not-exists flathub \
-        https://flathub.org/repo/flathub.flatpakrepo
-
-# Pre-install Firefox so the first boot has a working browser even
-# when the user hasn't connected to Wi-Fi yet. Adds ~200 MB to the
-# image (Firefox + Freedesktop runtime) but makes "open the browser"
-# work out of the box.
-#
-# --system installs into /var/lib/flatpak which is writable on bootc;
-# --no-related skips pre-installing the locale extensions (they'd add
-# another ~100 MB without much benefit on a pt-BR default).
-# The .desktop file lands in /var/lib/flatpak/exports/share/applications,
-# which is already in XDG_DATA_DIRS via iso/assets/launchers/jarvis-
-# session-launch — so the launcher grid (Phase 3 polish) picks it up.
-RUN flatpak install --system --noninteractive --no-related -y \
-        flathub org.mozilla.firefox
-
-# Pre-install Dolphin (KDE file manager). Phase 23 — closes the
-# "where are my files?" gap. The user picked KDE's Dolphin over
-# Nautilus + others; first install pulls in the KDE Platform
-# runtime (~1 GB) which is the costly part. Future KDE apps reuse
-# the runtime so they're tiny in comparison.
-RUN flatpak install --system --noninteractive --no-related -y \
-        flathub org.kde.dolphin
-
-# Pre-install Zed (Rust-based code editor). Reuses the Freedesktop
-# runtime Firefox already pulled, so marginal cost is ~150 MB. Same
-# ecosystem (Rust) as our own daemons — keeps the "code editor"
-# slot coherent with the rest of the stack instead of dragging in
-# yet another runtime for a single app.
-RUN flatpak install --system --noninteractive --no-related -y \
-        flathub dev.zed.Zed
-
-# System-wide MIME defaults — folders open in Dolphin, http(s)/html
-# in Firefox. Drops into /etc/xdg/ so every user inherits without
-# needing to maintain a per-user mimeapps.list.
-COPY iso/assets/xdg/mimeapps.list /etc/xdg/mimeapps.list
-
-# WhiteSur (macOS-like) GTK theme + icons + cursors, system-wide
-# under /usr/share. Styles GTK apps (Firefox) + the icon set the
-# launcher / file manager read + the pointer. Our own Qt shell keeps
-# its glassmorphic design — the GTK theme doesn't touch it.
-#
-# Dolphin (Qt/KDE) is NOT styled by this — matching it needs the
-# WhiteSur Kvantum theme + qt5ct/qt6ct wiring, deferred to a
-# follow-up. git is only needed for the clone, so we install it,
-# run the script, and the layer keeps the cloned repos out (the
-# script cleans its tmp dir).
-COPY iso/assets/theme/install-whitesur.sh /tmp/install-whitesur.sh
-# git for the clones; sass + glib2 for the GTK4/libadwaita theme
-# build (WhiteSur's install.sh compiles gtk4 CSS with sass and runs
-# glib-compile-resources). Missing sass is the usual reason the
-# install dies mid-run.
-#
-# The WhiteSur step is NON-FATAL: it's purely cosmetic, so a failure
-# (network hiccup, OOM on the huge icon repo, upstream script change)
-# logs a warning and ships the ISO without the theme rather than
-# killing a 10-minute build. The gtk-settings.ini below names
-# WhiteSur-Dark; if the theme is absent GTK silently falls back to
-# its default, which is harmless.
-RUN dnf -y install git sass glib2 \
-    && ( bash /tmp/install-whitesur.sh \
-         || echo "WARN: WhiteSur install failed — shipping without the theme" ) \
-    && rm -f /tmp/install-whitesur.sh \
-    && dnf -y remove git sass \
-    && dnf clean all
-
-# System-wide GTK defaults so GTK apps pick up WhiteSur + the icon
-# theme + cursor without a per-user config file.
-COPY iso/assets/theme/gtk-settings.ini /etc/gtk-3.0/settings.ini
-COPY iso/assets/theme/gtk-settings.ini /etc/gtk-4.0/settings.ini
-
-# Flatpak sandboxes don't see /usr/share/themes|icons and reset the
-# environment, so the session launcher's GTK_THEME won't reach
-# Firefox. A system-wide override grants read-only access to the
-# host theme dirs + sets GTK_THEME inside the sandbox. Applies to
-# every Flatpak (current + future), so Dolphin/Zed inherit the
-# icon + cursor too even though their widget toolkits differ.
-#
-# The Wayland bits (--socket=wayland + QT_QPA_PLATFORM/GDK_BACKEND/
-# MOZ_ENABLE_WAYLAND) force Flatpaks onto Wayland: this session has no
-# working XWayland/DISPLAY, so apps that default to X11 fail at launch.
-# NOTE: --system overrides live under /var, which bootc only seeds on
-# install — an OTA upgrade does NOT refresh them. The labwc autostart
-# re-applies the same --user override each login so existing VMs get it
-# without a reinstall; this block covers fresh installs.
-RUN flatpak override --system \
-        --filesystem=/usr/share/themes:ro \
-        --filesystem=/usr/share/icons:ro \
-        --env=GTK_THEME=WhiteSur-Dark \
-        --env=XCURSOR_THEME=WhiteSur-cursors \
-        --socket=wayland \
-        --env=QT_QPA_PLATFORM=wayland \
-        --env=GDK_BACKEND=wayland \
-        --env=MOZ_ENABLE_WAYLAND=1
-
-# Nested user namespaces so Flatpak apps with their own inner sandbox
-# (Firefox's content process) can start. Without a budget the nested
-# clone(CLONE_NEWUSER) fails EPERM and Firefox dies right after launch —
-# the dock click appears to do nothing. systemd-sysctl applies this at
-# boot; an OTA upgrade + reboot picks it up. See the asset for the full
-# rationale.
-COPY iso/assets/sysctl/99-jarvis-userns.conf /usr/lib/sysctl.d/99-jarvis-userns.conf
 
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.
@@ -362,19 +176,6 @@ COPY --from=builder /out/numbat/bin/numbat              /usr/bin/numbat
 COPY --from=builder /out/piper                          /opt/piper
 COPY --from=builder /out/piper-voices                   /usr/share/piper-voices
 RUN ln -sf /opt/piper/piper /usr/bin/piper
-
-# Ollama. The upstream installer creates a system user with home
-# `/usr/share/ollama`, which is read-only under bootc — the daemon then
-# crash-loops trying to write `~/.ollama/id_ed25519`. We bolt on a drop-in
-# that redirects HOME to /var/lib/ollama and asks systemd to provision that
-# directory with the right ownership (StateDirectory= creates
-# /var/lib/<name> chown ollama:ollama before ExecStart). We also enable the
-# unit — the installer skips `systemctl enable` on bootc images.
-RUN curl -fsSL https://ollama.com/install.sh | sh \
-    && mkdir -p /etc/systemd/system/ollama.service.d \
-    && printf '[Service]\nEnvironment=HOME=/var/lib/ollama\nStateDirectory=ollama\n' \
-        > /etc/systemd/system/ollama.service.d/bootc-home.conf \
-    && systemctl enable ollama.service
 
 # Compiled binaries from the builder stage.
 COPY --from=builder /out/bin/jarvis-action-bus    /usr/bin/jarvis-action-bus
