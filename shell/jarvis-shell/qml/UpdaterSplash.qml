@@ -238,17 +238,10 @@ Window {
                     filled: true
                     onClicked: {
                         if (root.mode === "reboot") {
-                            // The shell can't reboot the host directly, so we
-                            // just suggest the user run `reboot` themselves
-                            // via the notify channel. A future commit can wire
-                            // this to a confirmed `systemctl reboot` via the
-                            // Action Bus (terminal.execute scope, persistent
-                            // grant from this flow).
-                            ActionBusBridge.dispatch("system.notify",
-                                JSON.stringify({
-                                    "title": "Jarvis OS",
-                                    "body": "Reinicie para concluir a atualização."
-                                }));
+                            // Reboot straight through logind — the "Reiniciar
+                            // agora" click IS the confirmation (the user chose
+                            // the direct-button power model).
+                            PowerBridge.reboot();
                         } else {
                             UpdaterBridge.applyOSUpgrade();
                         }
