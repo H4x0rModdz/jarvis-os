@@ -38,19 +38,19 @@ COPY . .
 # stub for now and pulls in smithay + libseat-sys + a long tail of Wayland
 # build deps that would balloon the ISO image. The ISO uses labwc as its
 # compositor; our own lands in a later release.
-# Cache mounts (build-speed, see ADR 0021): the cargo target dir +
-# the cargo registry/git persist ACROSS builds without landing in any
-# image layer. A source-only edit then recompiles just our crates —
-# the whole dependency tree (tokio, zbus, reqwest, rusqlite, rustfft,
-# …) stays warm. Local rebuilds drop from ~15 min to ~2 min.
 #
-# Because the target dir is a cache mount (gone once the RUN ends), we
-# copy the binaries we want into the real /out tree IN THE SAME RUN —
-# a later "collect" step can't read a cache mount.
-RUN --mount=type=cache,target=/build/rust,id=jarvis-rust-target \
-    --mount=type=cache,target=/root/.cargo/registry,id=cargo-registry \
-    --mount=type=cache,target=/root/.cargo/git,id=cargo-git \
-    CARGO_TARGET_DIR=/build/rust cargo build --release \
+# Build speed (ADR 0021 P2, extended): the builder base already
+# pre-compiled our whole third-party dependency tree (tokio, zbus,
+# reqwest, rusqlite, rustfft, …) into THIS /build/rust + /root/.cargo, so
+# this RUN reuses those warm artifacts and only recompiles our own crates
+# — minutes instead of ten. We deliberately do NOT use a `--mount=type=
+# cache` here: on the ephemeral CI runner that cache is always cold AND it
+# would shadow the base's warm target dir, defeating the whole point.
+# CARGO_TARGET_DIR stays /build/rust (the base's warmed path).
+#
+# We copy the binaries we want into the real /out tree IN THIS RUN so the
+# "collect" step below sees them on an ordinary layer.
+RUN CARGO_TARGET_DIR=/build/rust cargo build --release \
         -p jarvis-action-bus \
         -p jarvis-permission \
         -p jarvis-settings \
@@ -85,13 +85,11 @@ RUN --mount=type=cache,target=/build/rust,id=jarvis-rust-target \
     && cp /build/rust/release/jarvis-pam-helper     /out/bin/
 
 # Optional: build the Jarvis Smithay compositor when BUILD_COMPOSITOR=1.
-# Self-contained (both branches land /out/bin/jarvis-compositor) so the
-# collect step below doesn't need to read the cache-mounted target dir.
-# Shares the same cache mounts so the dep tree from above is reused.
-RUN --mount=type=cache,target=/build/rust,id=jarvis-rust-target \
-    --mount=type=cache,target=/root/.cargo/registry,id=cargo-registry \
-    --mount=type=cache,target=/root/.cargo/git,id=cargo-git \
-    mkdir -p /out/bin \
+# Self-contained (both branches land /out/bin/jarvis-compositor). Reuses
+# the same warm /build/rust from the RUN above (no cache mount — see the
+# rationale there). Default BUILD_COMPOSITOR=0 just writes a stub, no
+# cargo, so the warm target is irrelevant in the common path.
+RUN mkdir -p /out/bin \
     && if [ "$BUILD_COMPOSITOR" = "1" ]; then \
            CARGO_TARGET_DIR=/build/rust cargo build --release \
                -p jarvis-compositor \
@@ -122,11 +120,10 @@ RUN cmake -S shell/jarvis-lock -B /build/lock -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
     && cmake --build /build/lock -j
 
-# Collect the cmake outputs (the Rust binaries + pam + compositor are
-# already in /out from their own cache-mounted RUNs above — those
-# build dirs are cache mounts and can't be read here). The cmake
+# Collect the cmake outputs (the Rust binaries + pam + compositor were
+# already copied into /out by their own RUNs above). The cmake
 # /build/{lock,shell,greeter} dirs are ordinary layers, so they're
-# readable. strip everything in /out/bin in one pass — picks up the
+# readable here. strip everything in /out/bin in one pass — picks up the
 # Rust + compositor binaries that landed earlier too.
 RUN cp /build/lock/jarvis-lock-window /out/bin/ \
     && cp /build/shell/jarvis-shell    /out/bin/ \

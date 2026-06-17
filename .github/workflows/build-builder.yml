@@ -7,11 +7,14 @@ name: Build builder base
 #
 # Run this:
 #   - automatically when iso/Containerfile.builder changes on main
+#   - automatically when Cargo.lock changes — the base pre-warms our Rust
+#     dependency tree (ADR 0021 P2), so a dep bump must re-warm it
 #   - manually (workflow_dispatch) after bumping a pinned tool version
 #
-# The image is rebuilt RARELY — only on toolchain / whisper / piper /
-# numbat bumps — so this workflow's own runtime doesn't gate normal
-# development.
+# Rebuilt only on toolchain / tool bumps or a dependency change — NOT on
+# ordinary source edits — so this workflow's runtime doesn't gate normal
+# development. While it re-warms, the main build keeps using the previous
+# base and just recompiles the changed deps incrementally.
 
 on:
   push:
@@ -19,6 +22,7 @@ on:
     paths:
       - "iso/Containerfile.builder"
       - ".github/workflows/build-builder.yml"
+      - "Cargo.lock"
   workflow_dispatch:
 
 permissions:
