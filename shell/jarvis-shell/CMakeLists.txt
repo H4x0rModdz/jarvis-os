@@ -43,6 +43,8 @@ qt_add_executable(jarvis-shell
     src/desktop_apps_model.h
     src/icon_image_provider.cpp
     src/icon_image_provider.h
+    src/escape_closer.cpp
+    src/escape_closer.h
     src/updater_bridge.cpp
     src/updater_bridge.h
     src/voice_bridge.cpp
