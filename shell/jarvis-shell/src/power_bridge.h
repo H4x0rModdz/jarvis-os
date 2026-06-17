@@ -54,6 +54,12 @@ public:
     int timeRemaining() const { return m_timeRemaining; }
     QString iconName() const { return m_iconName; }
 
+    /// Reboot the machine via logind (org.freedesktop.login1.Manager.Reboot).
+    /// An active local session is permitted by the default login1 polkit
+    /// policy, so no agent prompt is needed. Used by the updater splash's
+    /// "Reiniciar agora" button to finish an OS upgrade.
+    Q_INVOKABLE void reboot();
+
 signals:
     void stateChanged();
 

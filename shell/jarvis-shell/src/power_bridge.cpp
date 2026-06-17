@@ -32,6 +32,21 @@ QString stateLabel(uint state)
 }
 } // namespace
 
+void PowerBridge::reboot()
+{
+    qCInfo(lcPower) << "Reboot requested (logind)";
+    QDBusInterface login1(QStringLiteral("org.freedesktop.login1"),
+                          QStringLiteral("/org/freedesktop/login1"),
+                          QStringLiteral("org.freedesktop.login1.Manager"),
+                          QDBusConnection::systemBus());
+    // interactive=false: don't spawn a polkit agent; an active local session
+    // is allowed to reboot by the default login1 policy.
+    QDBusReply<void> reply = login1.call(QStringLiteral("Reboot"), false);
+    if (!reply.isValid()) {
+        qCWarning(lcPower) << "Reboot failed:" << reply.error().message();
+    }
+}
+
 PowerBridge::PowerBridge(QObject* parent) : QObject(parent)
 {
     auto bus = QDBusConnection::systemBus();

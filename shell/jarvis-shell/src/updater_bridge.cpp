@@ -55,9 +55,28 @@ UpdaterBridge::UpdaterBridge(QObject* parent) : QObject(parent)
 
 void UpdaterBridge::applyOSUpgrade()
 {
-    if (!m_iface) return;
-    qCInfo(lcUpd) << "ApplyOSUpgrade requested by UI";
-    m_iface->asyncCall(QStringLiteral("ApplyOSUpgrade"));
+    if (!m_iface) {
+        qCWarning(lcUpd) << "ApplyOsUpgrade: updater interface unavailable";
+        return;
+    }
+    qCInfo(lcUpd) << "ApplyOsUpgrade requested by UI";
+    // The D-Bus method is `ApplyOsUpgrade` — zbus PascalCases the daemon's
+    // `apply_os_upgrade` (Apply+Os+Upgrade), NOT `ApplyOSUpgrade`. The old
+    // name was a non-existent method, so the asyncCall failed silently and
+    // the "Instalar agora" button did nothing. Watch the call so any future
+    // failure (daemon down, denied) surfaces in the log instead of vanishing.
+    auto pending = m_iface->asyncCall(QStringLiteral("ApplyOsUpgrade"));
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            w->deleteLater();
+            if (reply.isError()) {
+                qCWarning(lcUpd) << "ApplyOsUpgrade failed:" << reply.error().message();
+            } else {
+                qCInfo(lcUpd) << "ApplyOsUpgrade started:" << reply.value();
+            }
+        });
 }
 
 void UpdaterBridge::checkNow()
