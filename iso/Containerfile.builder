@@ -88,5 +88,41 @@ RUN CARGO_TARGET_DIR=/build/numbat cargo install \
         numbat-cli \
     && rm -rf /build/numbat
 
+# ── Warm the Rust dependency cache (ADR 0021 P2, extended) ──────────────
+# This is the single biggest cost of every per-merge main image build:
+# recompiling OUR crates' third-party dependency tree (tokio, zbus,
+# reqwest, rusqlite, rustfft, …) from scratch. The main build's cargo
+# cache mounts DON'T persist on the ephemeral CI runner, so each run
+# started cold and burned ~10 min before touching our code.
+#
+# Compile that tree ONCE here, into the exact target dir + cargo home the
+# main build uses (/build/rust, /root/.cargo). This base then ships warm:
+# the per-merge build reuses the compiled deps and only rebuilds our own
+# (changed) crates — minutes instead of ten. The source is dropped right
+# after; only the warm target + registry are kept.
+#
+# Keyed on the copied source, so it re-warms when Cargo.lock changes
+# (build-builder.yml triggers on it). The -p list MUST mirror the main
+# iso/Containerfile build list so exactly those deps get warmed.
+COPY . /warm
+RUN cd /warm \
+    && CARGO_TARGET_DIR=/build/rust cargo build --release \
+        -p jarvis-action-bus \
+        -p jarvis-permission \
+        -p jarvis-settings \
+        -p jarvis-notifications \
+        -p jarvis-lilith \
+        -p jarvis-updater \
+        -p jarvis-voice \
+        -p jarvis-voice-ctl \
+        -p jarvis-app \
+        -p sdk-hello \
+        -p jarvis-compat \
+        -p jarvis-lock \
+        -p jarvis-lock-ctl \
+        -p jarvis-voiceprint-ctl \
+        -p pam-jarvis \
+    && rm -rf /warm
+
 LABEL org.opencontainers.image.title="Jarvis OS builder base"
 LABEL org.opencontainers.image.description="Fedora 42 + Rust/Qt6 toolchain + whisper-cli + piper + numbat, prebuilt for fast ISO builds"
