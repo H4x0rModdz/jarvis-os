@@ -19,8 +19,16 @@ Window {
     width: 400
     height: 500
     color: "transparent"
-    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    // Qt.Dialog (not Qt.Tool): under labwc a Tool window is non-activatable,
+    // so it never gets keyboard focus — the Escape Shortcut never fires.
+    // Qt.Dialog gets the activation the Launcher/JarvisMenu rely on.
+    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Bluetooth")
+
+    // Suppress the spurious first deactivate wlroots fires between show and
+    // the compositor granting focus — without it the panel closes instantly.
+    property bool _ignoreDeactivate: false
+    Timer { id: armTimer; interval: 250; onTriggered: root._ignoreDeactivate = false }
 
     function requestOpen() {
         if (Qt.application.screens.length > 0) {
@@ -28,8 +36,10 @@ Window {
             x = s.virtualX + s.width - width - 16;
             y = s.virtualY + s.height - height - Theme.barHeight - 16;
         }
+        _ignoreDeactivate = true;
         visible = true;
         requestActivate();
+        armTimer.restart();
         BluetoothBridge.startPolling();
     }
 
@@ -43,7 +53,7 @@ Window {
     }
 
     onActiveChanged: {
-        if (!active && visible) root.visible = false;
+        if (!active && !_ignoreDeactivate && visible) root.visible = false;
     }
 
     GlassPanel {

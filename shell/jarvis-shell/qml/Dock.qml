@@ -105,6 +105,10 @@ Window {
         anchors.centerIn: parent
         implicitWidth: dockRow.implicitWidth + 28
         implicitHeight: 64
+        // The pill is short and wide — the top-accent bloom would wash the
+        // whole dock violet. Keep the clean glass + a larger pill radius.
+        topAccent: false
+        radius: Theme.radiusLarge
 
         RowLayout {
             id: dockRow

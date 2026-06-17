@@ -16,7 +16,7 @@ set(CMAKE_AUTORCC ON)
 # Enable QML compile-time tooling and warnings.
 set(CMAKE_AUTOUIC OFF)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Quick Qml DBus QuickControls2 WaylandClient)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick Qml DBus QuickControls2 WaylandClient)
 
 # LayerShellQt is built out-of-tree against KDE's repo (see
 # .jarvis-os/memory) and installed alongside Qt. The find_package call below
@@ -41,6 +41,8 @@ qt_add_executable(jarvis-shell
     src/action_bus_bridge.h
     src/desktop_apps_model.cpp
     src/desktop_apps_model.h
+    src/icon_image_provider.cpp
+    src/icon_image_provider.h
     src/updater_bridge.cpp
     src/updater_bridge.h
     src/voice_bridge.cpp
@@ -130,6 +132,7 @@ qt_add_qml_module(jarvis-shell
 
 target_link_libraries(jarvis-shell PRIVATE
     Qt6::Core
+    Qt6::Gui
     Qt6::Quick
     Qt6::Qml
     Qt6::DBus

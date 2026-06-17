@@ -16,7 +16,15 @@ Window {
     height: 640
     title: qsTr("Notificações")
     color: "transparent"
-    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    // Qt.Dialog (not Qt.Tool): under labwc a Tool window is non-activatable,
+    // so it never gets keyboard focus — the Escape Shortcut never fires.
+    // Qt.Dialog gets the activation the Launcher/JarvisMenu rely on.
+    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+
+    // Suppress the spurious first deactivate wlroots fires between show and
+    // the compositor granting focus — without it the drawer closes instantly.
+    property bool _ignoreDeactivate: false
+    Timer { id: armTimer; interval: 250; onTriggered: root._ignoreDeactivate = false }
 
     function requestOpen() {
         NotificationsBridge.refreshHistory();
@@ -25,8 +33,10 @@ Window {
             x = s.virtualX + s.width - width - 16;
             y = s.virtualY + 16;
         }
+        _ignoreDeactivate = true;
         visible = true;
         requestActivate();
+        armTimer.restart();
     }
 
     // Esc closes.
@@ -37,7 +47,7 @@ Window {
 
     // Close when focus leaves us.
     onActiveChanged: {
-        if (!active && visible) root.visible = false;
+        if (!active && !_ignoreDeactivate && visible) root.visible = false;
     }
 
     GlassPanel {

@@ -24,7 +24,11 @@ Window {
     width: 480
     height: 380
     color: "transparent"
-    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    // Qt.Dialog (not Qt.Tool): under labwc a Tool window is non-activatable,
+    // so even after toggle()'s requestActivate() the Escape Shortcut never
+    // fires. Qt.Dialog gets real keyboard focus. No onActiveChanged handler
+    // here, so this can't cause a spurious close — auto-open stays unfocused.
+    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Lilith")
 
     /// Gap from the bottom edge so the popup sits just above the dock
