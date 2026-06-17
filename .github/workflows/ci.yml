@@ -77,8 +77,14 @@ jobs:
       # coverage, far less per-step overhead. The separate `cargo build
       # --workspace` was redundant: clippy --all-targets above already
       # compiles everything, and `cargo test` builds what it runs.
+      #
+      # --exclude pam-jarvis: it's a PAM cdylib whose symbols (pam_get_user,
+      # …) are supplied by libpam at module-load time, so a standalone test
+      # binary fails to link (undefined symbol: pam_get_user). clippy/check
+      # above still cover it — we just can't `cargo test` it on its own. The
+      # old per-crate test list excluded it for the same reason.
       - name: Test (workspace)
-        run: cargo test --workspace
+        run: cargo test --workspace --exclude pam-jarvis
 
   schema-lint:
     name: Validate JSON Schemas
