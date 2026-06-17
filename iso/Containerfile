@@ -18,8 +18,14 @@
 # Output is an OCI image for `bootc-image-builder` to turn into an
 # ISO. See iso/README.md.
 
-# ──────────────────────────── Stage 1: builder ────────────────────────────
+# Base image refs. Declared BEFORE the first FROM so both stages' `FROM
+# ${...}` lines can resolve them — a variable used in FROM must come from a
+# global ARG (one declared after a FROM is stage-scoped and invisible to a
+# later FROM, which fails the build with "no FROM statement found").
 ARG BUILDER_IMAGE=ghcr.io/h4x0rmoddz/jarvis-builder:latest
+ARG RUNTIME_IMAGE=ghcr.io/h4x0rmoddz/jarvis-runtime:latest
+
+# ──────────────────────────── Stage 1: builder ────────────────────────────
 FROM ${BUILDER_IMAGE} AS builder
 
 # Toggle to pull `jarvis-compositor` into the build. The builder base
@@ -139,8 +145,8 @@ RUN cp /build/lock/jarvis-lock-window /out/bin/ \
 # FROM the prebuilt runtime base — desktop packages, Flatpak apps, WhiteSur
 # theme and Ollama already baked in (none of it depends on our source). This
 # stage only layers our compiled binaries + Jarvis configs, so a per-merge
-# build is fast. See iso/Containerfile.runtime.
-ARG RUNTIME_IMAGE=ghcr.io/h4x0rmoddz/jarvis-runtime:latest
+# build is fast. See iso/Containerfile.runtime. (RUNTIME_IMAGE is declared
+# globally at the top so this FROM can resolve it.)
 FROM ${RUNTIME_IMAGE}
 
 ARG JARVIS_VERSION=0.0.1
