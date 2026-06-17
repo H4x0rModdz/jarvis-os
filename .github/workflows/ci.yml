@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Cancel superseded runs: pushing a new commit to the same branch/PR aborts
+# the in-flight run instead of letting both grind to the end. The biggest CI
+# time saver when iterating with several commits in a row.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -66,41 +73,12 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Build (all workspace members)
-        run: cargo build --workspace
-
-      - name: Test (action-bus)
-        run: cargo test -p jarvis-action-bus
-
-      - name: Test (permission)
-        run: cargo test -p jarvis-permission
-
-      - name: Test (lilith)
-        run: cargo test -p jarvis-lilith
-
-      - name: Test (settings)
-        run: cargo test -p jarvis-settings
-
-      - name: Test (updater)
-        run: cargo test -p jarvis-updater
-
-      - name: Test (voice)
-        run: cargo test -p jarvis-voice
-
-      - name: Test (notifications)
-        run: cargo test -p jarvis-notifications
-
-      - name: Test (sdk-types)
-        run: cargo test -p jarvis-sdk-types
-
-      - name: Test (sdk-hello example)
-        run: cargo test -p sdk-hello
-
-      - name: Test (jarvis-app CLI)
-        run: cargo test -p jarvis-app
-
-      - name: Test (compat)
-        run: cargo test -p jarvis-compat
+      # One workspace-wide test run instead of a step per crate — identical
+      # coverage, far less per-step overhead. The separate `cargo build
+      # --workspace` was redundant: clippy --all-targets above already
+      # compiles everything, and `cargo test` builds what it runs.
+      - name: Test (workspace)
+        run: cargo test --workspace
 
   schema-lint:
     name: Validate JSON Schemas
