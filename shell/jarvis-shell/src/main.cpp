@@ -10,6 +10,7 @@
 #include <QDBusConnection>
 #include <QDBusError>
 
+#include "escape_closer.h"
 #include "icon_image_provider.h"
 #include "window_control_service.h"
 
@@ -36,6 +37,11 @@ int main(int argc, char** argv)
     QGuiApplication app(argc, argv);
     app.setOrganizationName(QStringLiteral("Jarvis"));
     app.setApplicationName(QStringLiteral("jarvis-shell"));
+
+    // Escape closes the focused/visible shell panel everywhere. Per-window
+    // Esc handlers don't fire for panels that never grab keyboard focus under
+    // labwc, so we catch it once at the application level. See escape_closer.h.
+    app.installEventFilter(new EscapeCloser(&app));
 
     // App icons. The shell is a pure Qt/Wayland app with no GTK platform
     // theme, so QIcon has no active icon theme by default and every

@@ -9,6 +9,21 @@
 #                               session.
 # WLR_NO_HARDWARE_CURSORS=1     VBox's SVGA driver mishandles HW cursors
 #                               under wlroots — software cursor is fine.
+# WLR_DRM_NO_ATOMIC=1           VMware's vmwgfx DRM rejects atomic page-flips/
+#                               modesets — wlroots spams "atomic.c: Atomic
+#                               commit failed: Device or resource busy" and
+#                               the display flickers/stalls. Force the legacy
+#                               (non-atomic) modesetting path, which vmwgfx
+#                               handles reliably. Independent of the renderer
+#                               (that's pixman above) — this is the KMS path.
+#                               Legacy modeset works on every backend, so it's
+#                               safe on bare metal / other hypervisors too.
+# QT_IM_MODULE=none             No input-method framework in this session. With
+#                               the Fedora default (ibus/xim) the IM layer
+#                               swallowed control keys like Escape before they
+#                               reached the focused widget — typing worked but
+#                               Esc didn't close the launcher/panels. Disabling
+#                               it lets Escape through. Confirmed on-device.
 # QT_LOGGING_RULES …            Silences the noisy "Try to disable surface"
 #                               warnings Qt's Wayland text-input v3 plugin
 #                               emits every time a popup or dialog opens
@@ -23,5 +38,7 @@
 WLR_RENDERER=pixman
 LIBGL_ALWAYS_SOFTWARE=1
 WLR_NO_HARDWARE_CURSORS=1
+WLR_DRM_NO_ATOMIC=1
+QT_IM_MODULE=none
 QT_LOGGING_RULES=qt.qpa.wayland.textinput.warning=false
 XDG_CURRENT_DESKTOP=labwc:wlroots

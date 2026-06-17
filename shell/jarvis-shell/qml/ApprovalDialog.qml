@@ -9,6 +9,7 @@ import Jarvis.Shell
 /// stacking — on labwc the window is centered automatically.
 Window {
     id: root
+    objectName: "jarvis-approval"
     visible: PermissionBridge.hasPending
     width: 520
     height: 240
