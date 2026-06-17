@@ -5,10 +5,12 @@
 #include <QQuickWindow>
 #include <QLoggingCategory>
 #include <QDir>
+#include <QIcon>
 #include <QMargins>
 #include <QDBusConnection>
 #include <QDBusError>
 
+#include "icon_image_provider.h"
 #include "window_control_service.h"
 
 #ifdef JARVIS_HAVE_LAYER_SHELL
@@ -35,7 +37,23 @@ int main(int argc, char** argv)
     app.setOrganizationName(QStringLiteral("Jarvis"));
     app.setApplicationName(QStringLiteral("jarvis-shell"));
 
+    // App icons. The shell is a pure Qt/Wayland app with no GTK platform
+    // theme, so QIcon has no active icon theme by default and every
+    // `image://theme/<name>` lookup would miss — leaving the dock/launcher on
+    // their monogram fallback. Pin the theme the image actually ships
+    // (WhiteSur, see iso/assets/theme/install-whitesur.sh + gtk-settings.ini)
+    // and let hicolor catch the strays. Only set a name if nothing upstream
+    // already did, so a future platform-theme integration wins.
+    if (QIcon::themeName().isEmpty()) {
+        QIcon::setThemeName(QStringLiteral("WhiteSur"));
+    }
+    QIcon::setFallbackThemeName(QStringLiteral("hicolor"));
+
     QQmlApplicationEngine engine;
+
+    // Serve `image://theme/<name>` from the active icon theme. Registered
+    // before any QML loads so the very first dock paint resolves icons.
+    engine.addImageProvider(QStringLiteral("theme"), new IconImageProvider);
 
     // Real home dir for the desktop icons (Desktop.qml's "Pasta Pessoal"
     // opens HomePath). Resolved in C++ because xdg-open never expands a
