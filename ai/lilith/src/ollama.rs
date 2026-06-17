@@ -33,7 +33,21 @@ impl Ollama for OllamaClient {
 
 const DEFAULT_HOST: &str = "http://localhost:11434";
 const DEFAULT_MODEL: &str = "qwen3:4b";
-const REQUEST_TIMEOUT_SECS: u64 = 120;
+const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 120;
+
+/// Per-request timeout, overridable for slow hardware (CPU-only VMs).
+///
+/// Resolution: `LILITH_REQUEST_TIMEOUT_SECS` env var, else the compiled
+/// default (120s). A bad/zero value falls back to the default rather than
+/// failing every request. Set it in the service unit's drop-in on hosts
+/// where inference legitimately takes longer than two minutes.
+fn request_timeout_secs() -> u64 {
+    std::env::var("LILITH_REQUEST_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|&v| v > 0)
+        .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECS)
+}
 
 #[derive(Clone)]
 pub struct OllamaClient {
@@ -59,7 +73,7 @@ impl OllamaClient {
             .or_else(|| std::env::var("LILITH_MODEL").ok())
             .unwrap_or_else(|| DEFAULT_MODEL.into());
         let http = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
+            .timeout(std::time::Duration::from_secs(request_timeout_secs()))
             .build()
             .expect("reqwest client");
         Self { host, model, http }
