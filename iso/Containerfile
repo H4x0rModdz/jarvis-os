@@ -332,6 +332,14 @@ RUN flatpak override --system \
         --env=GDK_BACKEND=wayland \
         --env=MOZ_ENABLE_WAYLAND=1
 
+# Nested user namespaces so Flatpak apps with their own inner sandbox
+# (Firefox's content process) can start. Without a budget the nested
+# clone(CLONE_NEWUSER) fails EPERM and Firefox dies right after launch —
+# the dock click appears to do nothing. systemd-sysctl applies this at
+# boot; an OTA upgrade + reboot picks it up. See the asset for the full
+# rationale.
+COPY iso/assets/sysctl/99-jarvis-userns.conf /usr/lib/sysctl.d/99-jarvis-userns.conf
+
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.
 RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \
