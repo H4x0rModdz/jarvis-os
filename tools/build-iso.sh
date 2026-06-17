@@ -41,6 +41,10 @@ JARVIS_VERSION="${JARVIS_VERSION:-0.0.1}"
 # ghcr image; for a self-sufficient local build we build it here and
 # point at the local tag if a copy isn't already present.
 BUILDER_IMAGE="${BUILDER_IMAGE:-localhost/jarvis-builder:local}"
+# Runtime base (ADR 0021 P2, runtime half) — same idea: the final image
+# FROMs it (desktop packages + Flatpak apps + WhiteSur + Ollama). Built
+# locally on demand so a local ISO build is self-sufficient.
+RUNTIME_IMAGE="${RUNTIME_IMAGE:-localhost/jarvis-runtime:local}"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -59,11 +63,27 @@ else
     echo "─── Reusing builder base: $BUILDER_IMAGE (REBUILD_BUILDER=1 to force) ───"
 fi
 
+# ── Runtime base ─────────────────────────────────────────────────────
+# Reuse an existing runtime image if we have one (it changes rarely —
+# only on package / Flatpak app / theme changes). Build it otherwise.
+# Set REBUILD_RUNTIME=1 to force a fresh one.
+if [ "${REBUILD_RUNTIME:-0}" = "1" ] \
+        || ! podman image exists "$RUNTIME_IMAGE" 2>/dev/null; then
+    echo "─── Building runtime base: $RUNTIME_IMAGE ───"
+    podman build \
+        --file iso/Containerfile.runtime \
+        --tag "$RUNTIME_IMAGE" \
+        .
+else
+    echo "─── Reusing runtime base: $RUNTIME_IMAGE (REBUILD_RUNTIME=1 to force) ───"
+fi
+
 echo "─── Building OCI image: $IMAGE ───"
 podman build \
     --file iso/Containerfile \
     --build-arg "JARVIS_VERSION=$JARVIS_VERSION" \
     --build-arg "BUILDER_IMAGE=$BUILDER_IMAGE" \
+    --build-arg "RUNTIME_IMAGE=$RUNTIME_IMAGE" \
     --tag "$IMAGE" \
     .
 

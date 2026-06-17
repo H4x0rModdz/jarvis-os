@@ -109,6 +109,29 @@ jobs:
             echo "ref=localhost/jarvis-builder:local" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve runtime base
+        # ADR 0021 P2 (runtime half): the final image FROMs a prebuilt
+        # jarvis-runtime (desktop packages + Flatpak apps + WhiteSur +
+        # Ollama). Pull it from ghcr if build-runtime.yml has published it;
+        # otherwise build it locally so this workflow stays self-sufficient
+        # (first run, or a fork without the published base). Either way
+        # RUNTIME_IMAGE points at a tag in local podman storage.
+        id: runtime
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REF="ghcr.io/${OWNER}/jarvis-runtime:latest"
+          if sudo podman pull "$REF" 2>/dev/null; then
+            echo "using published runtime: $REF"
+            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "no published runtime — building locally"
+            sudo podman build \
+              --file iso/Containerfile.runtime \
+              --tag localhost/jarvis-runtime:local \
+              .
+            echo "ref=localhost/jarvis-runtime:local" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build OCI image
         # Must run as root so the image lands in the same storage that
         # bootc-image-builder (also root) reads from in the next step.
@@ -141,6 +164,7 @@ jobs:
             --cache-to "$CACHE" \
             --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
             --build-arg "BUILDER_IMAGE=${{ steps.builder.outputs.ref }}" \
+            --build-arg "RUNTIME_IMAGE=${{ steps.runtime.outputs.ref }}" \
             --tag "${IMG}:latest" \
             --tag "${IMG}:${{ steps.version.outputs.tag }}" \
             . || \
@@ -148,6 +172,7 @@ jobs:
             --file iso/Containerfile \
             --build-arg "JARVIS_VERSION=${{ steps.version.outputs.tag }}" \
             --build-arg "BUILDER_IMAGE=${{ steps.builder.outputs.ref }}" \
+            --build-arg "RUNTIME_IMAGE=${{ steps.runtime.outputs.ref }}" \
             --tag "${IMG}:latest" \
             --tag "${IMG}:${{ steps.version.outputs.tag }}" \
             .
