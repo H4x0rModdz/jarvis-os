@@ -127,13 +127,14 @@ int main(int argc, char** argv)
             layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         } else if (name == QLatin1String("jarvis-dock")) {
             // Dock: anchored to the bottom edge only, so the compositor
-            // centers it at its own width. Top layer, exclusive zone 0 —
-            // maximized windows float *under* it, exactly like macOS. A
-            // small bottom margin lifts it off the screen edge.
+            // centers it at its own width. Top layer, with an exclusive zone
+            // equal to its full footprint (height + the 8 px lift margin) so
+            // maximized windows stop ABOVE it instead of being covered — the
+            // macOS default (dock always visible, never overlapping content).
             layer->setLayer(LayerShellQt::Window::LayerTop);
             layer->setAnchors(LayerShellQt::Window::Anchors(
                 LayerShellQt::Window::AnchorBottom));
-            layer->setExclusiveZone(0);
+            layer->setExclusiveZone(win->height() + 8);
             layer->setMargins(QMargins(0, 0, 0, 8));
             layer->setScope(QStringLiteral("jarvis-dock"));
             layer->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
