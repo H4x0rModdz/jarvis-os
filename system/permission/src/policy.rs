@@ -48,6 +48,10 @@ const SAFE_SCOPES: &[&str] = &[
     // Reading state from the Updater is harmless — it returns whether
     // anything is pending, not the contents of the system.
     "updater.read",
+    // Listing Wi-Fi networks / Bluetooth devices is read-only discovery —
+    // no connection, no radio change. The mutating ops are `*.control` below.
+    "network.read",
+    "bluetooth.read",
 ];
 
 const DANGEROUS_SCOPES: &[&str] = &[
@@ -72,6 +76,11 @@ const DANGEROUS_SCOPES: &[&str] = &[
     // can write the user's wine prefix, talk to the network, install
     // services. Same trust class as `terminal.execute`.
     "compat.run",
+    // Joining a Wi-Fi network or pairing/connecting a Bluetooth device is
+    // device control with real security implications (rogue AP, untrusted
+    // peripheral), so it prompts. Discovery is `*.read` (safe) above.
+    "network.control",
+    "bluetooth.control",
 ];
 
 #[cfg(test)]
@@ -87,6 +96,8 @@ mod tests {
         assert_eq!(classify("audio.control"), PolicyVerdict::AutoAllow);
         assert_eq!(classify("clipboard.write"), PolicyVerdict::AutoAllow);
         assert_eq!(classify("updater.read"), PolicyVerdict::AutoAllow);
+        assert_eq!(classify("network.read"), PolicyVerdict::AutoAllow);
+        assert_eq!(classify("bluetooth.read"), PolicyVerdict::AutoAllow);
     }
 
     #[test]
@@ -102,6 +113,8 @@ mod tests {
         assert_eq!(classify("screen.read"), PolicyVerdict::RequireGrant);
         assert_eq!(classify("updater.apply"), PolicyVerdict::RequireGrant);
         assert_eq!(classify("compat.run"), PolicyVerdict::RequireGrant);
+        assert_eq!(classify("network.control"), PolicyVerdict::RequireGrant);
+        assert_eq!(classify("bluetooth.control"), PolicyVerdict::RequireGrant);
     }
 
     #[test]
