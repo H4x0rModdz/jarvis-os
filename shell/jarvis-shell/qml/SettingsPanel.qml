@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import Jarvis.Shell
@@ -58,10 +59,21 @@ Window {
         anchors.fill: parent
         anchors.margins: 8
 
-        ColumnLayout {
+        // Scrollable: the panel has more rows than fit, so without this the
+        // bottom settings (language, Whisper model, …) are unreachable.
+        Flickable {
             anchors.fill: parent
             anchors.margins: 24
-            spacing: 16
+            contentWidth: width
+            contentHeight: col.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+            ColumnLayout {
+                id: col
+                width: parent.width
+                spacing: 16
 
             RowLayout {
                 Layout.fillWidth: true
@@ -802,6 +814,7 @@ Window {
                     : qsTr("Settings daemon offline — alterações não serão salvas")
                 color: SettingsBridge.reachable ? Theme.success : Theme.danger
                 font.pixelSize: 11
+            }
             }
         }
     }
