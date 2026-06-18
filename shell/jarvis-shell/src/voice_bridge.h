@@ -29,6 +29,10 @@ class VoiceBridge : public QObject
     Q_PROPERTY(bool hotwordEnabled READ hotwordEnabled NOTIFY hotwordEnabledChanged)
     Q_PROPERTY(QVariantList enrolledUsers READ enrolledUsers NOTIFY enrolledUsersChanged)
     Q_PROPERTY(QString lastEnrollMessage READ lastEnrollMessage NOTIFY lastEnrollMessageChanged)
+    /// Human-readable status of the last `ensureModel` call (e.g. "baixando
+    /// medium…", "medium pronto", "erro: …"). Empty when idle. The Settings
+    /// panel shows it under the model picker.
+    Q_PROPERTY(QString modelStatus READ modelStatus NOTIFY modelStatusChanged)
     /// `$USER` — same identity the PAM module sees during a verify
     /// call. Settings panel enrolls/verifies against this so the
     /// enrollment matches the lock-screen unlock target.
@@ -45,6 +49,13 @@ public:
     QVariantList enrolledUsers() const { return m_enrolledUsers; }
     QString lastEnrollMessage() const { return m_lastEnrollMessage; }
     QString currentUser() const { return m_currentUser; }
+    QString modelStatus() const { return m_modelStatus; }
+
+    /// Ask the daemon to make whisper model `name` available, downloading it
+    /// if missing. The QML writes `voice.model` to Settings (which stt reads
+    /// live); this only triggers the download + reports progress via
+    /// `modelStatus`. No-op-ish when the model is already present.
+    Q_INVOKABLE void ensureModel(const QString& name);
 
     /// Toggle press-to-talk. When idle, sends StartListening; when listening,
     /// sends StopListening. Anything else (processing / speaking) is ignored.
@@ -88,6 +99,7 @@ signals:
     void hotwordEnabledChanged();
     void enrolledUsersChanged();
     void lastEnrollMessageChanged();
+    void modelStatusChanged();
 
     /// Emitted after the daemon's HotwordDetected signal lands.
     /// `fullTranscript` is the Whisper output verbatim;
@@ -101,6 +113,7 @@ private slots:
     void onTranscriptionFinal(const QString& text);
     void onTranscriptionFailed(const QString& reason);
     void onHotwordDetected(const QString& text);
+    void onModelReady(const QString& name, bool success, const QString& message);
 
 private:
     void setReachable(bool v);
@@ -115,4 +128,5 @@ private:
     QVariantList m_enrolledUsers;
     QString m_lastEnrollMessage;
     QString m_currentUser;
+    QString m_modelStatus;
 };

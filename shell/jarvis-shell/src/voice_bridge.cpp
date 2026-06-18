@@ -53,13 +53,19 @@ VoiceBridge::VoiceBridge(QObject* parent) : QObject(parent)
         QStringLiteral("HotwordDetected"),
         this,
         SLOT(onHotwordDetected(QString)));
+    const bool modelOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("ModelReady"),
+        this,
+        SLOT(onModelReady(QString, bool, QString)));
 
-    if (!stateOk || !finalOk || !failedOk || !hotwordOk) {
+    if (!stateOk || !finalOk || !failedOk || !hotwordOk || !modelOk) {
         qCWarning(lcVoice) << "Subscription failed:"
                            << "state=" << stateOk
                            << "final=" << finalOk
                            << "failed=" << failedOk
-                           << "hotword=" << hotwordOk;
+                           << "hotword=" << hotwordOk
+                           << "model=" << modelOk;
     }
 
     // Probe reachability by asking for the current state. The voice daemon
@@ -108,6 +114,44 @@ void VoiceBridge::speak(const QString& text)
 {
     if (!m_iface) return;
     m_iface->asyncCall(QStringLiteral("Speak"), text);
+}
+
+void VoiceBridge::ensureModel(const QString& name)
+{
+    if (!m_iface) return;
+    qCInfo(lcVoice) << "ensureModel" << name;
+    m_modelStatus = tr("verificando %1…").arg(name);
+    emit modelStatusChanged();
+
+    auto pending = m_iface->asyncCall(QStringLiteral("EnsureModel"), name);
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    QObject::connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, name](QDBusPendingCallWatcher* w) {
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                m_modelStatus = tr("erro: %1").arg(reply.error().message());
+            } else {
+                const auto obj = QJsonDocument::fromJson(reply.value().toUtf8()).object();
+                if (obj.value(QStringLiteral("present")).toBool()) {
+                    m_modelStatus = tr("%1 pronto").arg(name);
+                } else if (obj.value(QStringLiteral("started")).toBool()) {
+                    // Download running in the daemon; onModelReady finishes it.
+                    m_modelStatus = tr("baixando %1…").arg(name);
+                } else {
+                    m_modelStatus = obj.value(QStringLiteral("reason"))
+                                        .toString(tr("erro ao baixar %1").arg(name));
+                }
+            }
+            emit modelStatusChanged();
+            w->deleteLater();
+        });
+}
+
+void VoiceBridge::onModelReady(const QString& name, bool success, const QString& message)
+{
+    qCInfo(lcVoice) << "model ready" << name << success << message;
+    m_modelStatus = success ? tr("%1 pronto").arg(name) : tr("erro: %1").arg(message);
+    emit modelStatusChanged();
 }
 
 void VoiceBridge::onStateChanged(const QString& state)

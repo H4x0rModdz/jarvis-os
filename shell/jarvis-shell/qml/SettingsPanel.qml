@@ -722,6 +722,76 @@ Window {
                 }
             }
 
+            // ── Row: STT model (Whisper) ──────────────────────────────
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+                Text {
+                    text: qsTr("Modelo de reconhecimento (Whisper)")
+                    color: Theme.text
+                    font.pixelSize: 14
+                }
+                Text {
+                    text: qsTr("Maior = mais preciso, porém mais lento. Ao escolher, o " +
+                               "modelo é baixado se ainda não estiver no sistema e passa " +
+                               "a valer na próxima fala (sem reiniciar).")
+                    color: Theme.textDim
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Repeater {
+                        model: ["base", "small", "medium", "large-v3"]
+                        delegate: Rectangle {
+                            property bool selected: (root._settingsTick,
+                                SettingsBridge.getString("voice.model", "small")) === modelData
+                            Layout.fillWidth: true
+                            implicitHeight: 34
+                            radius: 8
+                            color: selected
+                                ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.18)
+                                : (modelArea.containsMouse
+                                    ? Qt.rgba(1, 1, 1, 0.05)
+                                    : Qt.rgba(1, 1, 1, 0.02))
+                            border.color: selected ? Theme.accent : Theme.border
+                            border.width: 1
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData
+                                color: Theme.text
+                                font.pixelSize: 12
+                                font.weight: selected ? Font.Bold : Font.Normal
+                            }
+                            MouseArea {
+                                id: modelArea
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    // Save the choice (stt reads it live) then
+                                    // pull the model if it isn't on disk yet.
+                                    SettingsBridge.setString("voice.model", modelData);
+                                    VoiceBridge.ensureModel(modelData);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    visible: VoiceBridge.modelStatus.length > 0
+                    Layout.fillWidth: true
+                    text: VoiceBridge.modelStatus
+                    color: VoiceBridge.modelStatus.startsWith("erro") ? Theme.danger : Theme.textDim
+                    font.pixelSize: 11
+                    wrapMode: Text.WordWrap
+                }
+            }
+
             Item { Layout.fillHeight: true }
 
             // ── Footer ────────────────────────────────────────────────
