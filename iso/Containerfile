@@ -161,7 +161,10 @@ RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \
 # immutable layer; the daemon's `stt::DEFAULT_MODEL` constant points
 # here. Replacement / upgrade flows are an updater Phase 2 concern.
 COPY --from=builder /out/whisper/whisper-cli           /usr/bin/whisper-cli
-COPY --from=builder /out/whisper-models/ggml-small.bin  /usr/share/whisper-models/ggml-small.bin
+# Copy the whole models dir (not a fixed filename) so the image build stays
+# green across a base→small builder-base transition: whatever model the
+# builder base baked lands here, and stt.rs falls back to whatever is present.
+COPY --from=builder /out/whisper-models/  /usr/share/whisper-models/
 
 # numbat — Lilith's calculator backend (see #159). No .desktop —
 # this is a tool the assistant reaches for, not an app the user

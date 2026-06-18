@@ -98,12 +98,36 @@ async fn resolve_model_setting() -> PathBuf {
             return p;
         }
         tracing::warn!(model = %val, "configured whisper model not present yet; using default");
-        return PathBuf::from(DEFAULT_MODEL);
+        return baked_default();
     }
     if let Some(p) = std::env::var_os("JARVIS_VOICE_MODEL") {
         return PathBuf::from(p);
     }
-    PathBuf::from(DEFAULT_MODEL)
+    baked_default()
+}
+
+/// The model to use when nothing is configured (or the configured one isn't
+/// downloaded yet). Prefers the baked `small`; if that's absent — e.g. during
+/// a base→small image transition where the system dir still holds the old
+/// model — falls back to any `ggml-*.bin` present so STT keeps working.
+fn baked_default() -> PathBuf {
+    let preferred = PathBuf::from(DEFAULT_MODEL);
+    if preferred.exists() {
+        return preferred;
+    }
+    if let Ok(rd) = std::fs::read_dir(SYSTEM_MODELS_DIR) {
+        for e in rd.flatten() {
+            let p = e.path();
+            let is_ggml = p
+                .file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|n| n.starts_with("ggml-") && n.ends_with(".bin"));
+            if is_ggml {
+                return p;
+            }
+        }
+    }
+    preferred
 }
 
 /// Run whisper-cli against `wav_path` and return the recognised text,
