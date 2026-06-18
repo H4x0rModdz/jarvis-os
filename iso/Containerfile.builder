@@ -41,9 +41,13 @@ RUN dnf -y install \
         git curl \
     && dnf clean all
 
-# whisper.cpp — static whisper-cli + the multilingual base model.
-# (Same build as the old inline step; see iso/Containerfile history.)
+# whisper.cpp — static whisper-cli + the multilingual `small` model.
+# small (~466 MB) is the baked default: much better PT-BR accuracy than
+# base while still running on a CPU-only VM. Bigger models (medium, large)
+# are downloadable at runtime from the Preferences panel (see
+# system/voice/src/stt.rs). (Same build as the old inline step.)
 ARG WHISPER_VERSION=v1.7.4
+ARG WHISPER_MODEL=small
 RUN git clone --depth 1 --branch ${WHISPER_VERSION} \
         https://github.com/ggml-org/whisper.cpp.git /src/whisper.cpp \
     && cmake -S /src/whisper.cpp -B /build/whisper -G Ninja \
@@ -53,8 +57,9 @@ RUN git clone --depth 1 --branch ${WHISPER_VERSION} \
     && cmake --build /build/whisper -j --target whisper-cli \
     && mkdir -p /out/whisper /out/whisper-models \
     && cp /build/whisper/bin/whisper-cli /out/whisper/whisper-cli \
-    && bash /src/whisper.cpp/models/download-ggml-model.sh base \
-    && cp /src/whisper.cpp/models/ggml-base.bin /out/whisper-models/ggml-base.bin \
+    && bash /src/whisper.cpp/models/download-ggml-model.sh ${WHISPER_MODEL} \
+    && cp /src/whisper.cpp/models/ggml-${WHISPER_MODEL}.bin \
+          /out/whisper-models/ggml-${WHISPER_MODEL}.bin \
     && rm -rf /src/whisper.cpp /build/whisper
 
 # piper (TTS) — precompiled tarball + the voice model.

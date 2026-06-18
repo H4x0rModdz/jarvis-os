@@ -39,8 +39,72 @@ impl Stt for WhisperCli {
 }
 
 pub const DEFAULT_BINARY: &str = "/usr/bin/whisper-cli";
-pub const DEFAULT_MODEL: &str = "/usr/share/whisper-models/ggml-base.bin";
+/// Baked, always-present model — the `small` multilingual ggml the image
+/// ships (iso/Containerfile.builder). Used as the fallback when the
+/// configured model isn't downloaded yet.
+pub const DEFAULT_MODEL: &str = "/usr/share/whisper-models/ggml-small.bin";
+/// System dir for image-baked models; user dir below for downloaded ones.
+const SYSTEM_MODELS_DIR: &str = "/usr/share/whisper-models";
 const DEFAULT_LANG: &str = "auto";
+
+/// Where runtime-downloaded models land — `~/.local/share/whisper-models`.
+pub fn user_models_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from("/tmp"))
+        .join("whisper-models")
+}
+
+/// Download target for a model name, e.g. `medium` → the user dir's
+/// `ggml-medium.bin`.
+pub fn user_model_path(name: &str) -> PathBuf {
+    user_models_dir().join(format!("ggml-{name}.bin"))
+}
+
+/// The whisper.cpp model repo URL for a model name.
+pub fn download_url(name: &str) -> String {
+    format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{name}.bin")
+}
+
+/// Resolve a `voice.model` value (a model NAME like `small`/`medium`, or a
+/// full path) to an existing file on disk. Names are looked up in the user
+/// download dir first, then the image's system dir. Returns `None` when the
+/// model isn't present (e.g. selected in the panel but not downloaded yet).
+pub fn resolve_model(name_or_path: &str) -> Option<PathBuf> {
+    let v = name_or_path.trim();
+    if v.is_empty() {
+        return None;
+    }
+    if v.contains('/') {
+        let p = PathBuf::from(v);
+        return p.exists().then_some(p);
+    }
+    let file = format!("ggml-{v}.bin");
+    let user = user_models_dir().join(&file);
+    if user.exists() {
+        return Some(user);
+    }
+    let sys = PathBuf::from(SYSTEM_MODELS_DIR).join(&file);
+    sys.exists().then_some(sys)
+}
+
+/// Pick the model file for this transcription. Order: `voice.model` from
+/// Settings (a name resolved to a present file) → `JARVIS_VOICE_MODEL` env
+/// path → the baked default. Re-read every call so a panel change applies
+/// without restarting the daemon. A configured-but-not-yet-downloaded model
+/// falls back to the default so STT keeps working.
+async fn resolve_model_setting() -> PathBuf {
+    if let Some(val) = read_setting("voice.model").await {
+        if let Some(p) = resolve_model(&val) {
+            return p;
+        }
+        tracing::warn!(model = %val, "configured whisper model not present yet; using default");
+        return PathBuf::from(DEFAULT_MODEL);
+    }
+    if let Some(p) = std::env::var_os("JARVIS_VOICE_MODEL") {
+        return PathBuf::from(p);
+    }
+    PathBuf::from(DEFAULT_MODEL)
+}
 
 /// Run whisper-cli against `wav_path` and return the recognised text,
 /// trimmed. Errors propagate the underlying message — Lilith / the shell
@@ -56,7 +120,7 @@ const DEFAULT_LANG: &str = "auto";
 /// effect immediately, no daemon restart.
 pub async fn transcribe(wav_path: &Path) -> Result<String> {
     let binary = env_path("JARVIS_VOICE_BINARY", DEFAULT_BINARY);
-    let model = env_path("JARVIS_VOICE_MODEL", DEFAULT_MODEL);
+    let model = resolve_model_setting().await;
     let lang = read_setting("voice.language")
         .await
         .or_else(|| std::env::var("JARVIS_VOICE_LANG").ok())

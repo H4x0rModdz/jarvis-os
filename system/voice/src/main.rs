@@ -256,6 +256,56 @@ impl VoiceService {
         }
     }
 
+    /// Ensure a whisper model is available locally, downloading it from the
+    /// whisper.cpp model repo into `~/.local/share/whisper-models` when
+    /// missing. Returns immediately (`{ present }` or `{ started }`); a
+    /// `ModelReady` signal fires when a download finishes. Selecting the
+    /// model is the shell writing `voice.model` to Settings — stt.rs reads
+    /// that live, so the next transcription uses it once the file lands.
+    async fn ensure_model(
+        &self,
+        name: &str,
+        #[zbus(signal_context)] ctx: SignalContext<'_>,
+    ) -> String {
+        let name = name.trim().to_string();
+        // Guard: the name is interpolated into a URL and a file path.
+        let valid = !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.');
+        if !valid {
+            return json!({ "started": false, "reason": "invalid model name" }).to_string();
+        }
+        if stt::resolve_model(&name).is_some() {
+            return json!({ "present": true }).to_string();
+        }
+        let url = stt::download_url(&name);
+        let dest = stt::user_model_path(&name);
+        let ctx = ctx.to_owned();
+        let task_name = name.clone();
+        tokio::spawn(async move {
+            let (ok, msg) = match download_model(&url, &dest).await {
+                Ok(()) => (true, format!("{task_name} pronto")),
+                Err(e) => (false, e.to_string()),
+            };
+            if let Err(e) = VoiceService::model_ready(&ctx, &task_name, ok, &msg).await {
+                tracing::warn!("ModelReady emit failed: {e}");
+            }
+        });
+        json!({ "started": true }).to_string()
+    }
+
+    /// The whisper models the panel offers + whether each is present locally
+    /// (baked under /usr/share or downloaded under the user data dir).
+    async fn list_models(&self) -> String {
+        const KNOWN: [&str; 4] = ["base", "small", "medium", "large-v3"];
+        let models: Vec<_> = KNOWN
+            .iter()
+            .map(|n| json!({ "name": n, "present": stt::resolve_model(n).is_some() }))
+            .collect();
+        json!({ "models": models }).to_string()
+    }
+
     #[zbus(signal)]
     async fn state_changed(ctx: &SignalContext<'_>, state: &str) -> zbus::Result<()>;
 
@@ -284,6 +334,43 @@ impl VoiceService {
     /// (the user said only the wake-word).
     #[zbus(signal)]
     async fn hotword_detected(ctx: &SignalContext<'_>, text: &str) -> zbus::Result<()>;
+
+    /// Fires when an `EnsureModel` download finishes. `success` + `message`
+    /// let the panel show "pronto" or an error. No action needed on success
+    /// beyond UI feedback — stt.rs reads `voice.model` live, so the next
+    /// transcription picks up the freshly-downloaded file.
+    #[zbus(signal)]
+    async fn model_ready(
+        ctx: &SignalContext<'_>,
+        name: &str,
+        success: bool,
+        message: &str,
+    ) -> zbus::Result<()>;
+}
+
+/// Download a whisper model file to `dest` via curl (shipped in the image).
+/// Writes to a `.part` sidecar and renames on success so a partial download
+/// never looks like a complete model to `resolve_model`.
+async fn download_model(url: &str, dest: &std::path::Path) -> anyhow::Result<()> {
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let tmp = dest.with_extension("part");
+    let status = tokio::process::Command::new("curl")
+        .arg("-fL") // fail on HTTP error, follow redirects
+        .arg("--retry")
+        .arg("3")
+        .arg("-o")
+        .arg(&tmp)
+        .arg(url)
+        .status()
+        .await?;
+    if !status.success() {
+        let _ = tokio::fs::remove_file(&tmp).await;
+        anyhow::bail!("curl failed ({status}) downloading {url}");
+    }
+    tokio::fs::rename(&tmp, dest).await?;
+    Ok(())
 }
 
 impl VoiceService {
