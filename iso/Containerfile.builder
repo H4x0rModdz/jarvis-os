@@ -18,7 +18,7 @@
 #   - adding a system devel dependency
 #   - moving to a new Fedora / Qt base
 
-FROM registry.fedoraproject.org/fedora:42
+FROM registry.fedoraproject.org/fedora:44
 
 # Devel deps for every Jarvis crate + the Qt shell. We ALWAYS install
 # the compositor's Smithay deps here too (libseat / libinput / mesa /

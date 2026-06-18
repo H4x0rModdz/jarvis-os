@@ -24,7 +24,7 @@
 # It stays a valid bootc base (FROM fedora-bootc), so the final image
 # layered on top remains OTA- and ISO-buildable.
 
-FROM quay.io/fedora/fedora-bootc:42
+FROM quay.io/fedora/fedora-bootc:44
 
 # Desktop runtime: labwc compositor, foot terminal (default keybind),
 # greetd for autologin into the wayland session, Qt 6 + LayerShellQt for
