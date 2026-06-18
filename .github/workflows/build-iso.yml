@@ -23,6 +23,13 @@ on:
       # Windows-side build tooling — never copied into the OS image, so a
       # change here can't affect what gets published.
       - "tools/**"
+  # Weekly OS-image republish so kernel + security updates reach OTA. Runs a
+  # few hours after build-runtime.yml's Monday rebuild, so "Resolve runtime
+  # base" pulls the freshly-rebuilt base (new kernel) and pushes it as
+  # jarvis-os:latest. No ISO is cut on a schedule run (those steps gate on
+  # tags / dispatch).
+  schedule:
+    - cron: "0 9 * * 1"  # Mondays 09:00 UTC (after build-runtime at 06:00)
   workflow_dispatch:
     inputs:
       version:

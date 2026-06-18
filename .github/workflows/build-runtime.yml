@@ -25,6 +25,13 @@ on:
       - "iso/assets/xdg/mimeapps.list"
       - "iso/assets/xdg-desktop-portal/labwc-portals.conf"
       - "iso/assets/sysctl/99-jarvis-userns.conf"
+  # Weekly rebuild so kernel + security updates from the fedora-bootc base
+  # keep flowing. The base (and thus the kernel) now lives in this rarely-
+  # rebuilt image, so without this it would freeze between code changes.
+  # build-iso.yml has a cron a few hours later that republishes the OS image
+  # on the freshly-pulled base, so `bootc upgrade` actually delivers it.
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -62,7 +69,10 @@ jobs:
         run: |
           # Lowercase the owner — ghcr refuses uppercase in image paths.
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          # --pull=newer: always re-pull the fedora-bootc base so the weekly
+          # rebuild actually picks up new kernel/security layers.
           sudo podman build \
+            --pull=newer \
             --file iso/Containerfile.runtime \
             --tag "ghcr.io/${OWNER}/jarvis-runtime:latest" \
             .
