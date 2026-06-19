@@ -37,7 +37,7 @@ RUN dnf -y install \
         qt6-qtbase qt6-qtdeclarative qt6-qtwayland qt6-qtquickcontrols2 \
         qt6-qtquick3d \
         layer-shell-qt \
-        sqlite libnotify xdg-utils jq curl \
+        sqlite libnotify xdg-utils xdg-user-dirs jq curl \
         seatd polkit NetworkManager \
         mesa-dri-drivers \
         wl-clipboard grim slurp \
@@ -212,6 +212,7 @@ COPY iso/assets/theme/gtk-settings.ini /etc/gtk-4.0/settings.ini
 RUN flatpak override --system \
         --filesystem=/usr/share/themes:ro \
         --filesystem=/usr/share/icons:ro \
+        --filesystem=xdg-download \
         --env=GTK_THEME=WhiteSur-Dark \
         --env=XCURSOR_THEME=WhiteSur-cursors \
         --socket=wayland \
