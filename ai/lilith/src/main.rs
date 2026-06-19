@@ -7,6 +7,7 @@
 
 mod audit;
 mod bus_client;
+mod emotion;
 mod error;
 mod intent;
 mod memory;
@@ -61,7 +62,20 @@ impl LilithService {
         let sink: Arc<dyn SignalSink> = Arc::new(DbusSignalSink {
             ctx: ctx.to_owned(),
         });
-        let response = self.process(text, sink).await;
+        let mut response = self.process(text, sink).await;
+        // Tag the reply with a coarse emotion so the embodied avatar (ADR 0028)
+        // can pick a facial expression. Done here, once, at the boundary —
+        // process() has many return sites and they all funnel through this
+        // string. The `thinking` face is owned by the busy *state* in the
+        // shell, so this only ever produces neutral/happy/concerned.
+        if let Some(obj) = response.as_object_mut() {
+            let reply = obj
+                .get("reply")
+                .and_then(|r| r.as_str())
+                .unwrap_or_default();
+            let mood = emotion::classify(reply);
+            obj.insert("emotion".into(), json!(mood));
+        }
         serde_json::to_string(&response).unwrap_or_else(|_| "{}".into())
     }
 
@@ -1320,15 +1334,16 @@ mod tests {
 
     #[tokio::test]
     async fn process_step_cap_hit() {
-        // Ollama keeps emitting tool calls past the MAX_STEPS=4 cap.
-        // Loop exits at step 4 with a "(parei após 4 passos)" reply.
+        // Ollama keeps emitting tool calls past the MAX_STEPS=8 cap.
+        // Loop exits at step 8 with a "(parei após 8 passos)" reply.
+        // (Script more than the cap so the loop hits the limit, not the mock.)
         let mut replies = Vec::new();
-        for _ in 0..6 {
+        for _ in 0..10 {
             replies.push(tool_call_reply("app.open", json!({ "app": "firefox" })));
         }
         let ollama = Arc::new(MockOllama::new(replies));
         let bus = Arc::new(MockBus::new(
-            (0..6)
+            (0..10)
                 .map(|_| success_response("app.open", json!({ "launched": true })))
                 .collect(),
         ));
@@ -1339,9 +1354,9 @@ mod tests {
         let resp = service.process("loop forever", sink).await;
 
         assert!(resp["reply"].as_str().unwrap_or("").contains("parei após"));
-        // Exactly 4 chain steps, even though the mock had 6 ready.
-        assert_eq!(sink_concrete.chain_steps_seen().len(), 4);
-        assert_eq!(bus.calls().len(), 4);
+        // Exactly 8 chain steps (MAX_STEPS), even though the mock had 10 ready.
+        assert_eq!(sink_concrete.chain_steps_seen().len(), 8);
+        assert_eq!(bus.calls().len(), 8);
     }
 
     #[tokio::test]

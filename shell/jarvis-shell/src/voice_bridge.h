@@ -24,6 +24,10 @@ class VoiceBridge : public QObject
     QML_SINGLETON
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(bool reachable READ reachable NOTIFY reachableChanged)
+    /// Mouth-open level 0.0–1.0 during TTS playback, from the daemon's
+    /// MouthLevel signal (ADR 0028). Drives the avatar's jaw/mouth. Returns to
+    /// 0.0 when speech ends.
+    Q_PROPERTY(double mouthLevel READ mouthLevel NOTIFY mouthLevelChanged)
     Q_PROPERTY(QString lastTranscript READ lastTranscript NOTIFY lastTranscriptChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
     Q_PROPERTY(bool hotwordEnabled READ hotwordEnabled NOTIFY hotwordEnabledChanged)
@@ -46,6 +50,7 @@ public:
 
     QString state() const { return m_state; }
     bool reachable() const { return m_reachable; }
+    double mouthLevel() const { return m_mouthLevel; }
     QString lastTranscript() const { return m_lastTranscript; }
     QString lastError() const { return m_lastError; }
     bool hotwordEnabled() const { return m_hotwordEnabled; }
@@ -98,6 +103,7 @@ public:
 signals:
     void stateChanged();
     void reachableChanged();
+    void mouthLevelChanged();
     void lastTranscriptChanged();
     void lastErrorChanged();
     void hotwordEnabledChanged();
@@ -114,6 +120,7 @@ signals:
 
 private slots:
     void onStateChanged(const QString& state);
+    void onMouthLevel(double level);
     void onTranscriptionFinal(const QString& text);
     void onTranscriptionFailed(const QString& reason);
     void onHotwordDetected(const QString& text);
@@ -127,6 +134,7 @@ private:
     QDBusInterface* m_iface = nullptr;
     QString m_state = QStringLiteral("idle");
     bool m_reachable = false;
+    double m_mouthLevel = 0.0;
     QString m_lastTranscript;
     QString m_lastError;
     bool m_hotwordEnabled = false;

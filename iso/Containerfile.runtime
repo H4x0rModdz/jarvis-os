@@ -35,6 +35,7 @@ RUN dnf -y install \
         greetd \
         xorg-x11-server-Xwayland \
         qt6-qtbase qt6-qtdeclarative qt6-qtwayland qt6-qtquickcontrols2 \
+        qt6-qtquick3d \
         layer-shell-qt \
         sqlite libnotify xdg-utils jq curl \
         seatd polkit NetworkManager \

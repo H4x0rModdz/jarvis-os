@@ -80,6 +80,12 @@ DBus  com.jarvis.Voice  at  /com/jarvis/Voice
           shell strips the wake-word and dispatches the remainder
           (or pops the mic when the remainder is empty).
 
+  signal MouthLevel(level: double)
+       └─ fires repeatedly during TTS playback (~20/s) with the
+          mouth-open level 0.0–1.0 from the audio's amplitude
+          envelope, plus a final 0.0 when speech ends. Drives the
+          embodied avatar's lip-sync (ADR 0028). Advisory.
+
   EnrollVoiceprint(user: string, seconds: u32) -> string  // JSON
        └─ { ok: bool, user, frames?, reason? }
           Captures `seconds` (clamped 1..=10) of audio, computes the

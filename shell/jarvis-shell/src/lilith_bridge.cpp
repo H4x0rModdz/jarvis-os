@@ -93,6 +93,9 @@ void LilithBridge::send(const QString& text)
     // accumulates across commands — push the user line now so the
     // popup can render the question even before the reply lands.
     resetStreamingState();
+    // Drop back to a neutral face while she works; the avatar shows the
+    // "thinking" state from `busy` over the top until the reply lands.
+    setEmotion(QStringLiteral("neutral"));
     pushConversationUser(text);
     setBusy(true);
     auto pending = m_iface->asyncCall(QStringLiteral("Command"), text);
@@ -119,6 +122,12 @@ void LilithBridge::send(const QString& text)
             const auto obj = doc.object();
             const QString replyText = obj.value(QStringLiteral("reply")).toString();
             const QString action = obj.value(QStringLiteral("action")).toString();
+            // Mood tag for the embodied avatar (ADR 0028). Absent on older
+            // daemons → leave the current expression alone.
+            const QString mood = obj.value(QStringLiteral("emotion")).toString();
+            if (!mood.isEmpty()) {
+                setEmotion(mood);
+            }
             const QJsonValue result = obj.value(QStringLiteral("result"));
             const QString resultJson = result.isObject()
                 ? QString::fromUtf8(QJsonDocument(result.toObject()).toJson(QJsonDocument::Compact))
@@ -192,6 +201,13 @@ void LilithBridge::setBusy(bool v)
     if (m_busy == v) return;
     m_busy = v;
     emit busyChanged();
+}
+
+void LilithBridge::setEmotion(const QString& v)
+{
+    if (m_emotion == v) return;
+    m_emotion = v;
+    emit emotionChanged();
 }
 
 void LilithBridge::onPartialReply(uint step, const QString& chunk)

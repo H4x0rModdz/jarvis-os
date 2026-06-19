@@ -35,6 +35,13 @@ pub trait VoiceSignalSink: Send + Sync {
     /// historically piggybacks TTS errors onto this signal too — the
     /// shell treats both as a single "voice pipeline error" channel.
     async fn transcription_failed(&self, reason: &str);
+
+    /// Fires repeatedly *during TTS playback* with the current mouth-open
+    /// level (0.0 shut … 1.0 wide), derived from the synthesized audio's
+    /// amplitude envelope. Drives the embodied avatar's lip movement
+    /// (ADR 0028). A final `0.0` is emitted when speech ends. Advisory like
+    /// the others — a dropped frame just means a skipped lip position.
+    async fn mouth_level(&self, level: f64);
 }
 
 /// No-op convenience — useful for early init or anywhere a caller
@@ -50,6 +57,7 @@ impl VoiceSignalSink for NoopVoiceSink {
     async fn state_changed(&self, _state: &str) {}
     async fn transcription_final(&self, _text: &str) {}
     async fn transcription_failed(&self, _reason: &str) {}
+    async fn mouth_level(&self, _level: f64) {}
 }
 
 /// Helper for callers that don't need real signals.

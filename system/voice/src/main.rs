@@ -88,6 +88,11 @@ impl VoiceSignalSink for DbusVoiceSink {
             tracing::warn!(error = %e, "TranscriptionFailed emit failed");
         }
     }
+    async fn mouth_level(&self, level: f64) {
+        if let Err(e) = VoiceService::mouth_level(&self.ctx, level).await {
+            tracing::warn!(error = %e, "MouthLevel emit failed");
+        }
+    }
 }
 
 fn dbus_sink(ctx: SignalContext<'_>) -> Arc<dyn VoiceSignalSink> {
@@ -364,6 +369,13 @@ impl VoiceService {
     /// follows once it finishes (or fails).
     #[zbus(signal)]
     async fn model_progress(ctx: &SignalContext<'_>, name: &str, percent: i32) -> zbus::Result<()>;
+
+    /// Fires repeatedly during TTS playback with the mouth-open level
+    /// (0.0–1.0) for the embodied avatar's lip-sync (ADR 0028). A final 0.0
+    /// follows when speech ends. The shell's VoiceBridge maps it to the
+    /// avatar's jaw morph / fallback mouth.
+    #[zbus(signal)]
+    async fn mouth_level(ctx: &SignalContext<'_>, level: f64) -> zbus::Result<()>;
 }
 
 /// Stream a whisper model from the whisper.cpp repo to `dest`, sending a
@@ -548,7 +560,13 @@ impl VoiceService {
         let signals_for_task = signals.clone();
         let tts = self.tts.clone();
         tokio::spawn(async move {
-            if let Err(e) = tts.speak(&text_owned).await {
+            // Lip-sync path: synthesize, read the audio's amplitude envelope,
+            // and emit MouthLevel frames while it plays so the avatar's mouth
+            // tracks the speech (ADR 0028). Falls back to plain speak() when the
+            // TTS impl can't split synth/play (mocks/tests).
+            if let Err(e) =
+                speak_with_lipsync(tts.as_ref(), &text_owned, signals_for_task.as_ref()).await
+            {
                 tracing::warn!(error = %e, "TTS speak failed");
                 signals_for_task.transcription_failed(&e.to_string()).await;
             }
@@ -572,6 +590,61 @@ impl VoiceService {
         tracing::info!(previous = %was.as_str(), "Cancel");
         json!({ "cancelled": true, "previous": was.as_str() }).to_string()
     }
+}
+
+/// Speak `text`, driving the avatar's mouth from the synthesized audio.
+///
+/// Synthesize → read the amplitude envelope → play while emitting `MouthLevel`
+/// frames on a timer that approximates real-time, stopping the moment playback
+/// returns. Playback is the source of truth for "still talking"; the envelope
+/// just shapes how open the mouth is. Always emits a final `0.0` so the mouth
+/// closes. When the TTS impl returns no WAV (mock/test, or empty text) it falls
+/// back to plain `speak()` and no mouth frames are emitted.
+async fn speak_with_lipsync(
+    tts: &dyn tts::Tts,
+    text: &str,
+    signals: &dyn VoiceSignalSink,
+) -> anyhow::Result<()> {
+    // 50 ms frames → 20 mouth positions/sec; matches the envelope window so the
+    // emitter walks it at roughly playback speed.
+    const FRAME_MS: u32 = 50;
+
+    let wav = match tts.synthesize(text).await? {
+        Some(p) => p,
+        None => return tts.speak(text).await,
+    };
+
+    // Decode + envelope on a blocking worker (file IO + WAV parse). A failure
+    // here costs lip-sync, not the speech itself — fall back to an empty curve.
+    let wav_for_read = wav.clone();
+    let envelope: Vec<f32> = tokio::task::spawn_blocking(move || {
+        tts::read_wav_samples(&wav_for_read)
+            .map(|(samples, rate)| tts::amplitude_envelope(&samples, rate, FRAME_MS))
+    })
+    .await
+    .unwrap_or_else(|e| Err(anyhow::anyhow!("envelope task panicked: {e}")))
+    .unwrap_or_default();
+
+    // Play and walk the envelope concurrently.
+    let play_fut = tts.play(&wav);
+    tokio::pin!(play_fut);
+    let mut frame = tokio::time::interval(std::time::Duration::from_millis(FRAME_MS as u64));
+    let mut i = 0usize;
+    let play_result = loop {
+        tokio::select! {
+            r = &mut play_fut => break r,
+            _ = frame.tick() => {
+                let level = envelope.get(i).copied().unwrap_or(0.0) as f64;
+                signals.mouth_level(level).await;
+                i += 1;
+            }
+        }
+    };
+
+    // Mouth shut once playback ends, then clean up the temp WAV.
+    signals.mouth_level(0.0).await;
+    let _ = tokio::fs::remove_file(&wav).await;
+    play_result
 }
 
 /// Bottom half of the STT pipeline: finish the capture, hand the
@@ -983,6 +1056,12 @@ mod tests {
                 .unwrap()
                 .push(("failed".into(), reason.into()));
         }
+        async fn mouth_level(&self, level: f64) {
+            self.events
+                .lock()
+                .unwrap()
+                .push(("mouth".into(), format!("{level:.2}")));
+        }
     }
 
     fn temp_vp_db() -> std::path::PathBuf {
@@ -1249,6 +1328,91 @@ mod tests {
         );
         assert_eq!(events[2], ("state".into(), "idle".into()));
         assert_eq!(*service.state.lock().await, State::Idle);
+    }
+
+    /// TTS that supports the split synth/play path: `synthesize` writes a
+    /// short loud WAV (so the envelope is non-trivial), `play` is a no-op.
+    /// Counts each method so the lip-sync tests can prove which path ran.
+    struct LipSyncTts {
+        synth_calls: StdMutex<u32>,
+        play_calls: StdMutex<u32>,
+        speak_calls: StdMutex<u32>,
+    }
+
+    impl LipSyncTts {
+        fn new() -> Self {
+            Self {
+                synth_calls: StdMutex::new(0),
+                play_calls: StdMutex::new(0),
+                speak_calls: StdMutex::new(0),
+            }
+        }
+    }
+
+    #[async_trait]
+    impl tts::Tts for LipSyncTts {
+        async fn speak(&self, _text: &str) -> anyhow::Result<()> {
+            *self.speak_calls.lock().unwrap() += 1;
+            Ok(())
+        }
+        async fn synthesize(&self, _text: &str) -> anyhow::Result<Option<PathBuf>> {
+            *self.synth_calls.lock().unwrap() += 1;
+            let path = std::env::temp_dir().join(format!(
+                "jarvis-lipsync-test-{}-{}.wav",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos())
+                    .unwrap_or(0),
+            ));
+            let spec = hound::WavSpec {
+                channels: 1,
+                sample_rate: 16_000,
+                bits_per_sample: 16,
+                sample_format: hound::SampleFormat::Int,
+            };
+            let mut w = hound::WavWriter::create(&path, spec)?;
+            for _ in 0..1600 {
+                w.write_sample(10_000i16)?;
+            }
+            w.finalize()?;
+            Ok(Some(path))
+        }
+        async fn play(&self, _wav: &std::path::Path) -> anyhow::Result<()> {
+            *self.play_calls.lock().unwrap() += 1;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn speak_with_lipsync_uses_synth_play_and_closes_mouth() {
+        let tts = LipSyncTts::new();
+        let sink = RecordingVoiceSink::default();
+        speak_with_lipsync(&tts, "oi lilith", &sink).await.unwrap();
+
+        // Took the synth/play path, not the speak() fallback.
+        assert_eq!(*tts.synth_calls.lock().unwrap(), 1);
+        assert_eq!(*tts.play_calls.lock().unwrap(), 1);
+        assert_eq!(*tts.speak_calls.lock().unwrap(), 0);
+
+        // Whatever frames raced in, the mouth always ends shut.
+        let events = sink.events();
+        assert_eq!(
+            events.last().unwrap(),
+            &("mouth".to_string(), "0.00".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn speak_with_lipsync_falls_back_when_synth_unsupported() {
+        // MockTts uses the trait defaults (synthesize → None), so the helper
+        // must fall back to plain speak() and emit no mouth frames.
+        let tts = MockTts::ok();
+        let sink = RecordingVoiceSink::default();
+        speak_with_lipsync(&tts, "oi", &sink).await.unwrap();
+
+        assert_eq!(tts.calls(), vec!["oi".to_string()]);
+        assert!(sink.events().iter().all(|(k, _)| k != "mouth"));
     }
 
     #[test]

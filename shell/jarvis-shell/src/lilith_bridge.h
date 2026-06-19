@@ -30,6 +30,10 @@ class LilithBridge : public QObject
     QML_SINGLETON
     Q_PROPERTY(bool reachable READ reachable NOTIFY reachableChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
+    /// Coarse mood of the most recent reply (neutral / happy / concerned),
+    /// tagged by the daemon (ADR 0028). The embodied avatar reads this to pick
+    /// a facial expression. Resets to "neutral" when a new command is sent.
+    Q_PROPERTY(QString emotion READ emotion NOTIFY emotionChanged)
     Q_PROPERTY(QString streamingText READ streamingText NOTIFY streamingTextChanged)
     Q_PROPERTY(QVariantList chainSteps READ chainSteps NOTIFY chainStepsChanged)
     Q_PROPERTY(QVariantList conversation READ conversation NOTIFY conversationChanged)
@@ -43,6 +47,7 @@ public:
 
     bool reachable() const { return m_reachable; }
     bool busy() const { return m_busy; }
+    QString emotion() const { return m_emotion; }
     QString streamingText() const { return m_streamingText; }
     QVariantList chainSteps() const { return m_chainSteps; }
     QVariantList conversation() const { return m_conversation; }
@@ -68,6 +73,7 @@ public:
 signals:
     void reachableChanged();
     void busyChanged();
+    void emotionChanged();
     void streamingTextChanged();
     void chainStepsChanged();
     void conversationChanged();
@@ -91,6 +97,7 @@ private slots:
 private:
     void setReachable(bool v);
     void setBusy(bool v);
+    void setEmotion(const QString& v);
     void resetStreamingState();
     void pushConversationUser(const QString& text);
     void pushConversationLilith(const QString& reply, const QString& action,
@@ -100,6 +107,7 @@ private:
     QTimer m_pingTimer;
     bool m_reachable = false;
     bool m_busy = false;
+    QString m_emotion = QStringLiteral("neutral");
     QString m_streamingText;
     QVariantList m_chainSteps; // [{ step: int, action: string }, …]
     QVariantList m_conversation;
