@@ -63,15 +63,21 @@ VoiceBridge::VoiceBridge(QObject* parent) : QObject(parent)
         QStringLiteral("ModelProgress"),
         this,
         SLOT(onModelProgress(QString, int)));
+    const bool mouthOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("MouthLevel"),
+        this,
+        SLOT(onMouthLevel(double)));
 
-    if (!stateOk || !finalOk || !failedOk || !hotwordOk || !modelOk || !modelProgOk) {
+    if (!stateOk || !finalOk || !failedOk || !hotwordOk || !modelOk || !modelProgOk || !mouthOk) {
         qCWarning(lcVoice) << "Subscription failed:"
                            << "state=" << stateOk
                            << "final=" << finalOk
                            << "failed=" << failedOk
                            << "hotword=" << hotwordOk
                            << "model=" << modelOk
-                           << "modelProgress=" << modelProgOk;
+                           << "modelProgress=" << modelProgOk
+                           << "mouth=" << mouthOk;
     }
 
     // Probe reachability by asking for the current state. The voice daemon
@@ -180,6 +186,18 @@ void VoiceBridge::onStateChanged(const QString& state)
     m_state = state;
     emit stateChanged();
     if (!m_reachable) setReachable(true);
+}
+
+void VoiceBridge::onMouthLevel(double level)
+{
+    // High-rate signal (~20/s during speech) — no logging here. Clamp defends
+    // the avatar's morph weight against any out-of-range value off the wire.
+    const double clamped = qBound(0.0, level, 1.0);
+    // Plain epsilon (qFuzzyCompare misbehaves near zero, which is exactly the
+    // mouth-shut value we send most often).
+    if (qAbs(m_mouthLevel - clamped) < 0.001) return;
+    m_mouthLevel = clamped;
+    emit mouthLevelChanged();
 }
 
 void VoiceBridge::onTranscriptionFinal(const QString& text)

@@ -7,6 +7,8 @@
 #include <QDir>
 #include <QIcon>
 #include <QMargins>
+#include <QStandardPaths>
+#include <QUrl>
 #include <QDBusConnection>
 #include <QDBusError>
 
@@ -67,6 +69,21 @@ int main(int argc, char** argv)
     // pulling in Qt.labs.platform. One justified context property.
     engine.rootContext()->setContextProperty(
         QStringLiteral("HomePath"), QDir::homePath());
+
+    // Avatar model URL for the embodied Lilith (ADR 0028). The VRM is a
+    // drop-in at <data>/jarvis/avatar/lilith.vrm; resolved in C++ via
+    // QStandardPaths (GenericDataLocation = ~/.local/share) for the same
+    // reason as HomePath above — QML has no first-class data-dir accessor
+    // without pulling in QtCore/Qt.labs.platform, and RuntimeLoader needs a
+    // real file URL. Absent file → RuntimeLoader errors → the avatar's
+    // procedural fallback renders. One more justified context property.
+    {
+        const QString dataDir =
+            QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        const QString vrmPath = dataDir + QStringLiteral("/jarvis/avatar/lilith.vrm");
+        engine.rootContext()->setContextProperty(
+            QStringLiteral("AvatarModelUrl"), QUrl::fromLocalFile(vrmPath).toString());
+    }
 
     // Dev loop: set JARVIS_QML_PATH to a directory that contains the
     // built `Jarvis/Shell/` module tree (the cmake build dir works —

@@ -144,6 +144,11 @@ Window {
     // goes busy; opened explicitly by the dock's Lilith orb (toggle()).
     LilithPopup { id: lilithPopup }
 
+    // Embodied avatar — Lilith's 3D companion (ADR 0028). A draggable,
+    // always-on-top corner window that reacts to her state/emotion/speech.
+    // Clicking it opens the conversation popup (same as the dock orb).
+    LilithAvatar { id: lilithAvatar }
+
     // Wi-Fi panel.
     ConnectivityPanel { id: connectivityPanel }
 
