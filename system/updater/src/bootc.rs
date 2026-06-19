@@ -143,9 +143,21 @@ fn short_digest(d: &str) -> String {
         .collect()
 }
 
-/// Run `bootc upgrade`. Pulls + stages the new image; the user reboots to
-/// apply. We deliberately do NOT pass `--reboot`.
-pub async fn apply_upgrade() -> Result<()> {
+/// Run `bootc upgrade`, streaming real download progress. Pulls + stages the
+/// new image; the user reboots to apply. We deliberately do NOT pass
+/// `--reboot`.
+///
+/// `--quiet --progress-fd 1` makes bootc suppress its TTY bars and instead
+/// write JSON-lines progress events to stdout (pkexec forwards stdout). We
+/// parse each line and forward `(percent, description)` over `progress` so the
+/// daemon can emit determinate Progress signals — without this the UI sat on a
+/// frozen indeterminate "Pulling new image…" with no sign it was working.
+/// `percent` is -1 for indeterminate phases. Duplicate updates are coalesced.
+pub async fn apply_upgrade(
+    progress: tokio::sync::mpsc::UnboundedSender<(i32, String)>,
+) -> Result<()> {
+    use tokio::io::AsyncBufReadExt;
+
     let binary = env_path("JARVIS_UPDATER_BOOTC", DEFAULT_BOOTC);
     if !binary.exists() {
         return Err(anyhow!(
@@ -154,15 +166,67 @@ pub async fn apply_upgrade() -> Result<()> {
         ));
     }
 
-    let status = bootc_command(&binary, &["upgrade"])
-        .status()
-        .await
+    let mut cmd = bootc_command(&binary, &["upgrade", "--quiet", "--progress-fd", "1"]);
+    cmd.stdout(std::process::Stdio::piped());
+    let mut child = cmd
+        .spawn()
         .with_context(|| format!("spawn {}", binary.display()))?;
 
+    if let Some(stdout) = child.stdout.take() {
+        let mut lines = tokio::io::BufReader::new(stdout).lines();
+        let mut last: Option<(i32, String)> = None;
+        while let Some(line) = lines.next_line().await? {
+            if let Some(update) = parse_progress_line(&line) {
+                if last.as_ref() != Some(&update) {
+                    let _ = progress.send(update.clone());
+                    last = Some(update);
+                }
+            }
+        }
+    }
+
+    let status = child.wait().await.context("wait for bootc upgrade")?;
     if !status.success() {
         return Err(anyhow!("bootc upgrade exited with {status}"));
     }
     Ok(())
+}
+
+/// Parse one JSON line from `bootc upgrade --progress-fd` into
+/// `(percent, description)`. `percent` is -1 for indeterminate events. Returns
+/// `None` for lines we don't surface (e.g. the `Start` banner) or non-JSON.
+fn parse_progress_line(line: &str) -> Option<(i32, String)> {
+    let v: serde_json::Value = serde_json::from_str(line.trim()).ok()?;
+    let pct = |done: u64, total: u64| -> i32 {
+        if total == 0 {
+            -1
+        } else {
+            ((done.min(total) as f64 / total as f64) * 100.0).round() as i32
+        }
+    };
+    match v.get("type")?.as_str()? {
+        "ProgressBytes" => {
+            let done = v.get("bytes")?.as_u64()?;
+            let total = v.get("bytes_total")?.as_u64()?;
+            let desc = v
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("Baixando atualização")
+                .to_string();
+            Some((pct(done, total), desc))
+        }
+        "ProgressSteps" => {
+            let done = v.get("steps")?.as_u64()?;
+            let total = v.get("steps_total")?.as_u64()?;
+            let desc = v
+                .get("description")
+                .and_then(|d| d.as_str())
+                .unwrap_or("Preparando")
+                .to_string();
+            Some((pct(done, total), desc))
+        }
+        _ => None,
+    }
 }
 
 fn env_path(var: &str, default: &str) -> PathBuf {
@@ -192,6 +256,37 @@ mod tests {
         };
         assert!(info.available);
         assert_eq!(info.version.as_deref(), Some("digest:abc"));
+    }
+
+    #[test]
+    fn parse_progress_bytes_computes_percent() {
+        let line = r#"{"type":"ProgressBytes","task":"pulling","description":"Fetching layers","bytes":50,"bytes_total":200,"steps":0,"steps_total":0,"subtasks":[]}"#;
+        assert_eq!(
+            parse_progress_line(line),
+            Some((25, "Fetching layers".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_progress_steps_and_indeterminate() {
+        let steps =
+            r#"{"type":"ProgressSteps","description":"Deploying","steps":1,"steps_total":4}"#;
+        assert_eq!(
+            parse_progress_line(steps),
+            Some((25, "Deploying".to_string()))
+        );
+        // total 0 → indeterminate (-1)
+        let zero = r#"{"type":"ProgressBytes","description":"x","bytes":0,"bytes_total":0}"#;
+        assert_eq!(parse_progress_line(zero), Some((-1, "x".to_string())));
+    }
+
+    #[test]
+    fn parse_progress_ignores_start_and_junk() {
+        assert_eq!(
+            parse_progress_line(r#"{"type":"Start","version":"0.1.0"}"#),
+            None
+        );
+        assert_eq!(parse_progress_line("not json"), None);
     }
 
     #[test]
