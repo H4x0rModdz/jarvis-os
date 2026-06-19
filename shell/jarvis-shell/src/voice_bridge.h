@@ -33,6 +33,9 @@ class VoiceBridge : public QObject
     /// medium…", "medium pronto", "erro: …"). Empty when idle. The Settings
     /// panel shows it under the model picker.
     Q_PROPERTY(QString modelStatus READ modelStatus NOTIFY modelStatusChanged)
+    /// Download progress of the model fetch, 0–100, or -1 when not downloading.
+    /// The panel draws a real progress bar off this.
+    Q_PROPERTY(int modelPercent READ modelPercent NOTIFY modelStatusChanged)
     /// `$USER` — same identity the PAM module sees during a verify
     /// call. Settings panel enrolls/verifies against this so the
     /// enrollment matches the lock-screen unlock target.
@@ -50,6 +53,7 @@ public:
     QString lastEnrollMessage() const { return m_lastEnrollMessage; }
     QString currentUser() const { return m_currentUser; }
     QString modelStatus() const { return m_modelStatus; }
+    int modelPercent() const { return m_modelPercent; }
 
     /// Ask the daemon to make whisper model `name` available, downloading it
     /// if missing. The QML writes `voice.model` to Settings (which stt reads
@@ -114,6 +118,7 @@ private slots:
     void onTranscriptionFailed(const QString& reason);
     void onHotwordDetected(const QString& text);
     void onModelReady(const QString& name, bool success, const QString& message);
+    void onModelProgress(const QString& name, int percent);
 
 private:
     void setReachable(bool v);
@@ -129,4 +134,5 @@ private:
     QString m_lastEnrollMessage;
     QString m_currentUser;
     QString m_modelStatus;
+    int m_modelPercent = -1;
 };

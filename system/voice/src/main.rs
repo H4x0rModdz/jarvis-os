@@ -284,7 +284,19 @@ impl VoiceService {
         let ctx = ctx.to_owned();
         let task_name = name.clone();
         tokio::spawn(async move {
-            let (ok, msg) = match download_model(&url, &dest).await {
+            // Stream the download, relaying each percentage as a ModelProgress
+            // signal; ModelReady then marks the terminal success/failure.
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<i32>();
+            let dl = tokio::spawn(async move { download_model(&url, &dest, tx).await });
+            while let Some(pct) = rx.recv().await {
+                if let Err(e) = VoiceService::model_progress(&ctx, &task_name, pct).await {
+                    tracing::warn!("ModelProgress emit failed: {e}");
+                }
+            }
+            let outcome = dl
+                .await
+                .unwrap_or_else(|e| Err(anyhow::anyhow!("download task panicked: {e}")));
+            let (ok, msg) = match outcome {
                 Ok(()) => (true, format!("{task_name} pronto")),
                 Err(e) => (false, e.to_string()),
             };
@@ -346,29 +358,58 @@ impl VoiceService {
         success: bool,
         message: &str,
     ) -> zbus::Result<()>;
+
+    /// Fires repeatedly during an `EnsureModel` download with the 0–100
+    /// percentage so the panel can show a real progress bar. `ModelReady`
+    /// follows once it finishes (or fails).
+    #[zbus(signal)]
+    async fn model_progress(ctx: &SignalContext<'_>, name: &str, percent: i32) -> zbus::Result<()>;
 }
 
-/// Download a whisper model file to `dest` via curl (shipped in the image).
-/// Writes to a `.part` sidecar and renames on success so a partial download
-/// never looks like a complete model to `resolve_model`.
-async fn download_model(url: &str, dest: &std::path::Path) -> anyhow::Result<()> {
+/// Stream a whisper model from the whisper.cpp repo to `dest`, sending a
+/// coalesced 0–100 percentage over `progress` as it downloads. Writes to a
+/// `.part` sidecar and renames on success so a partial download never looks
+/// like a complete model to `resolve_model`. Percentage needs a Content-Length;
+/// if the server omits it the file still downloads, just without progress.
+async fn download_model(
+    url: &str,
+    dest: &std::path::Path,
+    progress: tokio::sync::mpsc::UnboundedSender<i32>,
+) -> anyhow::Result<()> {
+    use futures_util::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
     if let Some(parent) = dest.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
     let tmp = dest.with_extension("part");
-    let status = tokio::process::Command::new("curl")
-        .arg("-fL") // fail on HTTP error, follow redirects
-        .arg("--retry")
-        .arg("3")
-        .arg("-o")
-        .arg(&tmp)
-        .arg(url)
-        .status()
-        .await?;
-    if !status.success() {
-        let _ = tokio::fs::remove_file(&tmp).await;
-        anyhow::bail!("curl failed ({status}) downloading {url}");
+
+    let resp = reqwest::get(url).await?.error_for_status()?;
+    let total = resp.content_length();
+    let mut file = tokio::fs::File::create(&tmp).await?;
+    let mut downloaded: u64 = 0;
+    let mut last_pct = -1i32;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = match chunk {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = tokio::fs::remove_file(&tmp).await;
+                return Err(e.into());
+            }
+        };
+        file.write_all(&chunk).await?;
+        downloaded += chunk.len() as u64;
+        if let Some(total) = total.filter(|t| *t > 0) {
+            let pct = ((downloaded.min(total) as f64 / total as f64) * 100.0).round() as i32;
+            if pct != last_pct {
+                let _ = progress.send(pct);
+                last_pct = pct;
+            }
+        }
     }
+    file.flush().await?;
+    drop(file);
     tokio::fs::rename(&tmp, dest).await?;
     Ok(())
 }

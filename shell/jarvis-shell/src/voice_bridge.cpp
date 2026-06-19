@@ -58,14 +58,20 @@ VoiceBridge::VoiceBridge(QObject* parent) : QObject(parent)
         QStringLiteral("ModelReady"),
         this,
         SLOT(onModelReady(QString, bool, QString)));
+    const bool modelProgOk = bus.connect(
+        kService, kPath, kIface,
+        QStringLiteral("ModelProgress"),
+        this,
+        SLOT(onModelProgress(QString, int)));
 
-    if (!stateOk || !finalOk || !failedOk || !hotwordOk || !modelOk) {
+    if (!stateOk || !finalOk || !failedOk || !hotwordOk || !modelOk || !modelProgOk) {
         qCWarning(lcVoice) << "Subscription failed:"
                            << "state=" << stateOk
                            << "final=" << finalOk
                            << "failed=" << failedOk
                            << "hotword=" << hotwordOk
-                           << "model=" << modelOk;
+                           << "model=" << modelOk
+                           << "modelProgress=" << modelProgOk;
     }
 
     // Probe reachability by asking for the current state. The voice daemon
@@ -130,16 +136,21 @@ void VoiceBridge::ensureModel(const QString& name)
             QDBusPendingReply<QString> reply = *w;
             if (reply.isError()) {
                 m_modelStatus = tr("erro: %1").arg(reply.error().message());
+                m_modelPercent = -1;
             } else {
                 const auto obj = QJsonDocument::fromJson(reply.value().toUtf8()).object();
                 if (obj.value(QStringLiteral("present")).toBool()) {
                     m_modelStatus = tr("%1 pronto").arg(name);
+                    m_modelPercent = -1;
                 } else if (obj.value(QStringLiteral("started")).toBool()) {
-                    // Download running in the daemon; onModelReady finishes it.
+                    // Download running in the daemon; ModelProgress drives the
+                    // bar, ModelReady finishes it.
                     m_modelStatus = tr("baixando %1…").arg(name);
+                    m_modelPercent = 0;
                 } else {
                     m_modelStatus = obj.value(QStringLiteral("reason"))
                                         .toString(tr("erro ao baixar %1").arg(name));
+                    m_modelPercent = -1;
                 }
             }
             emit modelStatusChanged();
@@ -147,10 +158,18 @@ void VoiceBridge::ensureModel(const QString& name)
         });
 }
 
+void VoiceBridge::onModelProgress(const QString& name, int percent)
+{
+    m_modelPercent = percent;
+    m_modelStatus = tr("baixando %1… %2%").arg(name).arg(percent);
+    emit modelStatusChanged();
+}
+
 void VoiceBridge::onModelReady(const QString& name, bool success, const QString& message)
 {
     qCInfo(lcVoice) << "model ready" << name << success << message;
     m_modelStatus = success ? tr("%1 pronto").arg(name) : tr("erro: %1").arg(message);
+    m_modelPercent = -1;
     emit modelStatusChanged();
 }
 

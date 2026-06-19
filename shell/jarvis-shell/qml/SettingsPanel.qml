@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
 import Jarvis.Shell
@@ -97,6 +98,23 @@ Window {
                 font.weight: Font.Bold
                 Layout.fillWidth: true
             }
+
+            // The header (title + × close) above stays fixed; only the settings
+            // below scroll, so the × is always reachable no matter how far down
+            // you've scrolled.
+            Flickable {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                contentWidth: width
+                contentHeight: col.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                ColumnLayout {
+                    id: col
+                    width: parent.width
+                    spacing: 16
 
             // ── Row: Lilith model ─────────────────────────────────────
             ColumnLayout {
@@ -782,6 +800,28 @@ Window {
                     }
                 }
 
+                // Real download bar while a model is being fetched.
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 6
+                    visible: VoiceBridge.modelPercent >= 0
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 3
+                        color: Theme.border
+                    }
+                    Rectangle {
+                        radius: 3
+                        height: parent.height
+                        color: Theme.accent
+                        width: parent.width
+                             * Math.max(0, Math.min(100, VoiceBridge.modelPercent)) / 100
+                        Behavior on width {
+                            NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic }
+                        }
+                    }
+                }
+
                 Text {
                     visible: VoiceBridge.modelStatus.length > 0
                     Layout.fillWidth: true
@@ -792,8 +832,6 @@ Window {
                 }
             }
 
-            Item { Layout.fillHeight: true }
-
             // ── Footer ────────────────────────────────────────────────
             Text {
                 Layout.alignment: Qt.AlignRight
@@ -802,6 +840,8 @@ Window {
                     : qsTr("Settings daemon offline — alterações não serão salvas")
                 color: SettingsBridge.reachable ? Theme.success : Theme.danger
                 font.pixelSize: 11
+            }
+                }
             }
         }
     }
