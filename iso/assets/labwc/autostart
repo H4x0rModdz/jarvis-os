@@ -71,23 +71,38 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
     echo "dbus-update-activation-environment: exit=$?"
 fi
 
-# Force Flatpak apps onto Wayland. This session ships no working
-# XWayland/DISPLAY, so Flatpaks that default to X11 (Firefox, Dolphin,
-# Zed, ...) die at launch with "no DISPLAY" / "xcb could not connect to
-# display" — which is why nothing opened from the dock or the desktop
-# icons even though the apps are installed and the MIME routing is fine.
-# A --user override sets the Wayland backend env + grants the wayland
-# socket. Idempotent (cheap to re-run each login). Unlike the image's
-# /var system override, this reaches an already-installed VM through an
-# OTA autostart update — no reinstall.
+# Make sure the XDG user dirs (~/Downloads, ~/Documents, ...) exist before we
+# hand Flatpaks access to them — bootc never seeds /home, and a fresh autologin
+# user may not have them yet. Without ~/Downloads, Firefox's "save to Downloads"
+# falls back into its private sandbox dir, which Dolphin can't see.
+if command -v xdg-user-dirs-update >/dev/null 2>&1; then
+    xdg-user-dirs-update
+fi
+mkdir -p "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}"
+
+# Force Flatpak apps onto Wayland AND let them write to the real Downloads.
+# This session ships no working XWayland/DISPLAY, so Flatpaks that default to
+# X11 (Firefox, Dolphin, Zed, ...) die at launch with "no DISPLAY" / "xcb could
+# not connect to display" — which is why nothing opened from the dock or the
+# desktop icons even though the apps are installed and the MIME routing is fine.
+# A --user override sets the Wayland backend env + grants the wayland socket.
+#
+# --filesystem=xdg-download: by default a sandboxed Firefox can't write to the
+# host ~/Downloads, so automatic downloads land in its private sandbox dir that
+# Dolphin (a different sandbox) can't see — files appear "lost". Granting the
+# real Downloads dir makes downloads show up where the user (and Dolphin) expect.
+# Idempotent (cheap to re-run each login). Unlike the image's /var system
+# override, this reaches an already-installed VM through an OTA autostart update
+# — no reinstall.
 if command -v flatpak >/dev/null 2>&1; then
     flatpak override --user \
         --socket=wayland \
+        --filesystem=xdg-download \
         --env=QT_QPA_PLATFORM=wayland \
         --env=GDK_BACKEND=wayland \
         --env=MOZ_ENABLE_WAYLAND=1 2>/dev/null \
-        && echo "flatpak wayland override: applied" \
-        || echo "flatpak wayland override: failed"
+        && echo "flatpak wayland+downloads override: applied" \
+        || echo "flatpak override: failed"
 fi
 
 systemctl --user start jarvis-session.target
