@@ -55,6 +55,9 @@ const SAFE_SCOPES: &[&str] = &[
     // Changing the desktop wallpaper is cosmetic and trivially reversible —
     // no reason to interrupt the user for it.
     "desktop.modify",
+    // Web search / page fetch is Lilith's research function — the user asked
+    // for an assistant that can look things up; prompting per query defeats it.
+    "web.access",
 ];
 
 const DANGEROUS_SCOPES: &[&str] = &[

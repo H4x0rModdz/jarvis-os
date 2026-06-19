@@ -150,6 +150,11 @@ impl PermissionChecker {
             "input.type" => "input.control",
             "desktop.set_wallpaper" => "desktop.modify",
 
+            // Searching / reading the web is Lilith's core research function;
+            // the query leaving the box is inherent to the feature the user
+            // asked for, so it's safe (no prompt per search).
+            "web.search" | "web.fetch" => "web.access",
+
             // Writing the clipboard is safe; reading it can leak secrets.
             "clipboard.set" => "clipboard.write",
             "clipboard.get" => "clipboard.read",
@@ -216,6 +221,7 @@ impl PermissionChecker {
             "network.read",
             "bluetooth.read",
             "desktop.modify",
+            "web.access",
         ];
         SAFE.iter()
             .any(|prefix| scope == *prefix || scope.starts_with(&format!("{prefix}.")))
@@ -332,6 +338,8 @@ mod scope_tests {
             "compat.terminate",
             "input.type",
             "desktop.set_wallpaper",
+            "web.search",
+            "web.fetch",
         ] {
             assert_ne!(
                 PermissionChecker::required_scope(action),

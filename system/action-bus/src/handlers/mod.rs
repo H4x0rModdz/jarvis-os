@@ -12,6 +12,7 @@ pub mod screenshot;
 pub mod sdk;
 pub mod system;
 pub mod updater;
+pub mod web;
 pub mod window;
 pub mod workspace;
 

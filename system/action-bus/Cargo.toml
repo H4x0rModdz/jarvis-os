@@ -16,6 +16,10 @@ serde       = { version = "1", features = ["derive"] }
 serde_json  = "1"
 thiserror   = "1"
 tokio       = { version = "1", features = ["full"] }
+# Lilith web search / page fetch (web.* handlers). rustls keeps it off
+# openssl; no extra HTML-parser crate — we do a small best-effort parse.
+reqwest     = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+scraper     = "0.20"
 tracing     = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid        = { version = "1", features = ["v4", "serde"] }

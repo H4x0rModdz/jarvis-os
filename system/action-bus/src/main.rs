@@ -130,6 +130,9 @@ fn build_registry() -> Registry {
     reg!("input.type", handlers::input::type_text);
     reg!("desktop.set_wallpaper", handlers::desktop::set_wallpaper);
 
+    reg!("web.search", handlers::web::search);
+    reg!("web.fetch", handlers::web::fetch);
+
     reg!("clipboard.set", handlers::clipboard::set);
     reg!("clipboard.get", handlers::clipboard::get);
 
