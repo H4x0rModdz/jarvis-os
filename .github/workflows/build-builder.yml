@@ -60,8 +60,15 @@ jobs:
         run: |
           # Lowercase the owner — ghcr refuses uppercase in image paths.
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          # Stamp the image with the hash of the Containerfile that built it.
+          # build-iso.yml reads this label and rebuilds the base locally when
+          # it doesn't match the source — so adding a compile-time devel
+          # package here never leaves the image build compiling against a
+          # stale base (the qt6-qtquick3d-devel race that broke #30).
+          HASH=$(sha256sum iso/Containerfile.builder | cut -d' ' -f1)
           sudo podman build \
             --file iso/Containerfile.builder \
+            --label "org.jarvis.base-hash=${HASH}" \
             --tag "ghcr.io/${OWNER}/jarvis-builder:latest" \
             .
 
