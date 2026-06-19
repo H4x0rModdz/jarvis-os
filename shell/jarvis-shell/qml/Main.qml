@@ -147,7 +147,23 @@ Window {
     // Embodied avatar — Lilith's 3D companion (ADR 0028). A draggable,
     // always-on-top corner window that reacts to her state/emotion/speech.
     // Clicking it opens the conversation popup (same as the dock orb).
-    LilithAvatar { id: lilithAvatar }
+    //
+    // Loaded through a Loader ON PURPOSE: LilithAvatar imports QtQuick3D, which
+    // is absent on a runtime base that predates qt6-qtquick3d. Instantiating it
+    // directly would make the import failure cascade up and take the whole
+    // top-bar root down with it — the bar, the Lilith chat and every panel
+    // (settings/wifi/…) are children here. A Loader contains that failure: a
+    // broken/missing QtQuick3D just leaves the avatar absent; the rest of the
+    // shell loads normally. The avatar appears once the runtime ships Quick3D.
+    Loader {
+        id: avatarLoader
+        source: Qt.resolvedUrl("LilithAvatar.qml")
+        asynchronous: true
+        onStatusChanged: {
+            if (status === Loader.Error)
+                console.warn("Lilith avatar failed to load (QtQuick3D missing?) — shell continues without it");
+        }
+    }
 
     // Wi-Fi panel.
     ConnectivityPanel { id: connectivityPanel }
