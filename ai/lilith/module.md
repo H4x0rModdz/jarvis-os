@@ -23,7 +23,9 @@ Action Bus dispatches, then narrates the result back to the user.
 ```
 DBus  com.jarvis.Lilith  at  /com/jarvis/Lilith
 
-  Command(text: string) -> string   // JSON reply with text, action, result
+  Command(text: string) -> string   // JSON { reply, action, result, emotion }
+                                     // emotion ∈ neutral|happy|concerned drives
+                                     // the embodied avatar's face (ADR 0028)
   Recall(key: string)   -> string   // JSON { found, value? }
   Reset()                            // wipe in-memory session ring
 ```
