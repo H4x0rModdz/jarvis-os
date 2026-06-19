@@ -587,6 +587,64 @@ pub fn all_tools() -> Vec<Tool> {
                           finish; this action only stages.",
             schema: json!({ "type": "object", "properties": {} }),
         },
+        // ── input ───────────────────────────────────────────────────────
+        Tool {
+            action: "input.type",
+            description: "Type text into the app that currently has focus. To write into a \
+                          specific app, open/focus it first (app.open or window.focus), THEN \
+                          call this. Example: 'escreve oi no zed' → open zed, then input.type \
+                          with text 'oi'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string", "description": "The text to type" }
+                },
+                "required": ["text"]
+            }),
+        },
+        // ── desktop ─────────────────────────────────────────────────────
+        Tool {
+            action: "desktop.set_wallpaper",
+            description: "Change the desktop wallpaper. `source` can be a local image path, an \
+                          http(s) URL (downloaded), OR a search phrase — anything that isn't a \
+                          path/URL is searched online (Wallhaven) and the top match is used. So \
+                          'troca o wallpaper por um de gato preto' → source: 'gato preto'. \
+                          Applies immediately and persists across reboots.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "source": { "type": "string", "description": "Local image path, an http(s) URL, or a search phrase to find one online" }
+                },
+                "required": ["source"]
+            }),
+        },
+        // ── web ─────────────────────────────────────────────────────────
+        Tool {
+            action: "web.search",
+            description: "Search the web and get the top results (title, url, snippet). Use when \
+                          you need current information or facts you don't know. Follow up with \
+                          web.fetch on a result url to read it in full.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "What to search for" },
+                    "limit": { "type": "integer", "description": "Max results (1-10, default 5)" }
+                },
+                "required": ["query"]
+            }),
+        },
+        Tool {
+            action: "web.fetch",
+            description: "Fetch a web page and return its readable text, to read/summarise an \
+                          article or extract details from a web.search result.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The http(s) URL to read" }
+                },
+                "required": ["url"]
+            }),
+        },
         // ── memory (Lilith-internal — bypasses Action Bus) ─────────────
         Tool {
             action: "memory.remember",

@@ -4,12 +4,15 @@ pub mod bluetooth;
 pub mod browser;
 pub mod clipboard;
 pub mod compat;
+pub mod desktop;
 pub mod file;
+pub mod input;
 pub mod network;
 pub mod screenshot;
 pub mod sdk;
 pub mod system;
 pub mod updater;
+pub mod web;
 pub mod window;
 pub mod workspace;
 

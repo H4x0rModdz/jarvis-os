@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/actions/desktop",
+  "title": "Desktop Actions",
+  "description": "Action schemas for the desktop.* namespace",
+  "oneOf": [
+    {
+      "title": "desktop.set_wallpaper",
+      "description": "Set the desktop wallpaper from a local file path or a URL",
+      "type": "object",
+      "required": ["source"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "A local image path (~ expands) or an http(s) URL to download"
+        }
+      }
+    }
+  ]
+}

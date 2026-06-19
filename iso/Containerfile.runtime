@@ -40,6 +40,7 @@ RUN dnf -y install \
         seatd polkit NetworkManager \
         mesa-dri-drivers \
         wl-clipboard grim slurp \
+        wtype \
         swayidle \
         swaybg \
         glib2 \
@@ -145,6 +146,14 @@ RUN flatpak install --system --noninteractive --no-related -y \
 # yet another runtime for a single app.
 RUN flatpak install --system --noninteractive --no-related -y \
         flathub dev.zed.Zed
+
+# Daily-driver viewers, all KDE (Qt) so they REUSE the KDE Platform runtime
+# Dolphin already pulled — marginal cost is tens of MB each, not another
+# runtime. Gwenview (images), Okular (PDF/docs), Haruna (mpv-based media).
+# They also inherit the WhiteSur cursor/icon override and will pick up the
+# Kvantum theme when that lands (roadmap PR 3).
+RUN flatpak install --system --noninteractive --no-related -y \
+        flathub org.kde.gwenview org.kde.okular org.kde.haruna
 
 # System-wide MIME defaults — folders open in Dolphin, http(s)/html
 # in Firefox. Drops into /etc/xdg/ so every user inherits without
