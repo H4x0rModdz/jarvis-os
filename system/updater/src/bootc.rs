@@ -143,21 +143,34 @@ fn short_digest(d: &str) -> String {
         .collect()
 }
 
-/// Run `bootc upgrade`, streaming real download progress. Pulls + stages the
-/// new image; the user reboots to apply. We deliberately do NOT pass
-/// `--reboot`.
+/// Outcome classification for one upgrade attempt, so the caller can tell a
+/// "bootc didn't like the progress argument" failure (worth retrying plainly)
+/// apart from a genuine upgrade error (worth surfacing).
+enum UpgradeError {
+    /// bootc rejected `--progress-fd` — either it doesn't know the flag, or it
+    /// refuses the fd we can hand it through pkexec. Retry without progress.
+    UnsupportedProgressArg,
+    /// A real upgrade failure — surface it verbatim.
+    Other(anyhow::Error),
+}
+
+/// Run `bootc upgrade`, streaming real download progress when bootc supports it.
+/// Pulls + stages the new image; the user reboots to apply. We deliberately do
+/// NOT pass `--reboot`.
 ///
-/// `--quiet --progress-fd 1` makes bootc suppress its TTY bars and instead
-/// write JSON-lines progress events to stdout (pkexec forwards stdout). We
-/// parse each line and forward `(percent, description)` over `progress` so the
-/// daemon can emit determinate Progress signals — without this the UI sat on a
-/// frozen indeterminate "Pulling new image…" with no sign it was working.
-/// `percent` is -1 for indeterminate phases. Duplicate updates are coalesced.
+/// Progress: bootc writes JSON-lines progress events to a file descriptor given
+/// by `--progress-fd`. pkexec only forwards fds 0/1/2 to the privileged process,
+/// and bootc **refuses fd 1** ("Cannot use fd 1 for progress JSON"), so we use
+/// **fd 2 (stderr)** — the one usable stream. We parse each line into
+/// `(percent, description)` so the UI shows a real bar instead of a frozen
+/// "Pulling…". `percent` is -1 for indeterminate phases; duplicates are coalesced.
+///
+/// Resilience: a stricter/older bootc may reject `--progress-fd` entirely. We
+/// detect that and fall back to a plain `bootc upgrade` (indeterminate progress)
+/// so the upgrade always applies — losing only the live percentage.
 pub async fn apply_upgrade(
     progress: tokio::sync::mpsc::UnboundedSender<(i32, String)>,
 ) -> Result<()> {
-    use tokio::io::AsyncBufReadExt;
-
     let binary = env_path("JARVIS_UPDATER_BOOTC", DEFAULT_BOOTC);
     if !binary.exists() {
         return Err(anyhow!(
@@ -166,30 +179,106 @@ pub async fn apply_upgrade(
         ));
     }
 
-    let mut cmd = bootc_command(&binary, &["upgrade", "--quiet", "--progress-fd", "1"]);
-    cmd.stdout(std::process::Stdio::piped());
+    match run_upgrade(&binary, true, &progress).await {
+        Ok(()) => Ok(()),
+        Err(UpgradeError::UnsupportedProgressArg) => {
+            tracing::warn!("bootc rejected --progress-fd; falling back to a plain upgrade");
+            // Indeterminate so the UI still reads as "working".
+            let _ = progress.send((-1, "Baixando atualização…".to_string()));
+            match run_upgrade(&binary, false, &progress).await {
+                Ok(()) => Ok(()),
+                // The plain attempt can't hit the progress-arg path.
+                Err(UpgradeError::UnsupportedProgressArg) => {
+                    Err(anyhow!("bootc upgrade failed unexpectedly"))
+                }
+                Err(UpgradeError::Other(e)) => Err(e),
+            }
+        }
+        Err(UpgradeError::Other(e)) => Err(e),
+    }
+}
+
+/// One `bootc upgrade` attempt. With `with_progress`, asks bootc to stream JSON
+/// progress on fd 2 and relays it over `progress`; otherwise runs plain. bootc's
+/// output (progress feed and/or errors) comes on stderr either way, so we always
+/// capture it — both to parse progress and to give a real error message.
+async fn run_upgrade(
+    binary: &PathBuf,
+    with_progress: bool,
+    progress: &tokio::sync::mpsc::UnboundedSender<(i32, String)>,
+) -> Result<(), UpgradeError> {
+    use tokio::io::AsyncBufReadExt;
+
+    let mut cmd = if with_progress {
+        bootc_command(binary, &["upgrade", "--quiet", "--progress-fd", "2"])
+    } else {
+        bootc_command(binary, &["upgrade"])
+    };
+    cmd.stderr(std::process::Stdio::piped());
+
     let mut child = cmd
         .spawn()
-        .with_context(|| format!("spawn {}", binary.display()))?;
+        .with_context(|| format!("spawn {}", binary.display()))
+        .map_err(UpgradeError::Other)?;
 
-    if let Some(stdout) = child.stdout.take() {
-        let mut lines = tokio::io::BufReader::new(stdout).lines();
+    // Keep the tail of non-progress stderr lines for error context.
+    let mut stderr_tail: Vec<String> = Vec::new();
+    if let Some(stderr) = child.stderr.take() {
+        let mut lines = tokio::io::BufReader::new(stderr).lines();
         let mut last: Option<(i32, String)> = None;
-        while let Some(line) = lines.next_line().await? {
-            if let Some(update) = parse_progress_line(&line) {
-                if last.as_ref() != Some(&update) {
-                    let _ = progress.send(update.clone());
-                    last = Some(update);
+        while let Some(line) = lines
+            .next_line()
+            .await
+            .map_err(|e| UpgradeError::Other(e.into()))?
+        {
+            if with_progress {
+                if let Some(update) = parse_progress_line(&line) {
+                    if last.as_ref() != Some(&update) {
+                        let _ = progress.send(update.clone());
+                        last = Some(update);
+                    }
+                    continue;
                 }
+            }
+            stderr_tail.push(line);
+            if stderr_tail.len() > 12 {
+                stderr_tail.remove(0);
             }
         }
     }
 
-    let status = child.wait().await.context("wait for bootc upgrade")?;
-    if !status.success() {
-        return Err(anyhow!("bootc upgrade exited with {status}"));
+    let status = child
+        .wait()
+        .await
+        .context("wait for bootc upgrade")
+        .map_err(UpgradeError::Other)?;
+    if status.success() {
+        return Ok(());
     }
-    Ok(())
+
+    let stderr_text = stderr_tail.join("\n");
+    if with_progress && is_progress_arg_error(status.code(), &stderr_text) {
+        return Err(UpgradeError::UnsupportedProgressArg);
+    }
+    Err(UpgradeError::Other(anyhow!(
+        "bootc upgrade exited with {status}{}",
+        if stderr_text.trim().is_empty() {
+            String::new()
+        } else {
+            format!(": {}", stderr_text.trim())
+        }
+    )))
+}
+
+/// Did bootc fail because it didn't accept the `--progress-fd` argument (unknown
+/// flag, or a refused fd like the "Cannot use fd 1 for progress JSON" guard)
+/// rather than a real upgrade error? clap exits 2 on argument errors.
+fn is_progress_arg_error(code: Option<i32>, stderr: &str) -> bool {
+    let s = stderr.to_lowercase();
+    code == Some(2)
+        || s.contains("progress-fd")
+        || s.contains("unexpected argument")
+        || s.contains("invalid value")
 }
 
 /// Parse one JSON line from `bootc upgrade --progress-fd` into
@@ -278,6 +367,31 @@ mod tests {
         // total 0 → indeterminate (-1)
         let zero = r#"{"type":"ProgressBytes","description":"x","bytes":0,"bytes_total":0}"#;
         assert_eq!(parse_progress_line(zero), Some((-1, "x".to_string())));
+    }
+
+    #[test]
+    fn progress_arg_error_detected() {
+        // The exact message bootc prints when it refuses the fd we pass.
+        assert!(is_progress_arg_error(
+            Some(2),
+            "error: invalid value '1' for '--progress-fd <PROGRESS_FD>': Cannot use fd 1 for progress JSON"
+        ));
+        // Unknown-flag shape (older bootc without the option at all).
+        assert!(is_progress_arg_error(
+            Some(2),
+            "error: unexpected argument '--progress-fd' found"
+        ));
+    }
+
+    #[test]
+    fn real_upgrade_failure_is_not_an_arg_error() {
+        // A genuine pull/deploy failure (exit 1, no arg-parsing text) must NOT
+        // be mistaken for an unsupported-argument case, or we'd retry pointlessly.
+        assert!(!is_progress_arg_error(
+            Some(1),
+            "error: failed to pull image: connection refused"
+        ));
+        assert!(!is_progress_arg_error(None, ""));
     }
 
     #[test]
