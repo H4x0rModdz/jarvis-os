@@ -280,7 +280,7 @@ mod tests {
         let rate = 16_000u32;
         let frame = (rate as usize * 50) / 1000; // samples per 50 ms
         let mut samples = vec![0i16; frame]; // quiet frame
-        samples.extend(std::iter::repeat(i16::MAX).take(frame)); // loud frame
+        samples.extend(std::iter::repeat_n(i16::MAX, frame)); // loud frame
         let env = amplitude_envelope(&samples, rate, 50);
         assert_eq!(env.len(), 2);
         assert!(env[0] < 0.01, "quiet frame should be ~0, got {}", env[0]);
