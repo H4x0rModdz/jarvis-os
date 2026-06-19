@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jarvis-os.dev/schema/action-bus/actions/input",
+  "title": "Input Actions",
+  "description": "Action schemas for the input.* namespace",
+  "oneOf": [
+    {
+      "title": "input.type",
+      "description": "Type text into the window that currently has keyboard focus",
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "The text to type"
+        }
+      }
+    }
+  ]
+}

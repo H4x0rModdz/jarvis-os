@@ -144,6 +144,12 @@ impl PermissionChecker {
             // launching an app.
             "browser.open" => "app.launch",
 
+            // Typing arbitrary text into the focused app is powerful (it could
+            // land in a password field) — prompt. Changing the wallpaper is
+            // cosmetic + reversible — safe.
+            "input.type" => "input.control",
+            "desktop.set_wallpaper" => "desktop.modify",
+
             // Writing the clipboard is safe; reading it can leak secrets.
             "clipboard.set" => "clipboard.write",
             "clipboard.get" => "clipboard.read",
@@ -209,6 +215,7 @@ impl PermissionChecker {
             "updater.read",
             "network.read",
             "bluetooth.read",
+            "desktop.modify",
         ];
         SAFE.iter()
             .any(|prefix| scope == *prefix || scope.starts_with(&format!("{prefix}.")))
@@ -323,6 +330,8 @@ mod scope_tests {
             "compat.list_prefixes",
             "compat.list_running",
             "compat.terminate",
+            "input.type",
+            "desktop.set_wallpaper",
         ] {
             assert_ne!(
                 PermissionChecker::required_scope(action),

@@ -28,7 +28,12 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 # and stays running as the background surface. `-m fill` crops to the
 # output. Backgrounded so the rest of autostart proceeds.
 if command -v swaybg >/dev/null 2>&1; then
-    swaybg -m fill -i /usr/share/backgrounds/jarvis/wallpaper.jpg &
+    # A user-set wallpaper (written by the desktop.set_wallpaper action to
+    # this exact path) wins; otherwise the shipped default. Keeps the choice
+    # across reboots without needing to read Settings from this shell script.
+    WP="${XDG_DATA_HOME:-$HOME/.local/share}/jarvis/wallpaper"
+    [ -f "$WP" ] || WP=/usr/share/backgrounds/jarvis/wallpaper.jpg
+    swaybg -m fill -i "$WP" &
 fi
 
 # Automount removable media + a desktop notification when a drive is

@@ -587,6 +587,35 @@ pub fn all_tools() -> Vec<Tool> {
                           finish; this action only stages.",
             schema: json!({ "type": "object", "properties": {} }),
         },
+        // ── input ───────────────────────────────────────────────────────
+        Tool {
+            action: "input.type",
+            description: "Type text into the app that currently has focus. To write into a \
+                          specific app, open/focus it first (app.open or window.focus), THEN \
+                          call this. Example: 'escreve oi no zed' → open zed, then input.type \
+                          with text 'oi'.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string", "description": "The text to type" }
+                },
+                "required": ["text"]
+            }),
+        },
+        // ── desktop ─────────────────────────────────────────────────────
+        Tool {
+            action: "desktop.set_wallpaper",
+            description: "Change the desktop wallpaper from a local image path or an http(s) \
+                          URL (it downloads URLs). Applies immediately and persists across \
+                          reboots.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "source": { "type": "string", "description": "Local image path (~ ok) or an http(s) URL" }
+                },
+                "required": ["source"]
+            }),
+        },
         // ── memory (Lilith-internal — bypasses Action Bus) ─────────────
         Tool {
             action: "memory.remember",
