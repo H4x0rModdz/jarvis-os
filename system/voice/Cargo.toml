@@ -15,9 +15,15 @@ serde_json         = "1"
 thiserror          = "1"
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "time", "process"] }
+tokio              = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "time", "process", "io-util"] }
 async-trait        = "0.1"
 zbus               = { version = "4", features = ["tokio"] }
+
+# Streaming model downloads with real progress (whisper models picked in
+# Preferences). default-features off + rustls keeps it from dragging openssl;
+# `stream` gives us the chunked bytes_stream we tick a percentage off of.
+reqwest            = { version = "0.12", default-features = false, features = ["rustls-tls", "stream"] }
+futures-util       = "0.3"
 
 # V2 — STT via whisper.cpp subprocess.
 # cpal handles the microphone capture (ALSA backend on Linux). hound

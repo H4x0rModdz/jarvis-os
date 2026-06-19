@@ -144,13 +144,27 @@ impl UpdaterService {
         let ctx_owned = ctx.to_owned();
 
         tokio::spawn(async move {
-            // Indeterminate progress — bootc doesn't report percent.
-            if let Err(e) = Self::progress(&ctx_owned, "os.upgrade", -1, "Pulling new image…").await
-            {
+            // Kick off indeterminate; bootc's --progress-fd stream then drives
+            // a real download percentage as layers pull (see bootc::apply_upgrade).
+            if let Err(e) = Self::progress(&ctx_owned, "os.upgrade", -1, "Conectando…").await {
                 tracing::warn!("Progress emit failed: {e}");
             }
 
-            let outcome = bootc::apply_upgrade().await;
+            // apply_upgrade sends (percent, description) updates; we relay each
+            // as a Progress signal. The sender drops when the upgrade task ends,
+            // closing the channel so the drain loop exits.
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(i32, String)>();
+            let upgrade = tokio::spawn(async move { bootc::apply_upgrade(tx).await });
+
+            while let Some((percent, message)) = rx.recv().await {
+                if let Err(e) = Self::progress(&ctx_owned, "os.upgrade", percent, &message).await {
+                    tracing::warn!("Progress emit failed: {e}");
+                }
+            }
+
+            let outcome = upgrade
+                .await
+                .unwrap_or_else(|e| Err(anyhow::anyhow!("upgrade task panicked: {e}")));
             *svc.running.lock().await = false;
 
             let (success, message) = match outcome {
