@@ -30,6 +30,7 @@ RUN dnf -y install \
         cmake ninja-build clang gcc-c++ make \
         qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwayland-devel \
         qt6-qtbase-private-devel qt6-qtdeclarative-private-devel \
+        qt6-qtquick3d-devel \
         layer-shell-qt-devel \
         sqlite-devel \
         dbus-devel pkgconfig \
