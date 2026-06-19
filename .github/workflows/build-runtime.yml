@@ -69,11 +69,18 @@ jobs:
         run: |
           # Lowercase the owner — ghcr refuses uppercase in image paths.
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          # Stamp the Containerfile hash so build-iso.yml can detect a stale
+          # published base and rebuild locally (see build-builder.yml). Covers
+          # the Containerfile itself — a new runtime package (e.g. qt6-qtquick3d)
+          # then can't ship in an image built against the old base. Asset-only
+          # tweaks still rely on this workflow's normal trigger.
+          HASH=$(sha256sum iso/Containerfile.runtime | cut -d' ' -f1)
           # --pull=newer: always re-pull the fedora-bootc base so the weekly
           # rebuild actually picks up new kernel/security layers.
           sudo podman build \
             --pull=newer \
             --file iso/Containerfile.runtime \
+            --label "org.jarvis.base-hash=${HASH}" \
             --tag "ghcr.io/${OWNER}/jarvis-runtime:latest" \
             .
 

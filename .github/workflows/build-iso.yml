@@ -104,13 +104,32 @@ jobs:
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REF="ghcr.io/${OWNER}/jarvis-builder:latest"
+          # Staleness guard: the published base is only safe to use if it was
+          # built from the SAME Containerfile.builder as this checkout. We stamp
+          # that file's hash as a label (build-builder.yml) and compare here. A
+          # mismatch (e.g. a new compile-time devel package just landed but the
+          # base rebuild is still running / hasn't run) → build the base locally
+          # so the image never compiles against a stale base. This is what makes
+          # adding qt6-qtquick3d-devel race-free. Missing label = treat as stale.
+          WANT=$(sha256sum iso/Containerfile.builder | cut -d' ' -f1)
+          USE_LOCAL=1
           if sudo podman pull "$REF" 2>/dev/null; then
-            echo "using published builder: $REF"
-            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+            HAVE=$(sudo podman inspect "$REF" \
+              --format '{{ index .Labels "org.jarvis.base-hash" }}' 2>/dev/null || true)
+            if [ "$HAVE" = "$WANT" ]; then
+              echo "published builder matches source ($WANT) — using it"
+              echo "ref=$REF" >> "$GITHUB_OUTPUT"
+              USE_LOCAL=0
+            else
+              echo "published builder is stale (have='$HAVE' want='$WANT') — rebuilding locally"
+            fi
           else
             echo "no published builder — building locally"
+          fi
+          if [ "$USE_LOCAL" = "1" ]; then
             sudo podman build \
               --file iso/Containerfile.builder \
+              --label "org.jarvis.base-hash=${WANT}" \
               --tag localhost/jarvis-builder:local \
               .
             echo "ref=localhost/jarvis-builder:local" >> "$GITHUB_OUTPUT"
@@ -127,13 +146,31 @@ jobs:
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           REF="ghcr.io/${OWNER}/jarvis-runtime:latest"
+          # Same staleness guard as the builder (see above): use the published
+          # runtime base only when its stamped Containerfile.runtime hash matches
+          # this checkout, else rebuild locally. Stops the image from shipping
+          # without a freshly-added runtime package (e.g. qt6-qtquick3d) just
+          # because the runtime-base rebuild hasn't published yet.
+          WANT=$(sha256sum iso/Containerfile.runtime | cut -d' ' -f1)
+          USE_LOCAL=1
           if sudo podman pull "$REF" 2>/dev/null; then
-            echo "using published runtime: $REF"
-            echo "ref=$REF" >> "$GITHUB_OUTPUT"
+            HAVE=$(sudo podman inspect "$REF" \
+              --format '{{ index .Labels "org.jarvis.base-hash" }}' 2>/dev/null || true)
+            if [ "$HAVE" = "$WANT" ]; then
+              echo "published runtime matches source ($WANT) — using it"
+              echo "ref=$REF" >> "$GITHUB_OUTPUT"
+              USE_LOCAL=0
+            else
+              echo "published runtime is stale (have='$HAVE' want='$WANT') — rebuilding locally"
+            fi
           else
             echo "no published runtime — building locally"
+          fi
+          if [ "$USE_LOCAL" = "1" ]; then
             sudo podman build \
+              --pull=newer \
               --file iso/Containerfile.runtime \
+              --label "org.jarvis.base-hash=${WANT}" \
               --tag localhost/jarvis-runtime:local \
               .
             echo "ref=localhost/jarvis-runtime:local" >> "$GITHUB_OUTPUT"
