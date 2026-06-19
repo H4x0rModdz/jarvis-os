@@ -189,7 +189,10 @@ impl LilithService {
         // assistant pattern that makes "tira um screenshot e abre no
         // editor" actually work end-to-end.
         const HISTORY_TURNS: usize = 8;
-        const MAX_STEPS: usize = 4;
+        // Bumped from 4 → 8: richer chains now exist (web.search → web.fetch →
+        // act, or open → focus → input.type), which legitimately need more
+        // hops. Still bounded so a loop-thrashing model can't run away.
+        const MAX_STEPS: usize = 8;
 
         let history = self.memory.recent(HISTORY_TURNS);
         // Latest compressed-history blob, if the summarizer has fired
