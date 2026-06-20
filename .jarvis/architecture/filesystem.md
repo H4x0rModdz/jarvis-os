@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define how Jarvis OS structures its filesystem for clarity, discoverability, and AI compatibility.
+Define how LilithOS structures its filesystem for clarity, discoverability, and AI compatibility.
 
 ## Core Principle
 

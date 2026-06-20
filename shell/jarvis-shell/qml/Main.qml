@@ -53,13 +53,13 @@ Window {
         target: UpdaterBridge
         function onUpToDate() {
             ActionBusBridge.dispatch("system.notify", JSON.stringify({
-                "title": "Jarvis OS",
+                "title": "LilithOS",
                 "body": qsTr("Seu sistema já está atualizado.")
             }));
         }
         function onCheckFailed(message) {
             ActionBusBridge.dispatch("system.notify", JSON.stringify({
-                "title": "Jarvis OS",
+                "title": "LilithOS",
                 "body": qsTr("Não foi possível verificar atualizações.")
             }));
         }

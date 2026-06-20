@@ -1,5 +1,5 @@
 [Unit]
-Description=Jarvis OS user session
+Description=LilithOS user session
 Documentation=https://github.com/H4x0rModdz/jarvis-os
 Requires=jarvis-permission.service jarvis-settings.service jarvis-notifications.service jarvis-action-bus.service jarvis-lilith.service
 # Updater and Voice are advisory — if either fails to come up the rest

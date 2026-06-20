@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Jarvis OS desktop shell — a Qt6/QML application that paints the
+The LilithOS desktop shell — a Qt6/QML application that paints the
 macOS-style **top menu bar**, the floating **bottom dock** (app tiles +
 the Lilith orb), the **desktop icons**, the launcher overlay, permission
 approval dialogs, the first-boot updater splash, the preferences panel,

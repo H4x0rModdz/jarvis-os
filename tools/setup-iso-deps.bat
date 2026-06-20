@@ -1,5 +1,5 @@
 @echo off
-REM Jarvis OS - ISO build dependencies setup
+REM LilithOS - ISO build dependencies setup
 REM Initializes Ubuntu-24.04 in WSL2 and installs podman.
 REM Run this ONCE before build-iso.bat.
 
@@ -8,7 +8,7 @@ setlocal enabledelayedexpansion
 set "DISTRO=Ubuntu-24.04"
 
 echo.
-echo === Jarvis OS - ISO build deps setup ===
+echo === LilithOS - ISO build deps setup ===
 echo   Distro: %DISTRO%
 echo.
 

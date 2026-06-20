@@ -1,6 +1,6 @@
-# Jarvis OS — ISO build
+# LilithOS — ISO build
 
-This directory turns the repo into a bootable Jarvis OS install ISO. It
+This directory turns the repo into a bootable LilithOS install ISO. It
 follows the path locked in by [`.jarvis/decisions/0005-fedora-atomic-base.md`](../.jarvis/decisions/0005-fedora-atomic-base.md):
 **Fedora Atomic (bootc) + labwc + our Rust/Qt stack baked into an
 immutable OS image**.

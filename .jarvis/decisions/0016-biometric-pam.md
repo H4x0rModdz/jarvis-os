@@ -95,8 +95,8 @@ Concerns to address before V2 ships:
 ## Alternatives Considered
 
 - **fprintd-style separate daemons per biometric.** Standard but
-  duplicates work; one of the things Jarvis OS is trying to avoid
+  duplicates work; one of the things LilithOS is trying to avoid
   ("not GNOME + Ollama"). Single owner ⊃ multiple owners.
 - **No biometric.** Considered for the "design language is
-  cyberpunk-AI" reality of Jarvis OS — Lilith Mode in the greeter
+  cyberpunk-AI" reality of LilithOS — Lilith Mode in the greeter
   needs voice/face to feel honest, not just decorative. Rejected.

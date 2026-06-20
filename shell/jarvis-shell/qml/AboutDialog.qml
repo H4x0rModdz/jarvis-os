@@ -51,7 +51,7 @@ Window {
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: qsTr("Jarvis OS")
+                text: qsTr("LilithOS")
                 color: Theme.text
                 font.pixelSize: 20
                 font.weight: Font.Bold

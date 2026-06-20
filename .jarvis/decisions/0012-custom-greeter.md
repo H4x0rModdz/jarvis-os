@@ -18,7 +18,7 @@ create `greeter`), not as the user being logged in.
 Three off-the-shelf greeters exist:
 
 - **tuigreet** — TUI-only. Functional but visually disconnected from
-  the rest of Jarvis OS.
+  the rest of LilithOS.
 - **gtkgreet** — GTK. Decent but pulls in the whole GTK stack just
   for one screen.
 - **regreet** — Rust + GTK. Same problem.

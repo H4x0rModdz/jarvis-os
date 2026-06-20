@@ -22,7 +22,7 @@ yet. Operators opt in service-by-service; safe-by-default until then.
 ## Boundaries
 
 - The module **owns** the biometric verdict surface. Any service that
-  trusts biometric auth on Jarvis OS goes through `pam_jarvis.so`,
+  trusts biometric auth on LilithOS goes through `pam_jarvis.so`,
   not through ad-hoc DBus calls. This means a future "lock screen
   unlocks with voice" landing automatically lights up on `sudo` too.
 - The module **does not** run the matching itself. V2 calls into

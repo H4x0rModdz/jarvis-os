@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 #
-# Jarvis OS BUILDER base image (ADR 0021 P2).
+# LilithOS BUILDER base image (ADR 0021 P2).
 #
 # This is the heavy, slow-changing half of the ISO build: the Fedora
 # toolchain + Qt6 devel headers + a from-source whisper-cli + the
@@ -130,5 +130,5 @@ RUN cd /warm \
         -p pam-jarvis \
     && rm -rf /warm
 
-LABEL org.opencontainers.image.title="Jarvis OS builder base"
+LABEL org.opencontainers.image.title="LilithOS builder base"
 LABEL org.opencontainers.image.description="Fedora 42 + Rust/Qt6 toolchain + whisper-cli + piper + numbat, prebuilt for fast ISO builds"

@@ -1,4 +1,4 @@
-Jarvis OS
+LilithOS
 AI-Native Operating System Manifesto & Technical Foundation
 Version: 0.1 Alpha Concept
 Status: Conceptual Architecture Draft
@@ -10,7 +10,7 @@ Vision
 Philosophy
 Mission
 Core Principles
-Why Jarvis OS Exists
+Why LilithOS Exists
 Strategic Direction
 Why Not Build a Kernel From Scratch Initially
 Long-Term Evolution Path
@@ -58,7 +58,7 @@ Governance Model
 Final Vision
 ---
 1. Vision
-Jarvis OS is an AI-native desktop operating system designed to combine:
+LilithOS is an AI-native desktop operating system designed to combine:
 Windows compatibility
 Linux freedom
 macOS-level polish
@@ -67,7 +67,7 @@ Open-source collaboration
 Human-centered design
 The objective is not merely to create another Linux distribution.
 The objective is to redefine how humans interact with computers.
-In Jarvis OS, artificial intelligence is not an external application.
+In LilithOS, artificial intelligence is not an external application.
 It is a native operating system component.
 The AI is capable of:
 Understanding the system
@@ -80,14 +80,14 @@ Interacting with applications
 Explaining errors
 Teaching users
 Learning preferences
-Jarvis OS aims to become:
+LilithOS aims to become:
 > The first truly AI-native desktop operating system.
 ---
 2. Philosophy
-Jarvis OS is built around five major beliefs.
+LilithOS is built around five major beliefs.
 2.1 Computers Should Feel Alive
 Traditional operating systems are passive.
-Jarvis OS should feel collaborative.
+LilithOS should feel collaborative.
 The operating system should:
 understand context
 assist proactively
@@ -112,12 +112,12 @@ avoid dark patterns
 avoid surveillance-driven design
 2.4 Design Matters
 Powerful software does not need to look ugly.
-Jarvis OS aims to combine:
+LilithOS aims to combine:
 Linux flexibility
 Windows familiarity
 macOS polish
 2.5 AI and Humans Should Cooperate
-Jarvis OS does not aim to replace users.
+LilithOS does not aim to replace users.
 It aims to amplify them.
 ---
 3. Mission
@@ -159,7 +159,7 @@ install software
 execute dangerous operations
 bypass permissions
 ---
-5. Why Jarvis OS Exists
+5. Why LilithOS Exists
 Modern operating systems suffer from several problems.
 Windows Problems
 Increasing telemetry
@@ -180,15 +180,15 @@ Closed ecosystem
 Hardware lock-in
 Limited customization
 Expensive entry point
-Jarvis OS attempts to unify the strengths of all three.
+LilithOS attempts to unify the strengths of all three.
 ---
 6. Strategic Direction
-Jarvis OS should initially launch as:
+LilithOS should initially launch as:
 > An AI-native Linux-based operating system.
 NOT as a fully custom kernel.
 Reason:
 Building a kernel from scratch immediately would massively slow development.
-The innovative value of Jarvis OS is:
+The innovative value of LilithOS is:
 AI-native UX
 compatibility systems
 automation
@@ -212,7 +212,7 @@ power management
 security
 audio pipelines
 This would delay the actual innovation layer by years.
-Jarvis OS should instead leverage Linux initially.
+LilithOS should instead leverage Linux initially.
 Potential future evolution:
 custom kernel modules
 custom scheduling layers
@@ -274,7 +274,7 @@ automation
 Traditional operating systems:
 Human-first.
 AI added later.
-Jarvis OS:
+LilithOS:
 Human + AI cooperative from the beginning.
 ---
 11. Jarvis Action Bus
@@ -303,7 +303,7 @@ easier debugging
 interoperability
 ---
 12. Lilith AI Assistant
-Lilith is the native AI assistant integrated into Jarvis OS.
+Lilith is the native AI assistant integrated into LilithOS.
 Responsibilities
 Lilith can:
 launch applications
@@ -394,7 +394,7 @@ Example voice activation:
 > "Hey Lilith"
 ---
 13. Human + AI Collaboration Model
-Jarvis OS should never make the user feel replaced.
+LilithOS should never make the user feel replaced.
 The AI should behave as:
 collaborator
 assistant
@@ -439,7 +439,7 @@ ad systems
 forced accounts
 ---
 16. Visual Identity
-Jarvis OS should pursue a premium visual identity that combines:
+LilithOS should pursue a premium visual identity that combines:
 futuristic minimalism
 fluid motion design
 translucency
@@ -463,7 +463,7 @@ GNOME
 sci-fi HUD systems
 modern glassmorphism concepts
 Design Philosophy
-Jarvis OS should avoid:
+LilithOS should avoid:
 visual clutter
 excessive transparency
 distracting animations
@@ -476,7 +476,7 @@ hierarchy
 consistency
 accessibility
 Glassmorphism Strategy
-Jarvis OS may adopt a controlled glassmorphism-based design language.
+LilithOS may adopt a controlled glassmorphism-based design language.
 Potential elements:
 translucent taskbars
 blurred floating panels
@@ -491,7 +491,7 @@ GPU accelerated
 optional on low-end hardware
 The operating system should never sacrifice usability for aesthetics.
 Recommended UI Technology
-Jarvis OS should strongly consider:
+LilithOS should strongly consider:
 Qt 6
 QML
 Wayland
@@ -537,7 +537,7 @@ translucency rules
 accessibility standards
 ---
 17. Compatibility Layer
-Jarvis OS should deeply integrate:
+LilithOS should deeply integrate:
 Wine
 Proton
 DXVK
@@ -546,7 +546,7 @@ The goal:
 Windows applications should feel native.
 ---
 18. Windows Application Support
-Jarvis OS aims to support:
+LilithOS aims to support:
 .exe applications
 Windows games
 productivity software
@@ -559,10 +559,10 @@ anti-cheat systems
 proprietary DRM
 low-level Windows internals
 However, modern Linux compatibility layers already achieve extremely high compatibility.
-Jarvis OS should simplify the experience.
+LilithOS should simplify the experience.
 ---
 19. Linux Application Support
-Jarvis OS should support:
+LilithOS should support:
 Flatpak
 AppImage
 native packages
@@ -620,7 +620,7 @@ Can manage terminals
 Every permission should be revocable.
 ---
 23.5 AI Execution Layer & Agent Orchestration
-Jarvis OS should support external AI execution agents through controlled adapters.
+LilithOS should support external AI execution agents through controlled adapters.
 Potential integrations:
 OpenClaude
 Ollama-based agents
@@ -687,14 +687,14 @@ automate safely
 remain transparent
 expose audit logs
 respect permission boundaries
-Jarvis OS should avoid creating uncontrolled autonomous agents.
+LilithOS should avoid creating uncontrolled autonomous agents.
 The AI must remain:
 inspectable
 governable
 interruptible
 permission-aware
 Long-Term Goal
-Jarvis OS may eventually support:
+LilithOS may eventually support:
 multi-agent systems
 specialized runtime agents
 AI orchestration pipelines
@@ -747,7 +747,7 @@ consistency
 Avoid hidden complexity whenever possible.
 ---
 28. Developer Experience
-Jarvis OS should become one of the best operating systems for developers.
+LilithOS should become one of the best operating systems for developers.
 Potential features:
 integrated terminals
 container support
@@ -783,7 +783,7 @@ module.md
 ```
 ---
 31. AI-Readable Engineering Standards
-Jarvis OS should intentionally optimize for AI-assisted development.
+LilithOS should intentionally optimize for AI-assisted development.
 This includes:
 predictable folder structures
 explicit naming
@@ -828,7 +828,7 @@ Goal:
 Unified install experience.
 ---
 35. Performance Goals
-Jarvis OS should aim for:
+LilithOS should aim for:
 low idle RAM usage
 low background CPU usage
 fast startup
@@ -861,7 +861,7 @@ secure containers
 identity integrations
 ---
 39. Privacy & Telemetry
-Jarvis OS should prioritize privacy.
+LilithOS should prioritize privacy.
 Telemetry must:
 be opt-in
 be transparent
@@ -965,12 +965,12 @@ maintainers council
 transparent decision-making
 ---
 50. Final Vision
-Jarvis OS is not intended to become:
+LilithOS is not intended to become:
 another Linux skin
 another Windows clone
 another AI chatbot
 The goal is larger.
-Jarvis OS aims to become:
+LilithOS aims to become:
 > A modern AI-native computing platform where humans and intelligent systems cooperate naturally.
 The operating system should:
 feel alive
@@ -979,7 +979,7 @@ empower developers
 simplify computing
 preserve user freedom
 embrace open collaboration
-Jarvis OS is an attempt to redefine the relationship between:
+LilithOS is an attempt to redefine the relationship between:
 humans
 software
 artificial intelligence

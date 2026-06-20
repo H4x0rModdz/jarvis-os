@@ -140,7 +140,7 @@ impl Service {
     async fn get_server_information(&self) -> (String, String, String, String) {
         (
             "Jarvis Notifications".into(),
-            "Jarvis OS".into(),
+            "LilithOS".into(),
             env!("CARGO_PKG_VERSION").into(),
             "1.2".into(),
         )

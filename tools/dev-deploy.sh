@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fast dev loop for a RUNNING Jarvis OS VM — no ISO rebuild.
+# Fast dev loop for a RUNNING LilithOS VM — no ISO rebuild.
 #
 # The 30-minute ISO build only matters for packaging / units / base
 # image changes. For day-to-day iteration on a Rust daemon or the Qt

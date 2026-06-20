@@ -126,6 +126,6 @@ V3 still planned as the openWakeWord swap.
 
 - **Snowboy** — abandoned upstream; we don't link to a dead project.
 - **Porcupine** — proprietary, free tier requires a paid key for
-  redistribution. Not compatible with the Jarvis OS license direction.
+  redistribution. Not compatible with the LilithOS license direction.
 - **openWakeWord** — viable; deferred to V2 once the substring-on-
   Whisper path has user feedback.

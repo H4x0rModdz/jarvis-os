@@ -2,7 +2,7 @@
 
 ## Goal
 
-Define how Lilith (the AI core) operates within Jarvis OS as a first-class system component.
+Define how Lilith (the AI core) operates within LilithOS as a first-class system component.
 
 ## Architecture Overview
 

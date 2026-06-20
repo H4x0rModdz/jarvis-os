@@ -2,7 +2,7 @@
 name = "jarvis-sdk-types"
 version = "0.1.0"
 edition = "2021"
-description = "Manifest types + loader for Jarvis OS SDK apps"
+description = "Manifest types + loader for LilithOS SDK apps"
 
 [dependencies]
 serde      = { version = "1", features = ["derive"] }

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Design every part of Jarvis OS assuming AI participation from the start — not as an afterthought.
+Design every part of LilithOS assuming AI participation from the start — not as an afterthought.
 
 ## Principles
 

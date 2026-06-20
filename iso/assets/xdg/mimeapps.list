@@ -1,4 +1,4 @@
-# Jarvis OS system-wide MIME defaults.
+# LilithOS system-wide MIME defaults.
 # Installed at /etc/xdg/mimeapps.list — applies to every user
 # unless they shadow it with ~/.config/mimeapps.list.
 #

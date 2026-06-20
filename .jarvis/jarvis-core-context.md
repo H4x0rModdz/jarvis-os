@@ -1,8 +1,8 @@
-# Jarvis OS — Core Context
+# LilithOS — Core Context
 
-> This is the project "bible". Read this first. It defines what Jarvis OS is and is not.
+> This is the project "bible". Read this first. It defines what LilithOS is and is not.
 
-## What Jarvis OS Is
+## What LilithOS Is
 
 - An AI-native desktop operating system
 - Linux-based (custom kernel is future research, not current goal)
@@ -11,7 +11,7 @@
 - Compatibility-oriented (Windows apps should feel native via Wine/Proton)
 - Built for real people doing real daily work
 
-## What Jarvis OS Is NOT
+## What LilithOS Is NOT
 
 - A Windows clone
 - Another Linux skin
@@ -22,7 +22,7 @@
 
 ## The Central Innovation
 
-Jarvis OS treats AI as a **native operating system component**, not a bolt-on.
+LilithOS treats AI as a **native operating system component**, not a bolt-on.
 
 This changes:
 - Architecture (Action Bus exists because AI needs structured system access)

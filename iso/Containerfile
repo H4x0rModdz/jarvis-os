@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 #
-# Jarvis OS image build.
+# LilithOS image build.
 #
 # Two stages:
 #   1. `builder` — FROM the prebuilt jarvis-builder base (ADR 0021 P2),
@@ -152,7 +152,7 @@ FROM ${RUNTIME_IMAGE}
 ARG JARVIS_VERSION=0.0.1
 # Repeat from stage 1 — Containerfile ARGs don't cross stages.
 ARG BUILD_COMPOSITOR=0
-LABEL org.opencontainers.image.title="Jarvis OS"
+LABEL org.opencontainers.image.title="LilithOS"
 LABEL org.opencontainers.image.description="AI-native desktop OS, built on Fedora Atomic + labwc"
 LABEL org.opencontainers.image.version="${JARVIS_VERSION}"
 LABEL org.opencontainers.image.source="https://github.com/H4x0rModdz/jarvis-os"

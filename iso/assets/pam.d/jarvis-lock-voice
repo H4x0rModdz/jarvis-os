@@ -1,5 +1,5 @@
 #%PAM-1.0
-# Jarvis OS lock-screen — voice-only path.
+# LilithOS lock-screen — voice-only path.
 #
 # Used by `com.jarvis.Lock.VerifyVoice()`. pam_jarvis.so is `required`
 # (not `sufficient`) so a voice miss or unavailable daemon fails the

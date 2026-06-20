@@ -8,7 +8,7 @@ Understand and correctly use Linux system internals to build a stable, performan
 
 ### Wayland
 
-- Jarvis OS is Wayland-first — X11 support is compatibility-only via XWayland
+- LilithOS is Wayland-first — X11 support is compatibility-only via XWayland
 - Use `wl_surface`, `xdg_toplevel`, and `xdg_popup` protocols correctly
 - Custom compositor must implement `xdg-shell` at minimum
 - Avoid X11-isms: no XGetWindowAttributes, no _NET_WM_* hacks

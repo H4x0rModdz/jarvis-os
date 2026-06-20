@@ -1,4 +1,4 @@
-Pra um projeto tipo Jarvis OS, as skills do Claude Code vão definir MUITO a qualidade do projeto. Porque tu não tá fazendo “um app”. Tu tá fazendo:
+Pra um projeto tipo LilithOS, as skills do Claude Code vão definir MUITO a qualidade do projeto. Porque tu não tá fazendo “um app”. Tu tá fazendo:
 
 
 
@@ -614,7 +614,7 @@ e ninguém mais entende nada. Inclusive a IA.
 
 Sinceramente?
 
-Se tu montar essas skills direito, teu Claude Code vira quase um “cofounder técnico operacional” da Jarvis OS.
+Se tu montar essas skills direito, teu Claude Code vira quase um “cofounder técnico operacional” da LilithOS.
 
 
 
@@ -632,7 +632,7 @@ Se tu estruturar isso direito, o Claude Code começa a agir menos como autocompl
 
 
 
-“um engenheiro que entende a filosofia da Jarvis OS”.
+“um engenheiro que entende a filosofia da LilithOS”.
 
 
 
@@ -872,7 +872,7 @@ jarvis-design-language.md
 
 
 
-Jarvis OS should feel:
+LilithOS should feel:
 
 
 
@@ -1076,11 +1076,11 @@ Exemplo:
 
 
 
-\# Jarvis OS Core Context
+\# LilithOS Core Context
 
 
 
-Jarvis OS is:
+LilithOS is:
 
 
 
@@ -1096,7 +1096,7 @@ Jarvis OS is:
 
 
 
-Jarvis OS is NOT:
+LilithOS is NOT:
 
 
 

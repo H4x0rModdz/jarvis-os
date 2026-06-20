@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-Jarvis OS's central promise — "AI is a native OS component, not a
+LilithOS's central promise — "AI is a native OS component, not a
 bolt-on" — only fully lands when third-party apps can plug into the
 same Action Bus that Lilith and the shell use. Without an SDK, every
 new capability requires editing the Jarvis monorepo: any external app

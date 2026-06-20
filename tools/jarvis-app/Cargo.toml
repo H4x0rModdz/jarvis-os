@@ -2,7 +2,7 @@
 name = "jarvis-app"
 version = "0.1.0"
 edition = "2021"
-description = "Developer CLI for Jarvis OS SDK apps — scaffold + validate"
+description = "Developer CLI for LilithOS SDK apps — scaffold + validate"
 
 [[bin]]
 name = "jarvis-app"

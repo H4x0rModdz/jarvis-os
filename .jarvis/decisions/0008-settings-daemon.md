@@ -84,5 +84,5 @@ CREATE TABLE settings (
   ties settings availability to Lilith being up. Lilith can crash
   cleanly; settings must outlive that crash.
 - **Per-module config.** Rejected: each daemon parsing its own config
-  file is exactly the pattern Jarvis OS is meant to replace. Action
+  file is exactly the pattern LilithOS is meant to replace. Action
   Bus + Settings + Permission together are the unified surface.

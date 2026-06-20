@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The Action Bus is the central orchestration layer of Jarvis OS. All interactions — from AI commands to user gestures to automation scripts — resolve into structured actions dispatched through the bus.
+The Action Bus is the central orchestration layer of LilithOS. All interactions — from AI commands to user gestures to automation scripts — resolve into structured actions dispatched through the bus.
 
 ## Design Goals
 

@@ -146,7 +146,7 @@ Window {
                         spacing: 2
 
                         Text {
-                            text: (modelData.app || "Jarvis").toUpperCase()
+                            text: (modelData.app || "LilithOS").toUpperCase()
                             color: Theme.accent
                             font.pixelSize: 9
                             font.weight: Font.Bold

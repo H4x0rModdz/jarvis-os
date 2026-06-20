@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Jarvis OS — WSL2 Development Environment Setup
+# LilithOS — WSL2 Development Environment Setup
 # Run this INSIDE WSL2 after installing it:
 #   bash tools/dev-setup-wsl.sh
 
 set -e
 
-echo "==> Jarvis OS WSL2 dev environment setup"
+echo "==> LilithOS WSL2 dev environment setup"
 
 # ── System dependencies ───────────────────────────────────────────────────
 echo "==> Installing system packages..."

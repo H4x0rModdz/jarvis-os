@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Owns Wine on Jarvis OS. Spawns Windows binaries with a controlled
+Owns Wine on LilithOS. Spawns Windows binaries with a controlled
 environment so the rest of the system has a single, predictable
 surface for "run this .exe" instead of every app reinventing the
 prefix dance.

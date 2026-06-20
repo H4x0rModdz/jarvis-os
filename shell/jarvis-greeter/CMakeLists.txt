@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(jarvis-greeter
     VERSION 0.1.0
-    DESCRIPTION "Jarvis OS login greeter (greetd front-end)"
+    DESCRIPTION "LilithOS login greeter (greetd front-end)"
     LANGUAGES CXX
 )
 

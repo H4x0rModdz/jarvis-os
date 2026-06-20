@@ -1,4 +1,4 @@
-# Contributing to Jarvis OS
+# Contributing to LilithOS
 
 Thanks for wanting to build the AI-native desktop with us. This guide is the
 front door: it tells you how to get a change merged. The *rules of the road*
@@ -6,7 +6,7 @@ front door: it tells you how to get a change merged. The *rules of the road*
 this document points you at the right file instead of repeating it.
 
 > **Read first:** [`.jarvis/jarvis-core-context.md`](./.jarvis/jarvis-core-context.md)
-> — what Jarvis OS is and is not. A PR that fights the project's identity
+> — what LilithOS is and is not. A PR that fights the project's identity
 > won't merge no matter how clean the code is.
 
 ---
@@ -169,7 +169,6 @@ attach the relevant tail.
 
 ## License
 
-The project license is still TBD (see [`README.md`](./README.md)). By
-contributing you agree your contributions will be released under whatever
-license the project adopts. Until then: look, learn, fork, don't ship as
-your own product.
+LilithOS is licensed under the **GNU General Public License v3.0**
+([`LICENSE`](./LICENSE)). By contributing, you agree that your contributions
+are licensed under GPL-3.0 as well.

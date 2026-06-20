@@ -2,7 +2,7 @@
 name = "pam-jarvis"
 version = "0.2.0"
 edition = "2021"
-description = "Biometric PAM module — voiceprint + faceprint hooks for Jarvis OS"
+description = "Biometric PAM module — voiceprint + faceprint hooks for LilithOS"
 
 [lib]
 name = "pam_jarvis"

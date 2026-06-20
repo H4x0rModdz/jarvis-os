@@ -102,6 +102,6 @@ on `$XDG_DATA_DIRS` being set.
 | Failure | Behavior |
 |---|---|
 | Daemon disappeared before we could call `Verify` | DBus call errors; QML shows "Sistema de bloqueio indisponível"; field stays filled so the user can retry. |
-| Wayland compositor doesn't support layer-shell | The `#ifdef JARVIS_HAVE_LAYER_SHELL` block is skipped — the window comes up as a regular toplevel. Not actually a *lock* in that mode; we log and continue rather than refusing to show anything. This only matters under non-labwc compositors (e.g., GNOME), which Jarvis OS doesn't ship. |
+| Wayland compositor doesn't support layer-shell | The `#ifdef JARVIS_HAVE_LAYER_SHELL` block is skipped — the window comes up as a regular toplevel. Not actually a *lock* in that mode; we log and continue rather than refusing to show anything. This only matters under non-labwc compositors (e.g., GNOME), which LilithOS doesn't ship. |
 | User presses Esc | Ignored. The lock window doesn't expose an "exit without auth" path. |
 | QML import fails | `engine.rootObjects().isEmpty()` → process exits 1; daemon's child-wait fires and unlocks (fail-open). Same path as a crash. |

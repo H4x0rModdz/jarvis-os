@@ -1,6 +1,6 @@
 /// udev/DRM backend — runs on real hardware via DRM/KMS.
 ///
-/// This is the production backend used when Jarvis OS boots.
+/// This is the production backend used when LilithOS boots.
 /// It uses libseat for rootless GPU access (no root required).
 ///
 /// Phase 1 status: SKELETON — not yet functional.

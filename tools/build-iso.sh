@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build a bootable Jarvis OS ISO from this repo.
+# Build a bootable LilithOS ISO from this repo.
 #
 # Pipeline:
 #   1. `podman build` produces an OCI image from iso/Containerfile.

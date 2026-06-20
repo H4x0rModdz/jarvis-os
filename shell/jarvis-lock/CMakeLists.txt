@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(jarvis-lock-window
     VERSION 0.1.0
-    DESCRIPTION "Jarvis OS session lock — Qt overlay window driven by jarvis-lock daemon"
+    DESCRIPTION "LilithOS session lock — Qt overlay window driven by jarvis-lock daemon"
     LANGUAGES CXX
 )
 

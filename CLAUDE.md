@@ -1,12 +1,12 @@
-# Jarvis OS — Claude Code Project Context
+# LilithOS — Claude Code Project Context
 
-You are working on **Jarvis OS**, an AI-native desktop operating system.
+You are working on **LilithOS**, an AI-native desktop operating system.
 
 Before doing any work, read and internalize the following files in order:
 
 ## 1. Project Bible (read first)
 
-- `.jarvis/jarvis-core-context.md` — what Jarvis OS is and is not
+- `.jarvis/jarvis-core-context.md` — what LilithOS is and is not
 
 ## 2. Skills (behavioral guidelines — always active)
 
