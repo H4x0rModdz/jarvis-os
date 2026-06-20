@@ -5,11 +5,12 @@ import QtQuick.Window
 import Jarvis.Shell
 
 /// First-boot wizard. Opens once after install — never again unless
-/// the QSettings flag `first_boot.completed` is reset. Four pages:
+/// the QSettings flag `first_boot.completed` is reset. Five pages:
 ///   1. Welcome
 ///   2. Wi-Fi (pick a network so the rest of the OS can phone home)
-///   3. Voice enrollment teaser (skippable)
-///   4. Tour
+///   3. Privacy & consent — sensitive features are opt-in (LGPD), off by default
+///   4. Voice enrollment teaser (skippable)
+///   5. Tour
 ///
 /// Each page has its own "skip / next" semantics. The wizard never
 /// blocks — every step is skippable. The final page replaces "Next"
@@ -42,6 +43,9 @@ Window {
 
     function complete() {
         SettingsBridge.setBool(completedKey, true);
+        // Record that the user saw + acted on the privacy/consent page (LGPD:
+        // evidence the opt-ins were a deliberate choice, not a silent default).
+        SettingsBridge.setBool("privacy.consent.reviewed", true);
         NetworkBridge.stopPolling();
         visible = false;
     }
@@ -61,7 +65,7 @@ Window {
                 spacing: 8
 
                 Repeater {
-                    model: 4
+                    model: 5
                     delegate: Rectangle {
                         implicitWidth: 32
                         implicitHeight: 4
@@ -314,7 +318,106 @@ Window {
                     }
                 }
 
-                // Page 3 — Voice enrollment.
+                // Page 3 — Privacy & consent (LGPD). Sensitive features collect
+                // personal/biometric data and ship OFF; the user explicitly
+                // opts in here. Each toggle writes a com.jarvis.Settings key the
+                // matching daemon reads. Nothing leaves the device.
+                ColumnLayout {
+                    spacing: 12
+
+                    Text {
+                        text: qsTr("Privacidade e consentimento")
+                        color: Theme.text
+                        font.pixelSize: 22
+                        font.weight: Font.Bold
+                    }
+                    Text {
+                        text: qsTr("Estes recursos coletam dados pessoais e ficam só no seu \
+                                    dispositivo — nada é enviado pra fora. Vêm desligados; ligue \
+                                    apenas o que quiser. Dá pra mudar depois em Preferências.")
+                        color: Theme.textDim
+                        font.pixelSize: 12
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+
+                    Item { Layout.preferredHeight: 8 }
+
+                    Repeater {
+                        model: [
+                            {
+                                key: "voice.hotword.enabled",
+                                title: qsTr("Palavra de ativação \"oi lilith\""),
+                                sub: qsTr("Mantém o microfone ouvindo para acordar a Lilith. Áudio processado localmente.")
+                            },
+                            {
+                                key: "privacy.ai_memory.enabled",
+                                title: qsTr("Memória da Lilith"),
+                                sub: qsTr("Guarda histórico de conversa e fatos que você ensinar, em banco local.")
+                            },
+                            {
+                                key: "privacy.voiceprint.enabled",
+                                title: qsTr("Desbloqueio por voz (biometria)"),
+                                sub: qsTr("Cria uma impressão de voz local para desbloquear a tela falando. Dado biométrico.")
+                            }
+                        ]
+                        delegate: RowLayout {
+                            id: consentRow
+                            Layout.fillWidth: true
+                            spacing: 12
+                            // Per-row consent state, seeded from the current
+                            // setting so re-opening the wizard reflects reality.
+                            property bool checked: false
+                            Component.onCompleted: checked = SettingsBridge.getBool(modelData.key, false)
+
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                Text {
+                                    text: modelData.title
+                                    color: Theme.text
+                                    font.pixelSize: 14
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: modelData.sub
+                                    color: Theme.textDim
+                                    font.pixelSize: 11
+                                    wrapMode: Text.WordWrap
+                                    Layout.fillWidth: true
+                                }
+                            }
+
+                            Rectangle {
+                                implicitWidth: 44
+                                implicitHeight: 24
+                                radius: 12
+                                color: consentRow.checked ? Theme.accent : Qt.rgba(1, 1, 1, 0.08)
+                                border.color: consentRow.checked ? Theme.accent : Theme.border
+                                border.width: 1
+                                Rectangle {
+                                    width: 18; height: 18; radius: 9
+                                    color: Theme.text
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    x: consentRow.checked ? parent.width - width - 3 : 3
+                                    Behavior on x { NumberAnimation { duration: Theme.animFast } }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        consentRow.checked = !consentRow.checked;
+                                        SettingsBridge.setBool(modelData.key, consentRow.checked);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Item { Layout.fillHeight: true }
+                }
+
+                // Page 4 — Voice enrollment.
                 ColumnLayout {
                     spacing: 16
 
@@ -383,7 +486,7 @@ Window {
                     Item { Layout.fillHeight: true }
                 }
 
-                // Page 4 — Tour.
+                // Page 5 — Tour.
                 ColumnLayout {
                     spacing: 16
 
