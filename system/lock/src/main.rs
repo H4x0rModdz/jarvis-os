@@ -91,6 +91,13 @@ impl LockService {
     /// path. Voice miss → returns ok:false; the lock window keeps
     /// the password field visible so the user can still type.
     async fn verify_voice(&self, #[zbus(signal_context)] ctx: SignalContext<'_>) -> String {
+        // Voice unlock is opt-in (privacy.voiceprint.enabled — LGPD, ADR 0029).
+        // Fail closed: if the user hasn't turned it on (or Settings is
+        // unreachable) we refuse rather than attempt a biometric match.
+        if !voice_unlock_opted_in().await {
+            tracing::info!("Voice unlock not opted in (privacy.voiceprint.enabled=false)");
+            return json!({ "ok": false, "reason": "Desbloqueio por voz desativado" }).to_string();
+        }
         let user = std::env::var("USER").unwrap_or_else(|_| "jarvis".to_string());
         let ok = verify_with_pamtester("jarvis-lock-voice", &user, None).await;
         if ok {
@@ -129,6 +136,48 @@ impl LockService {
         if let Err(e) = Self::lock_state_changed(ctx, false).await {
             tracing::warn!("LockStateChanged emit failed: {e}");
         }
+    }
+}
+
+/// Whether the user opted into voice unlock (`privacy.voiceprint.enabled` in
+/// com.jarvis.Settings). Defaults to **false** (opt-in) and treats an
+/// unreachable Settings daemon as "not opted in" — a biometric gate should fail
+/// closed. Handles the value arriving as a JSON bool or a truthy string.
+async fn voice_unlock_opted_in() -> bool {
+    let Ok(conn) = zbus::Connection::session().await else {
+        return false;
+    };
+    let Ok(proxy) = zbus::Proxy::new(
+        &conn,
+        "com.jarvis.Settings",
+        "/com/jarvis/Settings",
+        "com.jarvis.Settings",
+    )
+    .await
+    else {
+        return false;
+    };
+    let Ok(resp) = proxy
+        .call::<_, _, String>("Get", &("privacy.voiceprint.enabled",))
+        .await
+    else {
+        return false;
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&resp) else {
+        return false;
+    };
+    if parsed.get("found").and_then(|v| v.as_bool()) != Some(true) {
+        return false;
+    }
+    match parsed.get("value") {
+        Some(serde_json::Value::Bool(b)) => *b,
+        Some(serde_json::Value::String(s)) => {
+            matches!(
+                s.trim().to_ascii_lowercase().as_str(),
+                "true" | "1" | "yes" | "on"
+            )
+        }
+        _ => false,
     }
 }
 
