@@ -157,6 +157,17 @@ LABEL org.opencontainers.image.description="AI-native desktop OS, built on Fedor
 LABEL org.opencontainers.image.version="${JARVIS_VERSION}"
 LABEL org.opencontainers.image.source="https://github.com/H4x0rModdz/jarvis-os"
 
+# Rebrand the OS identity to LilithOS (ADR 0030). The Anaconda installer shows
+# "Install <PRETTY_NAME>", and os-release is what `bootc status`, the greeter,
+# fastfetch, etc. read — so rewriting NAME/PRETTY_NAME here rebrands the
+# installer chrome AND the running system in one safe move. We only touch the
+# display name; ID/VERSION_ID and the rest stay Fedora so dnf/$releasever and
+# any ID-based logic keep working. /etc/os-release is a symlink to this file.
+RUN sed -i \
+        -e 's/^NAME=.*/NAME="LilithOS"/' \
+        -e 's/^PRETTY_NAME=.*/PRETTY_NAME="LilithOS"/' \
+        /usr/lib/os-release
+
 # `greeter` system user — owns nothing on disk, has no shell login,
 # only exists for greetd to spawn jarvis-greeter under.
 RUN useradd --system --shell /sbin/nologin --home-dir /var/lib/greeter \
