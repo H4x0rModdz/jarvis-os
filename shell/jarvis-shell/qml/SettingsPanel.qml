@@ -379,6 +379,108 @@ Window {
                 }
             }
 
+            // ── Row: Privacidade — memória da Lilith (LGPD) ──────────
+            // Mirrors the first-boot consent page so the choice stays editable.
+            // Off by default; the Lilith daemon reads privacy.ai_memory.enabled
+            // at startup (restart to apply).
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: qsTr("Memória da Lilith")
+                        color: Theme.text
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        text: qsTr("Guarda o histórico das suas conversas em banco local. Desligado, a conversa fica só na sessão atual (aplica ao reiniciar a Lilith).")
+                        color: Theme.textDim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Rectangle {
+                    id: aiMemorySwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 44
+                    implicitHeight: 24
+                    radius: 12
+                    property bool checked: (root._settingsTick, SettingsBridge.getBool("privacy.ai_memory.enabled", false))
+                    color: checked ? Theme.accent : Qt.rgba(1, 1, 1, 0.08)
+                    border.color: checked ? Theme.accent : Theme.border
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.animFast } }
+                    Rectangle {
+                        width: 18; height: 18; radius: 9
+                        color: Theme.text
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: parent.checked ? parent.width - width - 3 : 3
+                        Behavior on x { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: SettingsBridge.setBool("privacy.ai_memory.enabled", !aiMemorySwitch.checked)
+                    }
+                }
+            }
+
+            // ── Row: Privacidade — desbloqueio por voz (LGPD) ────────
+            // Gates whether the lock screen offers biometric voice unlock
+            // (the lock daemon enforces privacy.voiceprint.enabled). Enroll
+            // your voice in the biometric section below.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: qsTr("Desbloqueio por voz")
+                        color: Theme.text
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        text: qsTr("Permite desbloquear a tela pela sua voz (dado biométrico). Desligado, só por senha.")
+                        color: Theme.textDim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Rectangle {
+                    id: voiceUnlockSwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 44
+                    implicitHeight: 24
+                    radius: 12
+                    property bool checked: (root._settingsTick, SettingsBridge.getBool("privacy.voiceprint.enabled", false))
+                    color: checked ? Theme.accent : Qt.rgba(1, 1, 1, 0.08)
+                    border.color: checked ? Theme.accent : Theme.border
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.animFast } }
+                    Rectangle {
+                        width: 18; height: 18; radius: 9
+                        color: Theme.text
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: parent.checked ? parent.width - width - 3 : 3
+                        Behavior on x { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: SettingsBridge.setBool("privacy.voiceprint.enabled", !voiceUnlockSwitch.checked)
+                    }
+                }
+            }
+
             // ── Row: Voiceprint biometric ────────────────────────────
             ColumnLayout {
                 Layout.fillWidth: true
