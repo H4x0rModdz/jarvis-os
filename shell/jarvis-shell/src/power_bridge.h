@@ -60,6 +60,13 @@ public:
     /// "Reiniciar agora" button to finish an OS upgrade.
     Q_INVOKABLE void reboot();
 
+    /// Set the login password for the fixed `jarvis` account (first-boot
+    /// wizard). Pipes `password` on stdin to
+    /// `pkexec /usr/libexec/jarvis-set-password`, authorised without a prompt
+    /// by 50-jarvis-setpw.rules. Blocks briefly until chpasswd returns.
+    /// Returns false on empty input / failure (autologin means no lockout).
+    Q_INVOKABLE bool setLoginPassword(const QString& password);
+
 signals:
     void stateChanged();
 

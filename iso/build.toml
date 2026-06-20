@@ -6,14 +6,15 @@
 [customizations]
 
 # Anaconda installer is on by default — we keep it so the user goes through
-# a normal Fedora installer in the VM. Phase 2 will swap for a custom
-# Jarvis-branded installer.
+# a normal Fedora installer in the VM. ADR 0029 Phase B will swap for a custom
+# LilithOS-branded installer (Qt + `bootc install to-disk`).
 
 [[customizations.user]]
 name = "jarvis"
-# Default dev password. The first-boot updater will prompt the user to
-# change this. Production builds replace this with a runtime-prompted
-# kickstart.
+# Transient install password. The first-boot wizard ("Defina sua senha")
+# replaces it via /usr/libexec/jarvis-set-password (ADR 0029). Kept as a real
+# value (not blank/locked) so sudo / SSH / dev-deploy work on day one and there
+# is no lockout window; the user is expected to set their own on first boot.
 password = "jarvis"
 groups = ["wheel"]
 

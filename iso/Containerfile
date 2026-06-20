@@ -293,6 +293,13 @@ RUN chmod 0755 /usr/libexec/jarvis-session-launch
 # wrongly reports "system up to date". See system/updater/src/bootc.rs.
 COPY iso/assets/polkit/49-jarvis-bootc.rules /usr/share/polkit-1/rules.d/49-jarvis-bootc.rules
 
+# First-boot password set (ADR 0029): a root helper the wizard calls via pkexec
+# to replace the transient install password. The polkit rule authorises only
+# wheel members running exactly this helper, so no agent prompt is needed.
+COPY iso/assets/polkit/50-jarvis-setpw.rules /usr/share/polkit-1/rules.d/50-jarvis-setpw.rules
+COPY iso/assets/setup/jarvis-set-password /usr/libexec/jarvis-set-password
+RUN chmod 0755 /usr/libexec/jarvis-set-password
+
 # greetd: autologin as `jarvis` and exec labwc through the wrapper.
 # Anaconda creates the user from build.toml so the name matches at
 # install time.

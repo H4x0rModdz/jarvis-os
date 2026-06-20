@@ -47,6 +47,36 @@ void PowerBridge::reboot()
     }
 }
 
+bool PowerBridge::setLoginPassword(const QString& password)
+{
+    if (password.isEmpty()) {
+        return false;
+    }
+    // Pass the password on stdin (never argv — argv shows up in `ps`). The
+    // helper hardcodes the target user to `jarvis`; the polkit rule lets wheel
+    // run it without a prompt. Blocking is fine for a one-off wizard button.
+    QProcess proc;
+    proc.start(QStringLiteral("pkexec"),
+               {QStringLiteral("/usr/libexec/jarvis-set-password")});
+    if (!proc.waitForStarted(5000)) {
+        qCWarning(lcPower) << "set-password: pkexec failed to start";
+        return false;
+    }
+    proc.write(password.toUtf8());
+    proc.write("\n");
+    proc.closeWriteChannel();
+    if (!proc.waitForFinished(15000)) {
+        qCWarning(lcPower) << "set-password: timed out";
+        proc.kill();
+        return false;
+    }
+    const bool ok = proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0;
+    if (!ok) {
+        qCWarning(lcPower) << "set-password failed:" << proc.readAllStandardError();
+    }
+    return ok;
+}
+
 PowerBridge::PowerBridge(QObject* parent) : QObject(parent)
 {
     auto bus = QDBusConnection::systemBus();

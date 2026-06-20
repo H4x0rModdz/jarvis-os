@@ -1,0 +1,20 @@
+// Let the first-boot wizard set the `jarvis` account password without an
+// interactive polkit prompt.
+//
+// The shell (running as the logged-in `jarvis` user) calls
+// `pkexec /usr/libexec/jarvis-set-password` and pipes the new password on
+// stdin. pkexec asks polkit to authorise org.freedesktop.policykit.exec; with
+// no rule, polkit would pop a password dialog our Wayland session has no agent
+// for, and the change would silently fail. We authorise it only for `wheel`
+// members and only when the program is exactly our helper — everything else
+// falls through to the default policy. Same shape as 49-jarvis-bootc.rules.
+//
+// The helper hardcodes the target user to `jarvis`, so this rule cannot be used
+// to rewrite an arbitrary account's password. See ADR 0029.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.policykit.exec" &&
+        action.lookup("program") == "/usr/libexec/jarvis-set-password" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

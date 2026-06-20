@@ -5,12 +5,13 @@ import QtQuick.Window
 import Jarvis.Shell
 
 /// First-boot wizard. Opens once after install — never again unless
-/// the QSettings flag `first_boot.completed` is reset. Five pages:
+/// the QSettings flag `first_boot.completed` is reset. Six pages:
 ///   1. Welcome
 ///   2. Wi-Fi (pick a network so the rest of the OS can phone home)
 ///   3. Privacy & consent — sensitive features are opt-in (LGPD), off by default
 ///   4. Voice enrollment teaser (skippable)
-///   5. Tour
+///   5. Set your password (replaces the transient install default)
+///   6. Tour
 ///
 /// Each page has its own "skip / next" semantics. The wizard never
 /// blocks — every step is skippable. The final page replaces "Next"
@@ -65,7 +66,7 @@ Window {
                 spacing: 8
 
                 Repeater {
-                    model: 5
+                    model: 6
                     delegate: Rectangle {
                         implicitWidth: 32
                         implicitHeight: 4
@@ -486,7 +487,150 @@ Window {
                     Item { Layout.fillHeight: true }
                 }
 
-                // Page 5 — Tour.
+                // Page 5 — Set your password. The install ships a transient
+                // default; this replaces it (protects sudo / SSH / lock). Applied
+                // via PowerBridge → pkexec → /usr/libexec/jarvis-set-password
+                // (polkit-allowed for wheel; see 50-jarvis-setpw.rules).
+                // Non-blocking: autologin keeps you in even if skipped → no lockout.
+                ColumnLayout {
+                    id: passwordPage
+                    spacing: 12
+                    property string status: ""
+
+                    Item { Layout.fillHeight: true }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        text: qsTr("Defina sua senha")
+                        color: Theme.text
+                        font.pixelSize: 22
+                        font.weight: Font.Bold
+                    }
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: 460
+                        text: qsTr("Sua conta usa uma senha provisória. Defina a sua agora — ela protege o sudo, o SSH e o desbloqueio da tela. (Recomendado.)")
+                        color: Theme.textDim
+                        font.pixelSize: 13
+                        wrapMode: Text.WordWrap
+                        horizontalAlignment: Text.AlignHCenter
+                    }
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: 320
+                        Layout.preferredHeight: 36
+                        radius: 18
+                        color: Qt.rgba(1, 1, 1, 0.06)
+                        border.color: pwNew.activeFocus ? Theme.accent : Theme.border
+                        border.width: 1
+                        TextInput {
+                            id: pwNew
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: Theme.text
+                            font.pixelSize: 14
+                            echoMode: TextInput.Password
+                            clip: true
+                        }
+                        Text {
+                            anchors.fill: pwNew
+                            verticalAlignment: Text.AlignVCenter
+                            text: qsTr("Nova senha")
+                            color: Theme.textDim
+                            font.pixelSize: 14
+                            visible: pwNew.text.length === 0
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: 320
+                        Layout.preferredHeight: 36
+                        radius: 18
+                        color: Qt.rgba(1, 1, 1, 0.06)
+                        border.color: pwConfirm.activeFocus ? Theme.accent : Theme.border
+                        border.width: 1
+                        TextInput {
+                            id: pwConfirm
+                            anchors.fill: parent
+                            anchors.leftMargin: 14
+                            anchors.rightMargin: 14
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: Theme.text
+                            font.pixelSize: 14
+                            echoMode: TextInput.Password
+                            clip: true
+                            onAccepted: setPwButton.apply()
+                        }
+                        Text {
+                            anchors.fill: pwConfirm
+                            verticalAlignment: Text.AlignVCenter
+                            text: qsTr("Confirme a senha")
+                            color: Theme.textDim
+                            font.pixelSize: 14
+                            visible: pwConfirm.text.length === 0
+                        }
+                    }
+
+                    Rectangle {
+                        id: setPwButton
+                        Layout.alignment: Qt.AlignHCenter
+                        implicitWidth: 200
+                        implicitHeight: 36
+                        radius: 18
+                        color: setPwArea.containsMouse
+                            ? Theme.accent
+                            : Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.30)
+                        border.color: Theme.accent
+                        border.width: 1
+                        function apply() {
+                            if (pwNew.text.length < 4) {
+                                passwordPage.status = qsTr("Senha muito curta (mín. 4).");
+                                return;
+                            }
+                            if (pwNew.text !== pwConfirm.text) {
+                                passwordPage.status = qsTr("As senhas não conferem.");
+                                return;
+                            }
+                            const ok = PowerBridge.setLoginPassword(pwNew.text);
+                            passwordPage.status = ok
+                                ? qsTr("Senha definida ✓")
+                                : qsTr("Não consegui definir agora — dá pra fazer depois com 'passwd' no terminal.");
+                            pwNew.text = "";
+                            pwConfirm.text = "";
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            text: qsTr("DEFINIR SENHA")
+                            color: Theme.text
+                            font.pixelSize: 11
+                            font.weight: Font.Bold
+                            font.letterSpacing: 1
+                        }
+                        MouseArea {
+                            id: setPwArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: setPwButton.apply()
+                        }
+                    }
+
+                    Text {
+                        Layout.alignment: Qt.AlignHCenter
+                        visible: passwordPage.status.length > 0
+                        text: passwordPage.status
+                        color: Theme.textDim
+                        font.pixelSize: 12
+                    }
+
+                    Item { Layout.fillHeight: true }
+                }
+
+                // Page 6 — Tour.
                 ColumnLayout {
                     spacing: 16
 
