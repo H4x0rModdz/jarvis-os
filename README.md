@@ -142,7 +142,20 @@ Every module has a `module.md` documenting its boundaries, interface, and failur
 
 ## License
 
-Open source, license TBD. Treat it as "look, learn, fork, don't ship as your own product" until a real license file lands.
+LilithOS is licensed under the **GNU General Public License v3.0** — see
+[`LICENSE`](./LICENSE). In short: you can use, study, share and modify it (and
+even sell it), but any version you **distribute** must stay open under the same
+license.
+
+**No warranty.** LilithOS is provided "as is", without warranty of any kind, to
+the extent permitted by law (GPL-3.0 §15–16). It is pre-1.0 software that runs
+system actions through an AI assistant — use it at your own risk.
+
+**Third-party components.** The OS image bundles independent programs under
+their own licenses (Fedora base, Qt/LGPL, Wine/LGPL, mpv & WhiteSur/GPL, Zed,
+Firefox/MPL, Ollama, whisper.cpp, piper, …). LilithOS ships them unmodified;
+their source is available from their upstreams (and from Fedora/Flathub for the
+packaged builds). See each component's own license for its terms.
 
 ## Contributing
 

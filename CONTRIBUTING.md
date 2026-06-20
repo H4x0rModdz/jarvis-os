@@ -169,7 +169,6 @@ attach the relevant tail.
 
 ## License
 
-The project license is still TBD (see [`README.md`](./README.md)). By
-contributing you agree your contributions will be released under whatever
-license the project adopts. Until then: look, learn, fork, don't ship as
-your own product.
+LilithOS is licensed under the **GNU General Public License v3.0**
+([`LICENSE`](./LICENSE)). By contributing, you agree that your contributions
+are licensed under GPL-3.0 as well.
