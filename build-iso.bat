@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  Jarvis OS — full ISO build from Windows (drives WSL).
+REM  LilithOS — full ISO build from Windows (drives WSL).
 REM
 REM  Builds the prebuilt builder base (once, ADR 0021 P2), the
 REM  OCI image, then the bootable ISO via bootc-image-builder.
@@ -64,7 +64,7 @@ if "%REPO%"=="" (
 )
 
 echo.
-echo === Jarvis OS ISO build ===
+echo === LilithOS ISO build ===
 echo   Distro : %DISTRO%
 echo   Repo   : %REPO%
 echo   Rebuild builder base: %REBUILD%

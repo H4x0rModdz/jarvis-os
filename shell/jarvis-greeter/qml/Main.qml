@@ -10,7 +10,7 @@ Window {
     visible: true
     width: 1366
     height: 800
-    title: qsTr("Jarvis OS")
+    title: qsTr("LilithOS")
     color: Theme.background
 
     Component.onCompleted: {
@@ -81,7 +81,7 @@ Window {
         anchors.margins: 22
 
         Text {
-            text: "Jarvis OS  2.0"
+            text: "LilithOS  2.0"
             color: Theme.textDim
             font.pixelSize: 11
             font.letterSpacing: 1

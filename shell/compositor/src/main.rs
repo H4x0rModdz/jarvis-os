@@ -22,7 +22,7 @@ use state::{ClientState, JarvisCompositor};
 use std::collections::HashMap;
 
 #[derive(Debug, clap::Parser)]
-#[command(name = "jarvis-compositor", about = "Jarvis OS Wayland compositor")]
+#[command(name = "jarvis-compositor", about = "LilithOS Wayland compositor")]
 struct Args {
     /// Backend to use
     #[arg(long, default_value = "winit")]

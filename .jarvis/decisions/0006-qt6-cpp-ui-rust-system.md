@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-Jarvis OS needs a UI framework for the desktop shell. The two realistic options were:
+LilithOS needs a UI framework for the desktop shell. The two realistic options were:
 - Qt6/QML (C++) — mature, proven for desktop shells, excellent animation/GPU support
 - Slint (Rust) — full Rust, growing ecosystem, less mature for complex desktop shells
 

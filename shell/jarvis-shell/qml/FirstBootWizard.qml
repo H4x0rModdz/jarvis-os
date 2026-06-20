@@ -21,7 +21,7 @@ Window {
     height: 540
     color: "transparent"
     flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    title: qsTr("Bem-vindo ao Jarvis OS")
+    title: qsTr("Bem-vindo ao LilithOS")
 
     /// The QSettings group name + key used to gate the wizard.
     readonly property string completedKey: "first_boot.completed"
@@ -89,7 +89,7 @@ Window {
                     Item { Layout.fillHeight: true }
 
                     // Branding mark: large accent ring with the
-                    // word "Jarvis" inside, drawn from primitives so
+                    // letter "L" (Lilith) inside, drawn from primitives so
                     // we don't depend on a baked PNG resource here.
                     Rectangle {
                         Layout.alignment: Qt.AlignHCenter
@@ -101,7 +101,7 @@ Window {
                         border.width: 3
                         Text {
                             anchors.centerIn: parent
-                            text: "J"
+                            text: "L"
                             color: Theme.text
                             font.pixelSize: 56
                             font.weight: Font.Bold
@@ -111,7 +111,7 @@ Window {
 
                     Text {
                         Layout.alignment: Qt.AlignHCenter
-                        text: qsTr("Bem-vindo ao Jarvis OS")
+                        text: qsTr("Bem-vindo ao LilithOS")
                         color: Theme.text
                         font.pixelSize: 26
                         font.weight: Font.Bold

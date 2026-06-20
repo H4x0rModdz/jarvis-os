@@ -1,8 +1,8 @@
-# Jarvis OS — Login Experience Design
+# LilithOS — Login Experience Design
 
 ## Overview
 
-The Jarvis OS login screen is not intended to feel like a traditional operating system authentication page.
+The LilithOS login screen is not intended to feel like a traditional operating system authentication page.
 
 Instead, the login experience should feel:
 
@@ -29,7 +29,7 @@ Traditional operating systems treat login as:
 - a password form
 - a static lockscreen
 
-Jarvis OS should instead treat login as:
+LilithOS should instead treat login as:
 
 - an interaction mode
 - a system state
@@ -104,7 +104,7 @@ Recommended structure:
 
 ### Left Side
 
-- Jarvis OS logo
+- LilithOS logo
 - translucent holographic effect
 - slogan text
 - soft glow
@@ -143,7 +143,7 @@ without becoming:
 
 ---
 
-# Jarvis OS Logo Design
+# LilithOS Logo Design
 
 ## Current Direction
 
@@ -153,7 +153,7 @@ The logo is based on:
 - orbital rings
 - a surrounding circular frame
 - sci-fi blue glow
-- Jarvis OS typography
+- LilithOS typography
 
 ## Symbolism
 
@@ -266,7 +266,7 @@ Feels:
 
 ### Purpose
 
-The signature experience of Jarvis OS.
+The signature experience of LilithOS.
 
 Transforms login into:
 
@@ -344,7 +344,7 @@ Feels:
 
 Lilith Mode is intended to become:
 
-> The iconic identity experience of Jarvis OS.
+> The iconic identity experience of LilithOS.
 
 ---
 
@@ -477,7 +477,7 @@ Desktop users may switch profiles using:
 
 ## Smart Mode Switching
 
-Jarvis OS may eventually learn preferred login profiles.
+LilithOS may eventually learn preferred login profiles.
 
 Examples:
 
@@ -624,7 +624,7 @@ Avoid:
 
 ## The Most Important Goal
 
-Jarvis OS should achieve something most operating systems currently lack:
+LilithOS should achieve something most operating systems currently lack:
 
 > Emotional identity.
 
@@ -643,7 +643,7 @@ macOS feels:
 - premium
 - minimal
 
-Jarvis OS should feel:
+LilithOS should feel:
 
 - adaptive
 - alive
@@ -673,5 +673,5 @@ The balance between:
 - minimalism
 - emotional interaction
 
-is critical to the identity of Jarvis OS.
+is critical to the identity of LilithOS.
 

@@ -10,7 +10,7 @@ ADR 0013 deferred Proton to Phase 4 because Wine alone covers the
 runtime, Steam-runtime container assumptions, DXVK/VKD3D toggles,
 gamescope overlays for the Steam Deck experience.
 
-Phase 4 has to decide which Proton path Jarvis OS ships.
+Phase 4 has to decide which Proton path LilithOS ships.
 
 ## Options Considered
 

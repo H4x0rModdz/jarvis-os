@@ -1,4 +1,4 @@
-# Jarvis OS
+# LilithOS
 
 > An AI-native desktop operating system. Lilith lives in the bar at the bottom of every screen, system actions flow through a single typed orchestration layer, and "open the browser to my dashboard" is a primitive — not a fragile script.
 
@@ -8,7 +8,7 @@
 
 ## What this is
 
-Jarvis OS treats AI as a **native operating-system component**, not a chatbot bolted on top of Linux. Everything the AI can do, you can do — and vice-versa — because both sides go through the same typed API.
+LilithOS treats AI as a **native operating-system component**, not a chatbot bolted on top of Linux. Everything the AI can do, you can do — and vice-versa — because both sides go through the same typed API.
 
 - **Lilith** — local AI assistant (Ollama + `qwen3:1.7b` by default), always present in the bar. Multi-turn conversation, multi-step tool chaining, streaming responses, rule-based fast path for common phrases. Never speaks to the system except through actions.
 - **Action Bus** — single DBus service every effect flows through. 38 built-in actions across `app.*`, `file.*`, `window.*`, `browser.*`, `clipboard.*`, `screenshot.*`, `audio.*`, `system.*`, `updater.*`, `compat.*`, plus any action registered by an SDK app at startup. Each call is permission-checked, dispatched to a real handler, and audit-logged.
@@ -37,7 +37,7 @@ If the answer to "what stops someone from doing this in an afternoon with `dnf i
 
 ## Architecture
 
-![Jarvis OS architecture — jarvis-shell talks over DBus to Lilith, the Permission System and the Updater, which all flow through the Jarvis Action Bus (permission-gated, audit-logged) down to the handlers. Includes the design token colour palette.](docs/architecture.png)
+![LilithOS architecture — jarvis-shell talks over DBus to Lilith, the Permission System and the Updater, which all flow through the Jarvis Action Bus (permission-gated, audit-logged) down to the handlers. Includes the design token colour palette.](docs/architecture.png)
 
 Pre-session: **greetd** spawns [`shell/jarvis-greeter/`](./shell/jarvis-greeter/module.md) (Qt overlay under `cage`). Post-login: the **labwc** compositor brings up the shell, the per-user daemons (voice, notifications, compat, lock), and Lilith. The custom Smithay-based `jarvis-compositor` is parked as a Phase 4 placeholder in [`shell/compositor/`](./shell/compositor/module.md).
 

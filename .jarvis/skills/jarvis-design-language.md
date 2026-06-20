@@ -2,7 +2,7 @@
 
 ## Visual Philosophy
 
-Jarvis OS should feel:
+LilithOS should feel:
 
 - smooth and fluid
 - futuristic but grounded

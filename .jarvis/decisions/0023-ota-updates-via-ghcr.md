@@ -5,7 +5,7 @@ Date: 2026-05-29
 
 ## Context
 
-Jarvis OS is a bootc/ostree image-based system: the design intent is to
+LilithOS is a bootc/ostree image-based system: the design intent is to
 install an ISO **once**, then update by pulling a newer container image
 and rebooting (`bootc upgrade`). The updater daemon, the UpdaterSplash
 UI, the `Updater.ApplyOSUpgrade` DBus method, and the

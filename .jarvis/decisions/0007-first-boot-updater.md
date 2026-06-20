@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-The Jarvis OS ISO ships without the LLM weights baked in: the qwen3:4b
+The LilithOS ISO ships without the LLM weights baked in: the qwen3:4b
 model alone is ~2.5 GB, and shipping it inside the image would inflate
 every download and every atomic update by that amount even when the user
 already has the model on disk. Lilith therefore boots into a state where

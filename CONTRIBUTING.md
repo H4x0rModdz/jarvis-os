@@ -1,4 +1,4 @@
-# Contributing to Jarvis OS
+# Contributing to LilithOS
 
 Thanks for wanting to build the AI-native desktop with us. This guide is the
 front door: it tells you how to get a change merged. The *rules of the road*
@@ -6,7 +6,7 @@ front door: it tells you how to get a change merged. The *rules of the road*
 this document points you at the right file instead of repeating it.
 
 > **Read first:** [`.jarvis/jarvis-core-context.md`](./.jarvis/jarvis-core-context.md)
-> — what Jarvis OS is and is not. A PR that fights the project's identity
+> — what LilithOS is and is not. A PR that fights the project's identity
 > won't merge no matter how clean the code is.
 
 ---

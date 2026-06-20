@@ -575,7 +575,7 @@ pub fn all_tools() -> Vec<Tool> {
         // ── updater ─────────────────────────────────────────────────────
         Tool {
             action: "updater.check",
-            description: "Check whether the Lilith model is installed and whether a Jarvis OS \
+            description: "Check whether the Lilith model is installed and whether a LilithOS \
                           upgrade is staged. Returns model_present, os_update_available, \
                           os_version.",
             schema: json!({ "type": "object", "properties": {} }),

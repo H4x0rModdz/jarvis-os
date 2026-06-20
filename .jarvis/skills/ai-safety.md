@@ -2,7 +2,7 @@
 
 ## Goal
 
-Ensure Lilith and any AI agent operating within Jarvis OS cannot cause irreversible harm, cannot bypass user intent, and remains fully auditable.
+Ensure Lilith and any AI agent operating within LilithOS cannot cause irreversible harm, cannot bypass user intent, and remains fully auditable.
 
 ## Core Rule
 

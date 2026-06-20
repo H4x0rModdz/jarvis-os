@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-Jarvis OS needs to choose between X11 and Wayland as the primary display protocol.
+LilithOS needs to choose between X11 and Wayland as the primary display protocol.
 
 ## Decision
 

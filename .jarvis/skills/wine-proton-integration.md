@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make Windows application compatibility seamless and AI-manageable within Jarvis OS.
+Make Windows application compatibility seamless and AI-manageable within LilithOS.
 
 ## Stack
 

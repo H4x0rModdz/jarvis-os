@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-Jarvis OS needs a Linux distribution base. The candidates evaluated were:
+LilithOS needs a Linux distribution base. The candidates evaluated were:
 - Fedora (traditional)
 - NixOS
 - Arch Linux
@@ -21,7 +21,7 @@ The core requirements:
 
 ## Decision
 
-Use **Fedora Atomic** as the base, distributing Jarvis OS as an **OCI image** built on top of it.
+Use **Fedora Atomic** as the base, distributing LilithOS as an **OCI image** built on top of it.
 
 The build system is **BlueBuild** (or a custom Containerfile pipeline).
 
@@ -29,7 +29,7 @@ The build system is **BlueBuild** (or a custom Containerfile pipeline).
 
 ```
 Fedora Atomic base (OCI image)
-  └── Jarvis OS Containerfile
+  └── LilithOS Containerfile
         ├── Remove default desktop environment
         ├── Add Qt6, wlroots, Vulkan tooling
         ├── Add Jarvis shell (compositor + window manager + taskbar)
@@ -38,7 +38,7 @@ Fedora Atomic base (OCI image)
         └── Add Wine/Proton stack
 ```
 
-Jarvis OS releases are versioned OCI images. Updates are atomic. Rollback is built-in.
+LilithOS releases are versioned OCI images. Updates are atomic. Rollback is built-in.
 
 ## Reasons
 
@@ -64,7 +64,7 @@ Wayland stack available on Linux.
 
 ## Consequences
 
-- Jarvis OS dev environment is defined in a Containerfile (good: reproducible, AI-readable)
+- LilithOS dev environment is defined in a Containerfile (good: reproducible, AI-readable)
 - System updates require an image rebuild + reboot (acceptable for a desktop OS)
 - `/usr` is immutable — Jarvis system files go there at image build time, not at runtime
 - User data and config live in `/var/home` and `~/.jarvis/` (mutable layer)

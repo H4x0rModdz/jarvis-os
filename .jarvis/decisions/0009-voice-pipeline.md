@@ -7,7 +7,7 @@ Accepted
 
 The always-present bar at the bottom of the screen only earns its
 shape if you can talk to Lilith without picking up a keyboard. Voice
-is also the differentiator between Jarvis OS and any other Linux
+is also the differentiator between LilithOS and any other Linux
 distribution with Ollama installed — typed-only AI is a tray icon
 problem, not an OS problem.
 

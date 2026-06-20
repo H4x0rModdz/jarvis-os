@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(jarvis-shell
     VERSION 0.1.0
-    DESCRIPTION "Jarvis OS desktop shell (Phase 1a — toplevel window)"
+    DESCRIPTION "LilithOS desktop shell (Phase 1a — toplevel window)"
     # C is needed too: the wlr-foreign-toplevel protocol's wl_interface
     # definitions are generated as a C source (see below).
     LANGUAGES C CXX

@@ -2,7 +2,7 @@
 name = "jarvis-compositor"
 version = "0.1.0"
 edition = "2021"
-description = "Jarvis OS Wayland compositor — built on Smithay"
+description = "LilithOS Wayland compositor — built on Smithay"
 
 [[bin]]
 name = "jarvis-compositor"

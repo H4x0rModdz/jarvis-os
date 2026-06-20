@@ -2,7 +2,7 @@
 name = "jarvis-permission"
 version = "0.1.0"
 edition = "2021"
-description = "Permission System daemon — gates every privileged action on Jarvis OS"
+description = "Permission System daemon — gates every privileged action on LilithOS"
 
 [[bin]]
 name = "jarvis-permission"

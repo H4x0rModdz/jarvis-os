@@ -296,13 +296,13 @@ fn assistant_message_for(turn: &Turn) -> String {
 
 /// System prompt for the Ollama chat. Establishes identity, locale,
 /// tone, the chain semantics that the multi-step loop relies on, and
-/// the policy boundaries Jarvis OS expects of its assistant.
+/// the policy boundaries LilithOS expects of its assistant.
 ///
 /// Kept terse on purpose: smaller models (qwen3:1.7b default) get
 /// confused by long system prompts and start ignoring them. Every
 /// line here earned its place.
 const SYSTEM_PROMPT: &str = "\
-You are Lilith, the assistant inside Jarvis OS — an AI-native desktop \
+You are Lilith, the assistant inside LilithOS — an AI-native desktop \
 built on Fedora Atomic + labwc. The user runs you from a bar at the \
 bottom of every screen.
 

@@ -1,5 +1,5 @@
 ﻿<#
-  Jarvis OS — preflight doctor for the ISO build.
+  LilithOS — preflight doctor for the ISO build.
 
   Why this exists: the ISO build runs inside WSL2, which silently needs a
   whole stack to be true at once — firmware virtualization, the Windows
@@ -55,7 +55,7 @@ function Maybe-Pause {
 
 function Finish ($code) { Maybe-Pause; exit $code }
 
-Head "== Jarvis OS — preflight do build da ISO =="
+Head "== LilithOS — preflight do build da ISO =="
 Say  "Distro alvo: $Distro"
 
 # ─────────────────────────────────────────────────────────────────────────

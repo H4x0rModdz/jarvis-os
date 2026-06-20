@@ -1,5 +1,5 @@
 #%PAM-1.0
-# Jarvis OS lock-screen — password-only path.
+# LilithOS lock-screen — password-only path.
 #
 # Phase 7 wired pam_jarvis.so here as `sufficient`, but the voice
 # attempt added ~2.5 s of latency to every typed-password unlock

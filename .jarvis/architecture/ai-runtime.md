@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defines how Lilith operates as a first-class system daemon within Jarvis OS.
+Defines how Lilith operates as a first-class system daemon within LilithOS.
 
 ## Process Model
 

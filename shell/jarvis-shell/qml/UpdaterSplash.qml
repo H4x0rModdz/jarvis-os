@@ -20,7 +20,7 @@ Window {
              || UpdaterBridge.requiresReboot
     width: 560
     height: 340
-    title: qsTr("Jarvis OS")
+    title: qsTr("LilithOS")
     color: "transparent"
     flags: Qt.Dialog | Qt.WindowStaysOnTopHint
 
@@ -81,8 +81,8 @@ Window {
                         case "reboot":    return qsTr("Reinicie para concluir");
                         case "active":    return UpdaterBridge.stage === "os.upgrade"
                                               ? qsTr("Instalando atualização do sistema")
-                                              : qsTr("Preparando o Jarvis OS");
-                        default:          return qsTr("Preparando o Jarvis OS");
+                                              : qsTr("Preparando o LilithOS");
+                        default:          return qsTr("Preparando o LilithOS");
                     }
                 }
                 color: Theme.text
@@ -102,7 +102,7 @@ Window {
                     if (UpdaterBridge.failed) return UpdaterBridge.message;
                     switch (root.mode) {
                         case "os-prompt":
-                            return qsTr("Uma nova versão do Jarvis OS está pronta para ser " +
+                            return qsTr("Uma nova versão do LilithOS está pronta para ser " +
                                         "instalada. A instalação dura alguns minutos e exige " +
                                         "reiniciar.")
                                  + (UpdaterBridge.osVersion.length > 0

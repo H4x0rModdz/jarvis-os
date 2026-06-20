@@ -5,7 +5,7 @@ Accepted
 
 ## Context
 
-Jarvis OS needs a mechanism for AI, users, and automations to interact with the system. The options were:
+LilithOS needs a mechanism for AI, users, and automations to interact with the system. The options were:
 1. Direct function calls between components
 2. Event system with pub/sub
 3. Centralized action bus with structured schemas

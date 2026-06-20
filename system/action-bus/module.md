@@ -3,7 +3,7 @@
 ## Purpose
 
 The Jarvis Action Bus (JAB) is the single orchestration layer for every
-system interaction on Jarvis OS. Lilith, the shell, automations, and any
+system interaction on LilithOS. Lilith, the shell, automations, and any
 future SDK app dispatch through here — there is no other supported path
 to "do something" on the system.
 

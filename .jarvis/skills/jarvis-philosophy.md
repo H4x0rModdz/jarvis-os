@@ -6,7 +6,7 @@ This skill exists to prevent the project from drifting into complexity theater, 
 
 When in doubt, return to these.
 
-## What Jarvis OS Is
+## What LilithOS Is
 
 - An AI-native desktop operating system
 - Linux-based, open source, desktop-first
@@ -14,7 +14,7 @@ When in doubt, return to these.
 - Compatibility-oriented (Windows apps should feel native)
 - Built for real people doing real work
 
-## What Jarvis OS Is NOT
+## What LilithOS Is NOT
 
 - A Windows clone
 - Another Linux skin

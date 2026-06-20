@@ -16,7 +16,7 @@ Window {
     visible: false
     width: 520
     height: 380
-    title: qsTr("Preferências do Jarvis OS")
+    title: qsTr("Preferências do LilithOS")
     color: "transparent"
     flags: Qt.Dialog | Qt.WindowStaysOnTopHint
 
@@ -92,7 +92,7 @@ Window {
             }
 
             Text {
-                text: qsTr("Jarvis OS")
+                text: qsTr("LilithOS")
                 color: Theme.text
                 font.pixelSize: 22
                 font.weight: Font.Bold

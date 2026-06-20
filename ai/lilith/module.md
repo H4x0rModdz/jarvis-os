@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Lilith is the conversational AI core of Jarvis OS. It turns natural-
+Lilith is the conversational AI core of LilithOS. It turns natural-
 language input ("abra o vscode", "tirar print", "volume 50") into
 Action Bus dispatches, then narrates the result back to the user.
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The login screen for Jarvis OS. Spawned by `greetd` at boot, runs
+The login screen for LilithOS. Spawned by `greetd` at boot, runs
 under `cage` as the unprivileged `greeter` user, collects username +
 secrets, hands a session-start request back to greetd. After greetd
 successfully authenticates and starts the session, the greeter exits

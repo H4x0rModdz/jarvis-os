@@ -35,7 +35,7 @@ The text below was the original V1 ADR. Kept as-is for history.
 
 ## Context
 
-ADR 0016 picked PAM as the place biometric auth lives in Jarvis OS,
+ADR 0016 picked PAM as the place biometric auth lives in LilithOS,
 shipped a PAM_IGNORE scaffold, and deferred the matching itself to
 "V2". Phase 5 needs to land enough of the matching path that
 downstream surfaces (pam-jarvis V2, settings UI for enrollment,

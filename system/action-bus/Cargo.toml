@@ -2,7 +2,7 @@
 name = "jarvis-action-bus"
 version = "0.1.0"
 edition = "2021"
-description = "Jarvis OS Action Bus — central orchestration daemon"
+description = "LilithOS Action Bus — central orchestration daemon"
 
 [[bin]]
 name = "jarvis-action-bus"

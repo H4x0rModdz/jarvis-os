@@ -26,7 +26,7 @@
     },
     {
       "title": "system.set_setting",
-      "description": "Modify a Jarvis OS system setting",
+      "description": "Modify a LilithOS system setting",
       "type": "object",
       "required": ["key", "value"],
       "additionalProperties": false,
@@ -42,7 +42,7 @@
     },
     {
       "title": "system.get_setting",
-      "description": "Read a Jarvis OS system setting",
+      "description": "Read a LilithOS system setting",
       "type": "object",
       "required": ["key"],
       "additionalProperties": false,

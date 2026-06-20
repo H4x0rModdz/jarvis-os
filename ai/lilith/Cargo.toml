@@ -2,7 +2,7 @@
 name = "jarvis-lilith"
 version = "0.1.0"
 edition = "2021"
-description = "Lilith — Jarvis OS AI assistant daemon"
+description = "Lilith — LilithOS AI assistant daemon"
 
 [[bin]]
 name = "jarvis-lilith"

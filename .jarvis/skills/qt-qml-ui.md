@@ -65,7 +65,7 @@ onVisibleChanged: {
 
 ## Wayland Best Practices
 
-- Never assume window decorations — Jarvis OS controls them via the compositor
+- Never assume window decorations — LilithOS controls them via the compositor
 - Use `Window.visibility` instead of platform-specific hacks
 - Avoid `Qt.WindowFullScreen` direct calls — route through the window manager action
 

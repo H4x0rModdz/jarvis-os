@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to Jarvis OS! Fill this in so review is fast.
+Thanks for contributing to LilithOS! Fill this in so review is fast.
 Read CONTRIBUTING.md first if you haven't.
 -->
 
