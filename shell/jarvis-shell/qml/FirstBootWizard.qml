@@ -353,7 +353,7 @@ Window {
                             {
                                 key: "privacy.ai_memory.enabled",
                                 title: qsTr("Memória da Lilith"),
-                                sub: qsTr("Guarda histórico de conversa e fatos que você ensinar, em banco local.")
+                                sub: qsTr("Guarda o histórico das suas conversas em banco local, pra continuar de onde parou entre sessões.")
                             },
                             {
                                 key: "privacy.voiceprint.enabled",

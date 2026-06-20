@@ -732,9 +732,26 @@ async fn main() -> anyhow::Result<()> {
         .map(|p| p.join("lilith.db"))
         .unwrap_or_else(|| std::path::PathBuf::from("./lilith.db"));
     tracing::info!("Turn store: {}", turns_path.display());
-    let turn_store = Arc::new(turn_store::TurnStore::open(&turns_path)?);
 
-    let memory = Arc::new(SessionMemory::with_store(32, turn_store.clone()));
+    // Conversation-history persistence is opt-in (LGPD — see the first-boot
+    // privacy page + ADR 0029). When `privacy.ai_memory.enabled` is off (the
+    // default), we don't attach the on-disk TurnStore at all: history lives in
+    // the RAM ring for the current session only — nothing is written to or read
+    // from disk. Explicitly-taught facts (`memory.remember`) are governed by the
+    // act of teaching and persist independently of this switch.
+    let persist_history = settings::read_bool("privacy.ai_memory.enabled", false).await;
+    let (memory, turn_store) = if persist_history {
+        let ts = Arc::new(turn_store::TurnStore::open(&turns_path)?);
+        (
+            Arc::new(SessionMemory::with_store(32, ts.clone())),
+            Some(ts),
+        )
+    } else {
+        tracing::info!(
+            "privacy.ai_memory.enabled=false — conversation history is session-only (not persisted)"
+        );
+        (Arc::new(SessionMemory::new(32)), None)
+    };
     let facts = Arc::new(FactStore::open(&facts_path)?);
     let audit = Arc::new(AuditLog::new(audit_path));
 
@@ -767,7 +784,11 @@ async fn main() -> anyhow::Result<()> {
     // on subsequent turns via #174). Both Arc clones live for the
     // process lifetime — spawn returns nothing because the loop
     // is detached.
-    summarizer::spawn_loop(turn_store.clone(), ollama.clone());
+    // Summarizer compresses old persisted turns — only meaningful when history
+    // is actually being persisted.
+    if let Some(ts) = turn_store {
+        summarizer::spawn_loop(ts, ollama.clone());
+    }
 
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(3600)).await;
