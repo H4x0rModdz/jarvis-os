@@ -67,10 +67,11 @@ The simplest path is to grab a build artifact from a GitHub Actions run on the [
 ```text
 # In your VM:
 # - 4 GB RAM, 25 GB disk, UEFI firmware
-# - boot from jarvis-os-<version>.iso
-# - Anaconda installer; pick the disk; Begin Installation
+# - boot from the LilithOS install ISO
+# - installer; pick the disk; (recommended) check "Encrypt my data" for
+#   full-disk LUKS — the at-rest boundary (ADR 0027 / 0030)
 # - reboot, the greeter appears (Standard / Lilith / Focus modes)
-# - log in as `jarvis`, watch the updater splash
+# - log in as `jarvis`; the first-boot wizard sets your password + privacy opt-ins
 # - bar appears, type something into the Lilith input
 ```
 
