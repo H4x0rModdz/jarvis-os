@@ -57,6 +57,8 @@ qt_add_executable(jarvis-shell
     src/network_bridge.h
     src/power_bridge.cpp
     src/power_bridge.h
+    src/system_stats_bridge.cpp
+    src/system_stats_bridge.h
     src/bluetooth_bridge.cpp
     src/bluetooth_bridge.h
     src/audio_bridge.cpp
@@ -123,6 +125,7 @@ qt_add_qml_module(jarvis-shell
         qml/LilithPopup.qml
         qml/Desktop.qml
         qml/DesktopIcon.qml
+        qml/HudGraph.qml
         qml/ShellBus.qml
         qml/TopBar.qml
         qml/JarvisMenu.qml
