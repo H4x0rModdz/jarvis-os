@@ -103,6 +103,14 @@ if command -v flatpak >/dev/null 2>&1; then
         --env=MOZ_ENABLE_WAYLAND=1 2>/dev/null \
         && echo "flatpak wayland+downloads override: applied" \
         || echo "flatpak override: failed"
+    # Firefox (the daily-driver browser) gets FULL home access. The global
+    # --filesystem=xdg-download above proved too narrow: Firefox kept saving into
+    # its private sandbox dir (which feels like a "temp folder" and Dolphin can't
+    # see), so the user could never open what they downloaded. A browser must be
+    # able to save/open anywhere the user expects.
+    flatpak override --user --filesystem=home org.mozilla.firefox 2>/dev/null \
+        && echo "firefox home override: applied" \
+        || echo "firefox home override: failed"
 fi
 
 systemctl --user start jarvis-session.target

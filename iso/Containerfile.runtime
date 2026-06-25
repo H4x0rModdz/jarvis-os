@@ -220,6 +220,15 @@ RUN flatpak override --system \
         --env=GDK_BACKEND=wayland \
         --env=MOZ_ENABLE_WAYLAND=1
 
+# Firefox (the daily-driver browser) gets FULL home access — saving/opening
+# downloads must work anywhere the user expects. The global xdg-download above
+# proved too narrow: Firefox kept dumping into its private sandbox dir (feels
+# like a temp folder; Dolphin can't see it), so downloads were unopenable.
+# NOTE: --system overrides live under /var (seeded on install only); the labwc
+# autostart re-applies the same --user override each login, so already-installed
+# VMs get it via OTA without a reinstall.
+RUN flatpak override --system --filesystem=home org.mozilla.firefox
+
 # Nested user namespaces so Flatpak apps with their own inner sandbox
 # (Firefox's content process) can start. Without a budget the nested
 # clone(CLONE_NEWUSER) fails EPERM and Firefox dies right after launch —

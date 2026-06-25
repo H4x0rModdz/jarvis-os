@@ -29,9 +29,10 @@ Window {
     readonly property string mono: "monospace"
     readonly property int panelW: 300
 
-    // "Online" = NetworkManager reports an active connection. activeConnection
-    // is always a (possibly empty) map, so this is safe even pre-connect.
-    readonly property bool netOnline: Object.keys(NetworkBridge.activeConnection).length > 0
+    // "Online" = a default route exists (wired or wifi). SystemStatsBridge reads
+    // /proc/net/route; the old NetworkBridge.activeConnection check was WiFi-only,
+    // so a wired VM always showed OFFLINE.
+    readonly property bool netOnline: SystemStatsBridge.online
 
     // Lilith's state for the center panel (same priority as the dock orb).
     readonly property string lilithState: {

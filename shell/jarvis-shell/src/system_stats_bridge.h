@@ -34,6 +34,7 @@ class SystemStatsBridge : public QObject
     Q_PROPERTY(double netDownKBs READ netDownKBs NOTIFY updated)
     Q_PROPERTY(QVariantList netUpHistory READ netUpHistory NOTIFY updated)
     Q_PROPERTY(QVariantList netDownHistory READ netDownHistory NOTIFY updated)
+    Q_PROPERTY(bool online READ online NOTIFY updated)
     Q_PROPERTY(int taskCount READ taskCount NOTIFY updated)
     Q_PROPERTY(QString cpuModel READ cpuModel CONSTANT)
     /// [{ pid:int, name:string, mem:double (percent) }], top 5 by RSS.
@@ -54,6 +55,7 @@ public:
     double netDownKBs() const { return m_netDownKBs; }
     QVariantList netUpHistory() const { return m_netUpHistory; }
     QVariantList netDownHistory() const { return m_netDownHistory; }
+    bool online() const { return m_online; }
     int taskCount() const { return m_taskCount; }
     QString cpuModel() const { return m_cpuModel; }
     QVariantList topProcesses() const { return m_topProcesses; }
@@ -84,6 +86,7 @@ private:
     double m_netDownKBs = 0.0;
     QVariantList m_netUpHistory;
     QVariantList m_netDownHistory;
+    bool m_online = false;
     int m_taskCount = 0;
     QString m_cpuModel;
     QVariantList m_topProcesses;
