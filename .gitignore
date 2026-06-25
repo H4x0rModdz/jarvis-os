@@ -38,6 +38,9 @@ Makefile
 .env
 .env.local
 
+# Private business strategy — kept out of the public GPL repo on purpose.
+lilith-open.md
+
 # Claude Code / tooling (not part of the project)
 .agents/
 .claude/
