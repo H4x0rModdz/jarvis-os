@@ -44,8 +44,14 @@ Two tensions to resolve up front:
    it isn't "fixed" back to house style by mistake). It does not restyle the
    bar/dock/popups.
 
-5. **Real terminal is deferred** (Phase 2). The first cut is telemetry +
-   aesthetic + (next) the Lilith center. A real terminal means a PTY + ANSI
+5. **Lilith center (Phase 2 — done).** Between the side panels sits Lilith's
+   console: the 3D avatar (the shared `LilithAvatarView`, loaded through a
+   Loader so a missing QtQuick3D leaves just the feed) + a read-only **activity
+   feed** built from the conversation (user lines, the tools she ran via
+   chain-steps, her replies, live streaming). Read-only because the desktop
+   takes no keyboard focus — typing stays in the orb/popup.
+
+6. **Real terminal is deferred** (Phase 3). A real terminal means a PTY + ANSI
    emulator in QML, or embedding `foot` — its own effort.
 
 ## Consequences

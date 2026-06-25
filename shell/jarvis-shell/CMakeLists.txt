@@ -134,6 +134,7 @@ qt_add_qml_module(jarvis-shell
         qml/DockIcon.qml
         qml/LilithOrb.qml
         qml/LilithAvatar.qml
+        qml/LilithAvatarView.qml
 )
 
 target_link_libraries(jarvis-shell PRIVATE
