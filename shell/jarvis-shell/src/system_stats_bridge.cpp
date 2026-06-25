@@ -148,6 +148,23 @@ void SystemStatsBridge::sampleNet()
     m_prevRx = rx;
     m_prevTx = tx;
     m_haveNetPrev = true;
+
+    // "Online" = a default route exists — interface-agnostic (wired OR wifi).
+    // The HUD used to read NetworkBridge's WiFi-only activeConnection, so a
+    // wired VM (VMware NAT) always showed OFFLINE.
+    bool online = false;
+    const QString route = readAll(QStringLiteral("/proc/net/route"));
+    const QStringList rlines = route.split('\n');
+    for (const QString& line : rlines) {
+        const QStringList c = line.simplified().split(' ');
+        // Columns: Iface Destination Gateway ... — Destination 00000000 = default.
+        if (c.size() >= 2 && c[1] == QLatin1String("00000000")
+            && c[0] != QLatin1String("lo")) {
+            online = true;
+            break;
+        }
+    }
+    m_online = online;
 }
 
 void SystemStatsBridge::sampleUptime()
