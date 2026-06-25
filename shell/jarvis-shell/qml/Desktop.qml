@@ -34,6 +34,15 @@ Window {
     // is always a (possibly empty) map, so this is safe even pre-connect.
     readonly property bool netOnline: Object.keys(NetworkBridge.activeConnection).length > 0
 
+    // Lilith's state for the center panel (same priority as the dock orb).
+    readonly property string lilithState: {
+        const v = VoiceBridge.state;
+        if (v === "listening") return "listening";
+        if (v === "speaking")  return "speaking";
+        if (LilithBridge.busy || v === "processing") return "thinking";
+        return "idle";
+    }
+
     // Ticking clock for the SYSTEM panel.
     property var now: new Date()
     Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
@@ -298,6 +307,134 @@ Window {
             }
 
             Item { Layout.fillHeight: true }
+        }
+    }
+
+    // ═══════════════════════ LILITH center (Phase 2) ═════════════════════
+    // The command-center soul (ADR 0031): the 3D avatar + a live feed of what
+    // Lilith is doing (her replies + the tools she ran). The avatar loads via a
+    // Loader so a missing QtQuick3D leaves just the feed — the HUD never breaks.
+    // Read-only: the desktop takes no keyboard focus, so typing stays in the orb.
+    Rectangle {
+        id: lilithPanel
+        anchors.left: sysPanel.right
+        anchors.right: netPanel.left
+        anchors.leftMargin: 16
+        anchors.rightMargin: 16
+        anchors.verticalCenter: parent.verticalCenter
+        height: parent.height * 0.62
+        color: root.hudPanel
+        border.color: root.hudBorder
+        border.width: 1
+        radius: 2
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 16
+            spacing: 10
+
+            RowLayout {
+                Layout.fillWidth: true
+                Text { text: "PANEL"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10; font.letterSpacing: 2 }
+                Item { Layout.fillWidth: true }
+                Text { text: "LILITH"; color: root.hudCyan; font.family: root.mono; font.pixelSize: 10; font.letterSpacing: 2 }
+            }
+
+            // Avatar — isolated so a missing QtQuick3D doesn't take the HUD down.
+            Loader {
+                id: avatarLoader
+                Layout.fillWidth: true
+                Layout.preferredHeight: 200
+                asynchronous: true
+                source: Qt.resolvedUrl("LilithAvatarView.qml")
+                onStatusChanged: {
+                    if (status === Loader.Error)
+                        console.warn("HUD avatar: QtQuick3D unavailable — feed only");
+                }
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: {
+                    switch (root.lilithState) {
+                    case "listening": return "OUVINDO";
+                    case "thinking":  return "PROCESSANDO";
+                    case "speaking":  return "FALANDO";
+                    default:          return LilithBridge.reachable ? "ONLINE" : "OFFLINE";
+                    }
+                }
+                color: root.hudCyan
+                font.family: root.mono
+                font.pixelSize: 11
+                font.letterSpacing: 2
+            }
+
+            Rectangle { Layout.fillWidth: true; height: 1; color: root.hudBorder }
+
+            Text {
+                text: "ACTIVITY FEED"
+                color: root.hudDim; font.family: root.mono; font.pixelSize: 9; font.letterSpacing: 1
+            }
+
+            // Scrolling log built from the conversation: user lines, the tools
+            // Lilith ran, and her replies.
+            ListView {
+                id: feed
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 6
+                model: LilithBridge.conversation
+                onCountChanged: positionViewAtEnd()
+                Component.onCompleted: positionViewAtEnd()
+
+                delegate: Column {
+                    width: ListView.view.width
+                    spacing: 2
+
+                    Text {
+                        width: parent.width
+                        visible: modelData.role === "user"
+                        text: "> " + (modelData.text || "")
+                        color: root.hudDim
+                        font.family: root.mono
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                    }
+                    Text {
+                        width: parent.width
+                        visible: modelData.role === "lilith"
+                            && modelData.chainSteps !== undefined
+                            && modelData.chainSteps.length > 0
+                        text: (modelData.chainSteps || [])
+                            .map(function (s) { return "→ " + (s.action || ""); }).join("  ")
+                        color: "#8ad0ff"
+                        font.family: root.mono
+                        font.pixelSize: 9
+                        wrapMode: Text.WordWrap
+                    }
+                    Text {
+                        width: parent.width
+                        visible: modelData.role === "lilith"
+                        text: "λ " + (modelData.text || "")
+                        color: root.hudCyan
+                        font.family: root.mono
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
+            // Live in-flight line while she's working.
+            Text {
+                Layout.fillWidth: true
+                visible: LilithBridge.busy || LilithBridge.streamingText.length > 0
+                text: "λ " + (LilithBridge.streamingText.length > 0 ? LilithBridge.streamingText : "…")
+                color: root.hudCyan
+                font.family: root.mono
+                font.pixelSize: 10
+                wrapMode: Text.WordWrap
+            }
         }
     }
 }
