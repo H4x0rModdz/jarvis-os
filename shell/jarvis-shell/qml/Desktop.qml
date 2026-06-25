@@ -8,13 +8,12 @@ import Jarvis.Shell
 /// wlr-layer-shell *bottom* layer (above swaybg's wallpaper, below every app
 /// window). It takes no keyboard focus.
 ///
-/// Hosts two things:
-///   1. The desktop icon column (Computador / Pasta Pessoal / Lixeira).
-///   2. An eDEX-style "command center" HUD — ambient SYSTEM (left) and
-///      NETWORK (right) panels fed by SystemStatsBridge (/proc telemetry).
-///      They live on the desktop behind windows, like the reference look.
-///      This is a deliberate sci-fi *mode* aesthetic (its own cyan palette),
-///      distinct from the calm glassmorphic chrome of the bar/popups.
+/// Hosts the eDEX-style "command center" HUD — SYSTEM (left), LILITH (center)
+/// and NETWORK (right) panels, fed by SystemStatsBridge (/proc), the Lilith
+/// bridges, and MediaBridge (playerctl now-playing). Lives behind app windows;
+/// a deliberate sci-fi *mode* aesthetic (its own cyan palette), distinct from
+/// the calm glass chrome of the bar/popups. No desktop icons — the HUD owns the
+/// home; app access is the launcher/dock.
 Window {
     id: root
     objectName: "jarvis-desktop"
@@ -52,46 +51,8 @@ Window {
         if (s) { width = s.width; height = s.height; }
     }
 
-    // Clicking the empty desktop clears any icon selection.
-    MouseArea {
-        anchors.fill: parent
-        onClicked: icons.selected = ""
-    }
-
-    // ── Desktop icons (shifted right so they clear the SYSTEM panel) ──────
-    Column {
-        id: icons
-        x: root.panelW + 28
-        y: 24
-        spacing: 10
-
-        property string selected: ""
-
-        DesktopIcon {
-            label: qsTr("Computador")
-            iconName: "computer"
-            selected: icons.selected === label
-            onSelectRequested: icons.selected = label
-            onActivated: ActionBusBridge.dispatch(
-                "app.open", JSON.stringify({ "app": "/" }))
-        }
-        DesktopIcon {
-            label: qsTr("Pasta Pessoal")
-            iconName: "user-home"
-            selected: icons.selected === label
-            onSelectRequested: icons.selected = label
-            onActivated: ActionBusBridge.dispatch(
-                "app.open", JSON.stringify({ "app": HomePath }))
-        }
-        DesktopIcon {
-            label: qsTr("Lixeira")
-            iconName: "user-trash"
-            selected: icons.selected === label
-            onSelectRequested: icons.selected = label
-            onActivated: ActionBusBridge.dispatch(
-                "app.open", JSON.stringify({ "app": "trash:///" }))
-        }
-    }
+    // Desktop icons removed — the HUD owns the home now (ADR 0031). Computador /
+    // Pasta Pessoal / Lixeira are reachable from the launcher + file manager.
 
     // ════════════════════════ SYSTEM panel (left) ════════════════════════
     Rectangle {
@@ -306,7 +267,65 @@ Window {
                 stroke: "#8ad0ff"
             }
 
-            Item { Layout.fillHeight: true }
+            Item { Layout.fillHeight: true }   // pushes the media widget to the bottom
+
+            // ── Now playing (MediaBridge → playerctl) ─────────────────────
+            Rectangle { Layout.fillWidth: true; height: 1; color: root.hudBorder }
+            Text {
+                text: "NOW PLAYING"
+                color: root.hudDim; font.family: root.mono; font.pixelSize: 9; font.letterSpacing: 1
+            }
+            Text {
+                Layout.fillWidth: true
+                text: MediaBridge.hasPlayer ? (MediaBridge.title.length > 0 ? MediaBridge.title : "—")
+                                            : "Nada tocando"
+                color: root.hudCyan; font.family: root.mono; font.pixelSize: 11
+                elide: Text.ElideRight
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: MediaBridge.hasPlayer && MediaBridge.artist.length > 0
+                text: MediaBridge.artist
+                color: root.hudDim; font.family: root.mono; font.pixelSize: 9
+                elide: Text.ElideRight
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                spacing: 22
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: "⏮"
+                    color: prevMa.containsMouse ? root.hudCyan : root.hudDim
+                    font.pixelSize: 18
+                    MouseArea {
+                        id: prevMa; anchors.fill: parent; anchors.margins: -8
+                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: MediaBridge.previous()
+                    }
+                }
+                Text {
+                    text: MediaBridge.status === "Playing" ? "⏸" : "▶"
+                    color: playMa.containsMouse ? root.hudCyan : root.hudDim
+                    font.pixelSize: 20
+                    MouseArea {
+                        id: playMa; anchors.fill: parent; anchors.margins: -8
+                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: MediaBridge.playPause()
+                    }
+                }
+                Text {
+                    text: "⏭"
+                    color: nextMa.containsMouse ? root.hudCyan : root.hudDim
+                    font.pixelSize: 18
+                    MouseArea {
+                        id: nextMa; anchors.fill: parent; anchors.margins: -8
+                        hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                        onClicked: MediaBridge.next()
+                    }
+                }
+                Item { Layout.fillWidth: true }
+            }
         }
     }
 
@@ -319,10 +338,12 @@ Window {
         id: lilithPanel
         anchors.left: sysPanel.right
         anchors.right: netPanel.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
         anchors.leftMargin: 16
         anchors.rightMargin: 16
-        anchors.verticalCenter: parent.verticalCenter
-        height: parent.height * 0.62
+        anchors.topMargin: 14
+        anchors.bottomMargin: 14
         color: root.hudPanel
         border.color: root.hudBorder
         border.width: 1
@@ -344,7 +365,7 @@ Window {
             Loader {
                 id: avatarLoader
                 Layout.fillWidth: true
-                Layout.preferredHeight: 200
+                Layout.preferredHeight: 320
                 asynchronous: true
                 source: Qt.resolvedUrl("LilithAvatarView.qml")
                 onStatusChanged: {

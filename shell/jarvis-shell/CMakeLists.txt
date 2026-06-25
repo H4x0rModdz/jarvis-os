@@ -59,6 +59,8 @@ qt_add_executable(jarvis-shell
     src/power_bridge.h
     src/system_stats_bridge.cpp
     src/system_stats_bridge.h
+    src/media_bridge.cpp
+    src/media_bridge.h
     src/bluetooth_bridge.cpp
     src/bluetooth_bridge.h
     src/audio_bridge.cpp
