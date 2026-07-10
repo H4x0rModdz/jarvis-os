@@ -60,10 +60,16 @@ jobs:
 
       - name: Free up disk space
         # The Containerfile pulls a Fedora base + wayblue base + builds two
-        # Rust targets + a Qt project. Stock ubuntu-24.04 runners are tight.
+        # Rust targets + a Qt project — and when the published runtime base is
+        # stale this workflow rebuilds it locally (Ollama's GPU bundles). Stock
+        # ubuntu-24.04 runners are tight, so reclaim the preinstalled toolchains
+        # we never use (hostedtoolcache alone is ~10 GB).
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+                      /usr/local/.ghcup /opt/hostedtoolcache /usr/share/swift \
+                      /usr/local/share/boost /usr/local/share/powershell \
+                      /usr/local/lib/node_modules
+          sudo apt-get clean
           sudo docker image prune --all --force
           df -h /
 
@@ -84,6 +90,20 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y podman
+
+      - name: Move container storage to /mnt (big disk)
+        # The runner's root disk (~20 GB) can't hold the base images + build
+        # cache + a local runtime-base rebuild (Ollama's GPU bundles overflow
+        # /var/tmp during the layer commit). /mnt is the big ephemeral disk
+        # (~74 GB). Bind-mount podman's storage AND the blob-staging /var/tmp
+        # onto it BEFORE any podman command runs, so every step here (including
+        # bootc-image-builder, which mounts /var/lib/containers/storage) inherits
+        # the space transparently — no per-command flags.
+        run: |
+          sudo mkdir -p /mnt/containers /var/lib/containers /mnt/vartmp /var/tmp
+          sudo mount --bind /mnt/containers /var/lib/containers
+          sudo mount --bind /mnt/vartmp /var/tmp
+          df -h / /mnt
 
       - name: Log in to ghcr.io
         # Needed both to pull the published builder base (P2) and to
