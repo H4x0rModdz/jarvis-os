@@ -76,6 +76,12 @@ impl XdgShellHandler for JarvisCompositor {
     }
 }
 
+// These helpers are all called from the `XdgShellHandler` impl above and are
+// live in the real (bin) build. clippy `--all-targets` also compiles this binary
+// as a *test* harness, where `main` is no longer a reachability root, so private
+// items reached only through trait-impl methods look dead. Silence that false
+// positive without hiding genuinely-unused code elsewhere.
+#[allow(dead_code)]
 impl JarvisCompositor {
     fn window_for_surface(
         &self,
@@ -107,6 +113,9 @@ impl JarvisCompositor {
     }
 }
 
+// Live in the bin build (called from new_toplevel / toplevel_destroyed); dead
+// only in the test-harness build of this binary. See the note above.
+#[allow(dead_code)]
 fn window_ptr_id(window: &Window) -> usize {
     window as *const Window as usize
 }
