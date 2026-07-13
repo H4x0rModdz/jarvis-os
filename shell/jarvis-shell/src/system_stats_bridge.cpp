@@ -5,6 +5,11 @@
 #include <QVariantMap>
 
 #include <algorithm>
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 
 namespace {
@@ -23,6 +28,7 @@ QString readAll(const QString& path)
 SystemStatsBridge::SystemStatsBridge(QObject* parent) : QObject(parent)
 {
     m_cpuModel = readCpuModel();
+    m_osRelease = readOsRelease();
 
     // One-second cadence — matches the HUD's animation feel and keeps the
     // /proc reads negligible. First tick has no deltas yet (CPU/net read 0),
@@ -40,6 +46,9 @@ void SystemStatsBridge::tick()
     sampleNet();
     sampleUptime();
     sampleProcs();
+    sampleDisk();
+    sampleTemp();
+    sampleNetIdentity();
     emit updated();
 }
 
@@ -226,6 +235,125 @@ void SystemStatsBridge::sampleProcs()
         out.append(m);
     }
     m_topProcesses = out;
+}
+
+void SystemStatsBridge::sampleDisk()
+{
+    // df-style: used = total - free(incl. root-reserved); percent is used over
+    // used+available-to-us, matching what the user sees in `df`.
+    auto usage = [](const QString& path, double& usedGiB, double& totalGiB, int& pct) {
+        struct statvfs vfs;
+        if (statvfs(path.toLocal8Bit().constData(), &vfs) != 0) return;
+        const double block = double(vfs.f_frsize);
+        const double totalB = double(vfs.f_blocks) * block;
+        const double freeB = double(vfs.f_bfree) * block;   // incl. reserved
+        const double availB = double(vfs.f_bavail) * block;  // available to us
+        if (totalB <= 0.0) return;
+        const double usedB = totalB - freeB;
+        const double denom = usedB + availB;
+        totalGiB = totalB / 1024.0 / 1024.0 / 1024.0;
+        usedGiB = usedB / 1024.0 / 1024.0 / 1024.0;
+        pct = denom > 0.0 ? int(qRound(100.0 * usedB / denom)) : 0;
+    };
+    usage(QStringLiteral("/"), m_diskUsedGiB, m_diskTotalGiB, m_diskPercent);
+    usage(QDir::homePath(), m_homeUsedGiB, m_homeTotalGiB, m_homePercent);
+}
+
+void SystemStatsBridge::sampleTemp()
+{
+    // Prefer a CPU-named hwmon (k10temp/coretemp/…); fall back to the hottest of
+    // any sensor. Values are millidegrees. 0 when nothing is readable (VM).
+    QDir hwmon(QStringLiteral("/sys/class/hwmon"));
+    const QStringList mons = hwmon.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    int cpuMilli = 0;
+    int anyMilli = 0;
+    for (const QString& m : mons) {
+        QDir d(hwmon.filePath(m));
+        const QString name = readAll(d.filePath(QStringLiteral("name"))).trimmed();
+        const bool isCpu = name == QLatin1String("k10temp")
+            || name == QLatin1String("coretemp") || name == QLatin1String("zenpower")
+            || name == QLatin1String("cpu_thermal");
+        const QStringList inputs =
+            d.entryList(QStringList() << QStringLiteral("temp*_input"), QDir::Files);
+        for (const QString& in : inputs) {
+            bool ok = false;
+            const int milli = readAll(d.filePath(in)).trimmed().toInt(&ok);
+            if (!ok) continue;
+            if (milli > anyMilli) anyMilli = milli;
+            if (isCpu && milli > cpuMilli) cpuMilli = milli;
+        }
+    }
+    const int milli = cpuMilli > 0 ? cpuMilli : anyMilli;
+    m_cpuTempC = milli > 0 ? int(qRound(milli / 1000.0)) : 0;
+}
+
+void SystemStatsBridge::sampleNetIdentity()
+{
+    // The default-route interface + its gateway (from /proc/net/route) and the
+    // IPv4 bound to it (from getifaddrs). Interface-agnostic, like `online`.
+    QString iface;
+    QString gw;
+    const QString route = readAll(QStringLiteral("/proc/net/route"));
+    for (const QString& line : route.split('\n')) {
+        const QStringList c = line.simplified().split(' ');
+        // Iface Destination Gateway ...  — Destination 00000000 = default route.
+        if (c.size() >= 3 && c[1] == QLatin1String("00000000")
+            && c[0] != QLatin1String("lo")) {
+            iface = c[0];
+            bool ok = false;
+            const quint32 raw = c[2].toUInt(&ok, 16); // little-endian hex
+            if (ok && raw != 0) {
+                struct in_addr a;
+                a.s_addr = raw; // already network byte order on LE hosts
+                gw = QString::fromLatin1(inet_ntoa(a));
+            }
+            break;
+        }
+    }
+
+    QString ip;
+    if (!iface.isEmpty()) {
+        struct ifaddrs* ifap = nullptr;
+        if (getifaddrs(&ifap) == 0) {
+            for (struct ifaddrs* ifa = ifap; ifa; ifa = ifa->ifa_next) {
+                if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+                if (iface != QLatin1String(ifa->ifa_name)) continue;
+                char buf[INET_ADDRSTRLEN] = {0};
+                auto* sin = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+                if (inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf)))
+                    ip = QString::fromLatin1(buf);
+                break;
+            }
+            freeifaddrs(ifap);
+        }
+    }
+
+    m_primaryIface = iface;
+    m_gateway = gw;
+    m_ipAddress = ip;
+}
+
+QString SystemStatsBridge::readOsRelease()
+{
+    // NAME + VERSION from /etc/os-release → e.g. "LilithOS 42.20260713". Values
+    // may be quoted; strip a single pair of surrounding quotes.
+    const QString s = readAll(QStringLiteral("/etc/os-release"));
+    auto val = [&s](const QString& key) -> QString {
+        for (const QString& line : s.split('\n')) {
+            if (line.startsWith(key)) {
+                QString v = line.mid(key.size()).trimmed();
+                if (v.size() >= 2 && v.startsWith('"') && v.endsWith('"'))
+                    v = v.mid(1, v.size() - 2);
+                return v;
+            }
+        }
+        return QString();
+    };
+    QString name = val(QStringLiteral("NAME="));
+    if (name.isEmpty()) name = QStringLiteral("LilithOS");
+    QString version = val(QStringLiteral("VERSION="));
+    if (version.isEmpty()) version = val(QStringLiteral("VERSION_ID="));
+    return version.isEmpty() ? name : (name + QStringLiteral(" ") + version);
 }
 
 QString SystemStatsBridge::readCpuModel()

@@ -23,8 +23,12 @@ Window {
 
     // ── HUD palette / type (local — not the purple glass Theme) ──────────
     readonly property color hudCyan: "#18ffff"
-    readonly property color hudDim: "#4f8f8f"
-    readonly property color hudPanel: Qt.rgba(0, 0, 0, 0.55)
+    readonly property color hudDim: "#67b0b0"
+    // Dark, mostly-opaque backing. The wallpaper is a separate Wayland surface
+    // *below* this one, so there's nothing to blur through — legibility comes
+    // from an opaque-enough fill. 0.55 let a busy wallpaper wash the text (and
+    // the avatar) out; ~0.85 over near-black keeps the eDEX look but readable.
+    readonly property color hudPanel: Qt.rgba(0.02, 0.05, 0.07, 0.85)
     readonly property color hudBorder: Qt.rgba(0.094, 1.0, 1.0, 0.35)
     readonly property string mono: "monospace"
     readonly property int panelW: 300
@@ -96,6 +100,26 @@ Window {
                 color: root.hudDim
                 font.family: root.mono
                 font.pixelSize: 10
+            }
+            // Booted OS build + OTA status (UpdaterBridge). Informational — the
+            // full install flow lives in the updater splash.
+            Text {
+                Layout.fillWidth: true
+                text: SystemStatsBridge.osRelease
+                color: root.hudDim; font.family: root.mono; font.pixelSize: 9
+                elide: Text.ElideRight
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: text.length > 0
+                text: {
+                    if (UpdaterBridge.requiresReboot) return "● REINICIE PARA APLICAR";
+                    if (UpdaterBridge.active && UpdaterBridge.stage === "os.upgrade")
+                        return "● ATUALIZANDO " + (UpdaterBridge.percent >= 0 ? UpdaterBridge.percent + "%" : "…");
+                    if (UpdaterBridge.osUpdateAvailable) return "● ATUALIZAÇÃO DISPONÍVEL";
+                    return "";
+                }
+                color: root.hudCyan; font.family: root.mono; font.pixelSize: 9; font.letterSpacing: 1
             }
 
             // CPU
@@ -175,6 +199,55 @@ Window {
                 color: root.hudDim; font.family: root.mono; font.pixelSize: 9
             }
 
+            // Disk — root ("/") and home ("~"). Critical on a bootc OS whose OTA
+            // images are large (an update can fill /); home fills with user data.
+            RowLayout {
+                Layout.topMargin: 4
+                Layout.fillWidth: true
+                Text { text: "DISK /"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: SystemStatsBridge.diskUsedGiB.toFixed(0) + " / " + SystemStatsBridge.diskTotalGiB.toFixed(0) + " GiB"
+                    color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true; height: 8; color: Qt.rgba(1, 1, 1, 0.06)
+                Rectangle {
+                    width: parent.width * (SystemStatsBridge.diskPercent / 100.0)
+                    height: parent.height
+                    color: SystemStatsBridge.diskPercent >= 90 ? "#ff5a5a" : root.hudCyan
+                    Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                visible: SystemStatsBridge.homeTotalGiB > 0
+                Text { text: "DISK ~"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
+                Item { Layout.fillWidth: true }
+                Text {
+                    text: SystemStatsBridge.homeUsedGiB.toFixed(0) + " / " + SystemStatsBridge.homeTotalGiB.toFixed(0) + " GiB"
+                    color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
+                }
+            }
+            Rectangle {
+                Layout.fillWidth: true; height: 8; color: Qt.rgba(1, 1, 1, 0.06)
+                visible: SystemStatsBridge.homeTotalGiB > 0
+                Rectangle {
+                    width: parent.width * (SystemStatsBridge.homePercent / 100.0)
+                    height: parent.height
+                    color: SystemStatsBridge.homePercent >= 90 ? "#ff5a5a" : root.hudCyan
+                    Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+                }
+            }
+            // CPU temperature — hidden in a VM with no readable sensor.
+            Text {
+                visible: SystemStatsBridge.cpuTempC > 0
+                text: "CPU TEMP  " + SystemStatsBridge.cpuTempC + "°C"
+                color: SystemStatsBridge.cpuTempC >= 85 ? "#ff5a5a" : root.hudDim
+                font.family: root.mono; font.pixelSize: 9
+            }
+
             // Top processes
             Text {
                 Layout.topMargin: 4
@@ -233,6 +306,46 @@ Window {
                     font.family: root.mono; font.pixelSize: 14; font.bold: true
                 }
                 Item { Layout.fillWidth: true }
+            }
+
+            // Interface identity — default-route iface + its IP/gateway (wired or
+            // wifi; SystemStatsBridge, not the WiFi-only NetworkBridge). SSID is a
+            // bonus when on wifi.
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 6
+                spacing: 2
+                visible: root.netOnline && SystemStatsBridge.ipAddress.length > 0
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "IFACE"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
+                    Item { Layout.fillWidth: true }
+                    Text { text: SystemStatsBridge.primaryIface; color: root.hudCyan; font.family: root.mono; font.pixelSize: 10 }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text { text: "IP"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
+                    Item { Layout.fillWidth: true }
+                    Text { text: SystemStatsBridge.ipAddress; color: root.hudCyan; font.family: root.mono; font.pixelSize: 10 }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: SystemStatsBridge.gateway.length > 0
+                    Text { text: "GATEWAY"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
+                    Item { Layout.fillWidth: true }
+                    Text { text: SystemStatsBridge.gateway; color: root.hudCyan; font.family: root.mono; font.pixelSize: 10 }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    visible: !!(NetworkBridge.activeConnection && NetworkBridge.activeConnection.ssid)
+                    Text { text: "SSID"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        Layout.maximumWidth: 150
+                        text: NetworkBridge.activeConnection ? (NetworkBridge.activeConnection.ssid || "") : ""
+                        color: root.hudCyan; font.family: root.mono; font.pixelSize: 10; elide: Text.ElideRight
+                    }
+                }
             }
 
             Text {
@@ -389,6 +502,92 @@ Window {
                 font.family: root.mono
                 font.pixelSize: 11
                 font.letterSpacing: 2
+            }
+
+            // Proactive suggestion (LilithBridge — same nudge the orb popup shows).
+            // Persists in the HUD until dismissed.
+            Rectangle {
+                Layout.fillWidth: true
+                visible: LilithBridge.proactiveNudgeText.length > 0
+                Layout.preferredHeight: nudgeCol.implicitHeight + 16
+                color: Qt.rgba(0.094, 1.0, 1.0, 0.08)
+                border.color: root.hudBorder; border.width: 1; radius: 2
+                ColumnLayout {
+                    id: nudgeCol
+                    anchors.fill: parent; anchors.margins: 8; spacing: 2
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            text: "◈ SUGESTÃO"
+                            color: LilithBridge.proactiveNudgeUrgency === "critical" ? "#ff5a5a" : root.hudCyan
+                            font.family: root.mono; font.pixelSize: 9; font.letterSpacing: 1
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: "✕"
+                            color: nudgeDismiss.containsMouse ? root.hudCyan : root.hudDim
+                            font.pixelSize: 12
+                            MouseArea {
+                                id: nudgeDismiss; anchors.fill: parent; anchors.margins: -6
+                                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: LilithBridge.dismissProactiveNudge()
+                            }
+                        }
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: LilithBridge.proactiveNudgeText
+                        color: root.hudCyan; font.family: root.mono; font.pixelSize: 10; wrapMode: Text.WordWrap
+                    }
+                }
+            }
+
+            // A dangerous action awaiting your approval (PermissionBridge). The
+            // full dialog also pops from Main.qml; approving/denying from either
+            // resolves the same request.
+            Rectangle {
+                Layout.fillWidth: true
+                visible: PermissionBridge.hasPending
+                Layout.preferredHeight: confCol.implicitHeight + 16
+                color: Qt.rgba(1.0, 0.35, 0.35, 0.10)
+                border.color: "#ff5a5a"; border.width: 1; radius: 2
+                ColumnLayout {
+                    id: confCol
+                    anchors.fill: parent; anchors.margins: 8; spacing: 2
+                    Text {
+                        text: "⚠ CONFIRMAÇÃO PENDENTE"
+                        color: "#ff5a5a"; font.family: root.mono; font.pixelSize: 9; font.letterSpacing: 1
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: PermissionBridge.pendingAction + "  (" + PermissionBridge.pendingCaller + ")"
+                        color: root.hudCyan; font.family: root.mono; font.pixelSize: 10; wrapMode: Text.WordWrap
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true; Layout.topMargin: 2; spacing: 12
+                        Text {
+                            text: "APROVAR"
+                            color: approveMa.containsMouse ? root.hudCyan : root.hudDim
+                            font.family: root.mono; font.pixelSize: 10; font.bold: true
+                            MouseArea {
+                                id: approveMa; anchors.fill: parent; anchors.margins: -6
+                                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: PermissionBridge.approveOnce()
+                            }
+                        }
+                        Text {
+                            text: "NEGAR"
+                            color: denyMa.containsMouse ? "#ff5a5a" : root.hudDim
+                            font.family: root.mono; font.pixelSize: 10; font.bold: true
+                            MouseArea {
+                                id: denyMa; anchors.fill: parent; anchors.margins: -6
+                                hoverEnabled: true; cursorShape: Qt.PointingHandCursor
+                                onClicked: PermissionBridge.deny()
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                }
             }
 
             Rectangle { Layout.fillWidth: true; height: 1; color: root.hudBorder }
