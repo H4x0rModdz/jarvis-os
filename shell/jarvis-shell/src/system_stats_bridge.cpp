@@ -255,7 +255,13 @@ void SystemStatsBridge::sampleDisk()
         usedGiB = usedB / 1024.0 / 1024.0 / 1024.0;
         pct = denom > 0.0 ? int(qRound(100.0 * usedB / denom)) : 0;
     };
-    usage(QStringLiteral("/"), m_diskUsedGiB, m_diskTotalGiB, m_diskPercent);
+    // "/" on bootc is a tiny read-only composefs overlay (statvfs reports ~0),
+    // which is useless as a "disk" gauge. The real writable store — where OTA
+    // images, ollama models and logs live and where ENOSPC actually bites — is
+    // /var. Fall back to "/" if /var isn't a separate mount (non-bootc host).
+    usage(QStringLiteral("/var"), m_diskUsedGiB, m_diskTotalGiB, m_diskPercent);
+    if (m_diskTotalGiB <= 0.0)
+        usage(QStringLiteral("/"), m_diskUsedGiB, m_diskTotalGiB, m_diskPercent);
     usage(QDir::homePath(), m_homeUsedGiB, m_homeTotalGiB, m_homePercent);
 }
 

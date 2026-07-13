@@ -71,6 +71,7 @@ Window {
         border.color: root.hudBorder
         border.width: 1
         radius: 2
+        clip: true
 
         ColumnLayout {
             anchors.fill: parent
@@ -85,15 +86,9 @@ Window {
                 Text { text: "SYSTEM"; color: root.hudCyan; font.family: root.mono; font.pixelSize: 10; font.letterSpacing: 2 }
             }
 
-            // Clock
+            // (No big clock here — the top bar already shows the time.)
             Text {
-                text: Qt.formatDateTime(root.now, "HH:mm:ss")
-                color: root.hudCyan
-                font.family: root.mono
-                font.pixelSize: 40
-                font.letterSpacing: 2
-            }
-            Text {
+                Layout.topMargin: 2
                 text: Qt.formatDateTime(root.now, "yyyy MMM dd").toUpperCase()
                     + "   UP " + SystemStatsBridge.uptimeText
                     + "   TASKS " + SystemStatsBridge.taskCount
@@ -199,12 +194,13 @@ Window {
                 color: root.hudDim; font.family: root.mono; font.pixelSize: 9
             }
 
-            // Disk — root ("/") and home ("~"). Critical on a bootc OS whose OTA
-            // images are large (an update can fill /); home fills with user data.
+            // Disk — the writable store (/var on bootc; on this btrfs it's the
+            // same pool as /home, so one bar tells the whole story). Critical on
+            // a bootc OS: large OTA images land here and can fill it (ENOSPC).
             RowLayout {
                 Layout.topMargin: 4
                 Layout.fillWidth: true
-                Text { text: "DISK /"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
+                Text { text: "DISK"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
                 Item { Layout.fillWidth: true }
                 Text {
                     text: SystemStatsBridge.diskUsedGiB.toFixed(0) + " / " + SystemStatsBridge.diskTotalGiB.toFixed(0) + " GiB"
@@ -220,26 +216,6 @@ Window {
                     Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
                 }
             }
-            RowLayout {
-                Layout.fillWidth: true
-                visible: SystemStatsBridge.homeTotalGiB > 0
-                Text { text: "DISK ~"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: SystemStatsBridge.homeUsedGiB.toFixed(0) + " / " + SystemStatsBridge.homeTotalGiB.toFixed(0) + " GiB"
-                    color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
-                }
-            }
-            Rectangle {
-                Layout.fillWidth: true; height: 8; color: Qt.rgba(1, 1, 1, 0.06)
-                visible: SystemStatsBridge.homeTotalGiB > 0
-                Rectangle {
-                    width: parent.width * (SystemStatsBridge.homePercent / 100.0)
-                    height: parent.height
-                    color: SystemStatsBridge.homePercent >= 90 ? "#ff5a5a" : root.hudCyan
-                    Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-                }
-            }
             // CPU temperature — hidden in a VM with no readable sensor.
             Text {
                 visible: SystemStatsBridge.cpuTempC > 0
@@ -248,23 +224,41 @@ Window {
                 font.family: root.mono; font.pixelSize: 9
             }
 
-            // Top processes
+            // Top processes (by memory). Fixed-width PID/MEM columns with a
+            // fill NAME column, so the header lines up with the rows and long
+            // names elide instead of being hard-cut mid-word.
             Text {
                 Layout.topMargin: 4
-                text: "TOP PROCESSES        PID  NAME        MEM"
-                color: root.hudDim; font.family: root.mono; font.pixelSize: 9
+                text: "TOP PROCESSES"
+                color: root.hudDim; font.family: root.mono; font.pixelSize: 9; font.letterSpacing: 1
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+                Text { text: "PID"; color: root.hudDim; font.family: root.mono; font.pixelSize: 9; Layout.preferredWidth: 46 }
+                Text { text: "NAME"; color: root.hudDim; font.family: root.mono; font.pixelSize: 9; Layout.fillWidth: true }
+                Text { text: "MEM"; color: root.hudDim; font.family: root.mono; font.pixelSize: 9; Layout.preferredWidth: 46; horizontalAlignment: Text.AlignRight }
             }
             Repeater {
                 model: SystemStatsBridge.topProcesses
-                delegate: Text {
+                delegate: RowLayout {
                     Layout.fillWidth: true
-                    text: ("" + modelData.pid).padStart(6) + "  "
-                        + (modelData.name || "").padEnd(11).substring(0, 11) + " "
-                        + modelData.mem.toFixed(1) + "%"
-                    color: root.hudCyan
-                    font.family: root.mono
-                    font.pixelSize: 10
-                    elide: Text.ElideRight
+                    spacing: 8
+                    Text {
+                        text: "" + modelData.pid
+                        color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
+                        Layout.preferredWidth: 46
+                    }
+                    Text {
+                        text: modelData.name || ""
+                        color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
+                        Layout.fillWidth: true; elide: Text.ElideRight
+                    }
+                    Text {
+                        text: modelData.mem.toFixed(1) + "%"
+                        color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
+                        Layout.preferredWidth: 46; horizontalAlignment: Text.AlignRight
+                    }
                 }
             }
 
@@ -284,6 +278,7 @@ Window {
         border.color: root.hudBorder
         border.width: 1
         radius: 2
+        clip: true
 
         ColumnLayout {
             anchors.fill: parent
@@ -462,6 +457,7 @@ Window {
         border.color: root.hudBorder
         border.width: 1
         radius: 2
+        clip: true
 
         ColumnLayout {
             anchors.fill: parent
