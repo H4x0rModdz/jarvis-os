@@ -128,6 +128,7 @@ qt_add_qml_module(jarvis-shell
         qml/Desktop.qml
         qml/DesktopIcon.qml
         qml/HudGraph.qml
+        qml/HudGauge.qml
         qml/ShellBus.qml
         qml/TopBar.qml
         qml/JarvisMenu.qml

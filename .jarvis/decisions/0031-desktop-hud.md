@@ -75,9 +75,41 @@ Two tensions to resolve up front:
 - **Ship a real terminal now** — high effort (ANSI emulator / Wayland embed);
   not needed for the first, telemetry-focused cut.
 
+## Phase 3 — instrument cluster (car dashboard)
+
+The flat bars read as a monitoring widget, not as the "command center" this
+surface is supposed to be. SYSTEM now renders as a **car instrument cluster**:
+a large CPU dial with MEM/DISK satellites, tick marks, a redline zone, needles,
+and a one-shot boot sweep (the self-test a real cluster does). LILITH keeps the
+3D body over the activity feed, with a state-coloured status pill.
+
+**Canvas, not QtQuick.Shapes + MultiEffect.** The obvious stack for this is
+`QtQuick.Shapes` (ConicalGradient arcs) with a `MultiEffect` glow — both ship in
+`qt6-qtdeclarative`, so availability isn't the issue. We use `Canvas` (as
+`HudGraph.qml` already does) because:
+
+- **Glow is one pass, not a shader chain.** Canvas 2D's native `shadowBlur`
+  gives the bloom without a multi-pass blur post-process. LilithOS routinely
+  runs on software rendering (VM, no GPU) where a per-frame shader is precisely
+  what makes the shell stutter — the same machine already logs libinput "your
+  system is too slow".
+- **Repaints are on-demand**, tied to the animated value, not per frame.
+- **No extra QML import** can go missing at runtime. After the QtQuick3D
+  incident (a missing module took down the whole shell), keeping new surfaces on
+  core `QtQuick` is worth more than a nicer gradient API.
+
+**Effect tier (`hud.effects`).** `full` (glow + needles) / `reduced` (needles,
+no glow) / `off` (flat rings). Defaults to **`reduced`** — the safe tier is the
+default and the pretty one is opt-in per machine, set from Settings. Nothing on
+the desktop animates at rest: the boot sweep is one-shot and the status dot only
+pulses while Lilith is actually working.
+
+Deferred: `MultiEffect` bloom as an extra step above `full` for real GPUs; a
+global action feed (needs an `ActionExecuted` DBus signal on the action bus).
+
 ## Related
 
-- `shell/jarvis-shell/qml/Desktop.qml`, `qml/HudGraph.qml`,
+- `shell/jarvis-shell/qml/Desktop.qml`, `qml/HudGraph.qml`, `qml/HudGauge.qml`,
   `src/system_stats_bridge.{h,cpp}`.
 - ADR 0028 (embodied avatar — the planned HUD center).
 - `.jarvis/skills/jarvis-design-language.md` (the default this mode departs from).
