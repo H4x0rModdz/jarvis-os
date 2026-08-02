@@ -208,6 +208,71 @@ Window {
                 }
             }
 
+            // ── Row: HUD effect tier ──────────────────────────────────
+            // The desktop dials can glow, which is a per-frame cost. On software
+            // rendering (a VM with no GPU) that stutters, so this ships on the
+            // safe tier and the rich one is opt-in per machine.
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: qsTr("Efeitos do painel (HUD)")
+                        color: Theme.text
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        text: qsTr("Completo acende os mostradores; Reduzido mantém os ponteiros sem brilho; "
+                                 + "Desligado deixa tudo plano. Use Reduzido/Desligado em máquinas sem GPU.")
+                        color: Theme.textDim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                // Segmented 3-way selector.
+                Row {
+                    id: hudEffectSeg
+                    Layout.alignment: Qt.AlignVCenter
+                    spacing: 4
+                    property string current:
+                        (root._settingsTick, SettingsBridge.getString("hud.effects", "reduced"))
+                    Repeater {
+                        model: [
+                            { key: "full",    text: qsTr("Completo") },
+                            { key: "reduced", text: qsTr("Reduzido") },
+                            { key: "off",     text: qsTr("Desligado") }
+                        ]
+                        delegate: Rectangle {
+                            id: seg
+                            readonly property bool active: hudEffectSeg.current === modelData.key
+                            implicitWidth: segLabel.implicitWidth + 16
+                            implicitHeight: 24
+                            radius: 4
+                            color: seg.active ? Theme.accent : Qt.rgba(1, 1, 1, 0.06)
+                            border.color: seg.active ? Theme.accent : Theme.border
+                            border.width: 1
+                            Behavior on color { ColorAnimation { duration: Theme.animFast } }
+                            Text {
+                                id: segLabel
+                                anchors.centerIn: parent
+                                text: modelData.text
+                                color: seg.active ? Theme.background : Theme.textDim
+                                font.pixelSize: 11
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: SettingsBridge.setString("hud.effects", modelData.key)
+                            }
+                        }
+                    }
+                }
+            }
+
             // ── Row: Lilith proativa ──────────────────────────────────
             RowLayout {
                 Layout.fillWidth: true

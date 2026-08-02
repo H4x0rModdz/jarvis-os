@@ -30,8 +30,25 @@ Window {
     // the avatar) out; ~0.85 over near-black keeps the eDEX look but readable.
     readonly property color hudPanel: Qt.rgba(0.02, 0.05, 0.07, 0.85)
     readonly property color hudBorder: Qt.rgba(0.094, 1.0, 1.0, 0.35)
+    readonly property color hudDanger: "#ff5a5a"
     readonly property string mono: "monospace"
     readonly property int panelW: 300
+
+    // ── Effect tier ──────────────────────────────────────────────────────
+    // "full" (glow + needles), "reduced" (needles, no glow) or "off" (flat
+    // rings only). Defaults to "reduced": LilithOS routinely runs on software
+    // rendering in a VM, where per-frame glow is what makes the shell stutter —
+    // so the safe tier is the default and the pretty one is opt-in. Changed
+    // from Settings › Aparência; SettingsBridge.valueChanged re-reads it live.
+    property int _settingsTick: 0
+    Connections {
+        target: SettingsBridge
+        function onValueChanged(key) { root._settingsTick++; }
+    }
+    readonly property string hudEffects:
+        (root._settingsTick, SettingsBridge.getString("hud.effects", "reduced"))
+    readonly property bool hudGlow: hudEffects === "full"
+    readonly property bool hudNeedle: hudEffects !== "off"
 
     // "Online" = a default route exists (wired or wifi). SystemStatsBridge reads
     // /proc/net/route; the old NetworkBridge.activeConnection check was WiFi-only,
@@ -117,25 +134,33 @@ Window {
                 color: root.hudCyan; font.family: root.mono; font.pixelSize: 9; font.letterSpacing: 1
             }
 
-            // CPU
+            // ── Instrument cluster ───────────────────────────────────────
+            // A car dashboard: one big CPU dial with MEM/DISK satellites, tick
+            // marks, a redline zone and needles that sweep on boot.
             Text {
-                Layout.topMargin: 4
-                text: "CPU  " + SystemStatsBridge.cpuModel
+                Layout.topMargin: 2
+                text: SystemStatsBridge.cpuModel
                 color: root.hudDim
                 font.family: root.mono
                 font.pixelSize: 9
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }
-            RowLayout {
-                Layout.fillWidth: true
-                Text { text: "USAGE"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
-                Item { Layout.fillWidth: true }
-                Text { text: SystemStatsBridge.cpuPercent + "%"; color: root.hudCyan; font.family: root.mono; font.pixelSize: 12; font.bold: true }
+            HudGauge {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 172
+                Layout.preferredHeight: 172
+                value: SystemStatsBridge.cpuPercent
+                text: SystemStatsBridge.cpuPercent + "%"
+                label: "CPU"
+                accent: root.hudCyan
+                danger: root.hudDanger
+                glow: root.hudGlow
+                needle: root.hudNeedle
             }
             HudGraph {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 46
+                Layout.preferredHeight: 40
                 values: SystemStatsBridge.cpuHistory
                 maxValue: 100
                 stroke: root.hudCyan
@@ -167,54 +192,55 @@ Window {
                 }
             }
 
-            // Memory
+            // Satellite dials: memory + the writable store (/var on bootc — the
+            // pool that large OTA images land in and can fill; ENOSPC lives here).
             RowLayout {
-                Layout.topMargin: 4
                 Layout.fillWidth: true
-                Text { text: "MEMORY"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: SystemStatsBridge.memUsedGiB.toFixed(1) + " / " + SystemStatsBridge.memTotalGiB.toFixed(1) + " GiB"
-                    color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
+                Layout.topMargin: 2
+                spacing: 8
+                HudGauge {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 108
+                    value: SystemStatsBridge.memPercent
+                    text: SystemStatsBridge.memPercent + "%"
+                    label: "MEM"
+                    accent: root.hudCyan
+                    danger: root.hudDanger
+                    glow: root.hudGlow
+                    needle: root.hudNeedle
+                }
+                HudGauge {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 108
+                    value: SystemStatsBridge.diskPercent
+                    text: SystemStatsBridge.diskPercent + "%"
+                    label: "DISK"
+                    accent: root.hudCyan
+                    danger: root.hudDanger
+                    glow: root.hudGlow
+                    needle: root.hudNeedle
                 }
             }
-            Rectangle {
+            // Absolute figures under the dials (the dials carry the percentage).
+            RowLayout {
                 Layout.fillWidth: true
-                height: 8
-                color: Qt.rgba(1, 1, 1, 0.06)
-                Rectangle {
-                    width: parent.width * (SystemStatsBridge.memPercent / 100.0)
-                    height: parent.height
-                    color: root.hudCyan
-                    Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+                spacing: 8
+                Text {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: SystemStatsBridge.memUsedGiB.toFixed(1) + " / " + SystemStatsBridge.memTotalGiB.toFixed(1) + " GiB"
+                    color: root.hudDim; font.family: root.mono; font.pixelSize: 9
+                }
+                Text {
+                    Layout.fillWidth: true
+                    horizontalAlignment: Text.AlignHCenter
+                    text: SystemStatsBridge.diskUsedGiB.toFixed(0) + " / " + SystemStatsBridge.diskTotalGiB.toFixed(0) + " GiB"
+                    color: root.hudDim; font.family: root.mono; font.pixelSize: 9
                 }
             }
             Text {
                 text: "SWAP  " + SystemStatsBridge.swapUsedGiB.toFixed(1) + " GiB"
                 color: root.hudDim; font.family: root.mono; font.pixelSize: 9
-            }
-
-            // Disk — the writable store (/var on bootc; on this btrfs it's the
-            // same pool as /home, so one bar tells the whole story). Critical on
-            // a bootc OS: large OTA images land here and can fill it (ENOSPC).
-            RowLayout {
-                Layout.topMargin: 4
-                Layout.fillWidth: true
-                Text { text: "DISK"; color: root.hudDim; font.family: root.mono; font.pixelSize: 10 }
-                Item { Layout.fillWidth: true }
-                Text {
-                    text: SystemStatsBridge.diskUsedGiB.toFixed(0) + " / " + SystemStatsBridge.diskTotalGiB.toFixed(0) + " GiB"
-                    color: root.hudCyan; font.family: root.mono; font.pixelSize: 10
-                }
-            }
-            Rectangle {
-                Layout.fillWidth: true; height: 8; color: Qt.rgba(1, 1, 1, 0.06)
-                Rectangle {
-                    width: parent.width * (SystemStatsBridge.diskPercent / 100.0)
-                    height: parent.height
-                    color: SystemStatsBridge.diskPercent >= 90 ? "#ff5a5a" : root.hudCyan
-                    Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
-                }
             }
             // CPU temperature — hidden in a VM with no readable sensor.
             Text {
@@ -475,7 +501,9 @@ Window {
             Loader {
                 id: avatarLoader
                 Layout.fillWidth: true
-                Layout.preferredHeight: 320
+                // Scale with the panel instead of a fixed 320 — she's the
+                // centrepiece, and the feed below still takes the remainder.
+                Layout.preferredHeight: Math.max(240, lilithPanel.height * 0.42)
                 asynchronous: true
                 source: Qt.resolvedUrl("LilithAvatarView.qml")
                 onStatusChanged: {
@@ -484,20 +512,54 @@ Window {
                 }
             }
 
-            Text {
+            // Status pill: a state-coloured dot + label. The dot only pulses
+            // while she's actually doing something — at rest nothing on the
+            // desktop animates, which keeps software rendering idle.
+            Row {
                 Layout.alignment: Qt.AlignHCenter
-                text: {
+                spacing: 8
+
+                readonly property color stateColor: {
                     switch (root.lilithState) {
-                    case "listening": return "OUVINDO";
-                    case "thinking":  return "PROCESSANDO";
-                    case "speaking":  return "FALANDO";
-                    default:          return LilithBridge.reachable ? "ONLINE" : "OFFLINE";
+                    case "listening": return "#46d6ff";
+                    case "thinking":  return "#ffd166";
+                    case "speaking":  return "#3ad17a";
+                    default:          return LilithBridge.reachable ? root.hudCyan : root.hudDanger;
                     }
                 }
-                color: root.hudCyan
-                font.family: root.mono
-                font.pixelSize: 11
-                font.letterSpacing: 2
+
+                Rectangle {
+                    id: stateDot
+                    width: 7; height: 7; radius: 3.5
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: parent.stateColor
+                    Behavior on color { ColorAnimation { duration: 250 } }
+                    SequentialAnimation on opacity {
+                        running: root.lilithState !== "idle"
+                        loops: Animation.Infinite
+                        alwaysRunToEnd: true
+                        NumberAnimation { to: 0.25; duration: 520; easing.type: Easing.InOutSine }
+                        // alwaysRunToEnd lets the cycle finish on 1.0, so the dot
+                        // never freezes half-faded when she goes idle.
+                        NumberAnimation { to: 1.0;  duration: 520; easing.type: Easing.InOutSine }
+                    }
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: {
+                        switch (root.lilithState) {
+                        case "listening": return "OUVINDO";
+                        case "thinking":  return "PROCESSANDO";
+                        case "speaking":  return "FALANDO";
+                        default:          return LilithBridge.reachable ? "ONLINE" : "OFFLINE";
+                        }
+                    }
+                    color: parent.stateColor
+                    font.family: root.mono
+                    font.pixelSize: 11
+                    font.letterSpacing: 2
+                    Behavior on color { ColorAnimation { duration: 250 } }
+                }
             }
 
             // Proactive suggestion (LilithBridge — same nudge the orb popup shows).
@@ -604,6 +666,23 @@ Window {
                 model: LilithBridge.conversation
                 onCountChanged: positionViewAtEnd()
                 Component.onCompleted: positionViewAtEnd()
+
+                // Empty state — a blank panel reads as broken. Say why it's
+                // empty and how to fill it.
+                Text {
+                    anchors.centerIn: parent
+                    width: parent.width - 24
+                    visible: feed.count === 0 && !LilithBridge.busy
+                    horizontalAlignment: Text.AlignHCenter
+                    text: LilithBridge.reachable
+                        ? qsTr("Sem atividade ainda.\nFale com a Lilith e o que ela fizer aparece aqui.")
+                        : qsTr("Lilith indisponível.\nO serviço não está respondendo.")
+                    color: root.hudDim
+                    font.family: root.mono
+                    font.pixelSize: 10
+                    wrapMode: Text.WordWrap
+                    lineHeight: 1.4
+                }
 
                 delegate: Column {
                     width: ListView.view.width
