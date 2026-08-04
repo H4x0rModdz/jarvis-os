@@ -5,6 +5,7 @@
 #include <QQuickWindow>
 #include <QLoggingCategory>
 #include <QDir>
+#include <QFile>
 #include <QIcon>
 #include <QMargins>
 #include <QStandardPaths>
@@ -75,14 +76,21 @@ int main(int argc, char** argv)
     // QStandardPaths (GenericDataLocation = ~/.local/share) for the same
     // reason as HomePath above — QML has no first-class data-dir accessor
     // without pulling in QtCore/Qt.labs.platform, and RuntimeLoader needs a
-    // real file URL. Absent file → RuntimeLoader errors → the avatar's
-    // procedural fallback renders. One more justified context property.
+    // real file URL.
+    //
+    // AvatarModelPresent gates the whole 3D view: with no VRM there is nothing
+    // to show, so we don't instantiate QtQuick3D at all. That matters twice
+    // over — we shipped no stand-in model (the avatar is the user's own file),
+    // and an idle View3D still renders every frame, which on a machine without
+    // GPU acceleration is pure CPU cost for an empty scene.
     {
         const QString dataDir =
             QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
         const QString vrmPath = dataDir + QStringLiteral("/jarvis/avatar/lilith.vrm");
         engine.rootContext()->setContextProperty(
             QStringLiteral("AvatarModelUrl"), QUrl::fromLocalFile(vrmPath).toString());
+        engine.rootContext()->setContextProperty(
+            QStringLiteral("AvatarModelPresent"), QFile::exists(vrmPath));
     }
 
     // Dev loop: set JARVIS_QML_PATH to a directory that contains the
