@@ -1,23 +1,18 @@
 # Environment variables labwc exports before starting the session.
 #
-# WLR_RENDERER=pixman           Force wlroots' CPU renderer. Required inside
-#                               VMs without GPU passthrough (VirtualBox,
-#                               Hyper-V, QEMU without GL); harmless on bare
-#                               metal — Phase 2 swap to gles2 once we ship
-#                               our own compositor with proper GPU detection.
-# LIBGL_ALWAYS_SOFTWARE=1       Mesa fallback for any GL app run inside the
-#                               session.
-# WLR_NO_HARDWARE_CURSORS=1     VBox's SVGA driver mishandles HW cursors
-#                               under wlroots — software cursor is fine.
-# WLR_DRM_NO_ATOMIC=1           VMware's vmwgfx DRM rejects atomic page-flips/
-#                               modesets — wlroots spams "atomic.c: Atomic
-#                               commit failed: Device or resource busy" and
-#                               the display flickers/stalls. Force the legacy
-#                               (non-atomic) modesetting path, which vmwgfx
-#                               handles reliably. Independent of the renderer
-#                               (that's pixman above) — this is the KMS path.
-#                               Legacy modeset works on every backend, so it's
-#                               safe on bare metal / other hypervisors too.
+# NOTHING HERE MAY FORCE SOFTWARE RENDERING. This file is static and applies
+# to every machine, so a software fallback written here silently cripples real
+# hardware. That is exactly what happened: WLR_RENDERER=pixman and
+# LIBGL_ALWAYS_SOFTWARE=1 lived here "for VMs", and on a desktop with an RTX
+# 3060 they pinned both the compositor AND every Qt window to the CPU — an
+# ultrawide repainted entirely in software. The GPU, the firmware and NVK were
+# all fine; this file was overriding them.
+#
+# Host-dependent choices belong in /usr/libexec/jarvis-session-launch, which
+# runs before both cage (greeter) and labwc (session) and detects the host:
+# it forces pixman + software GL only on VirtualBox/VMware or when there is no
+# DRM render node, and otherwise leaves the GPU path untouched.
+#
 # QT_IM_MODULE=none             No input-method framework in this session. With
 #                               the Fedora default (ibus/xim) the IM layer
 #                               swallowed control keys like Escape before they
@@ -35,10 +30,6 @@
 #                               (selects labwc-portals.conf → wlr ScreenCast +
 #                               gtk FileChooser, ADR 0026) and to apps that
 #                               branch on the desktop name.
-WLR_RENDERER=pixman
-LIBGL_ALWAYS_SOFTWARE=1
-WLR_NO_HARDWARE_CURSORS=1
-WLR_DRM_NO_ATOMIC=1
 QT_IM_MODULE=none
 QT_LOGGING_RULES=qt.qpa.wayland.textinput.warning=false
 XDG_CURRENT_DESKTOP=labwc:wlroots
