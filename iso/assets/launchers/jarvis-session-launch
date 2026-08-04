@@ -26,9 +26,21 @@
 
 set -eu
 
+# Everything software-rendering-related is set HERE and only here, gated on the
+# host checks below. It used to be hardcoded in /etc/xdg/labwc/environment,
+# which applied it unconditionally and silently pinned real hardware (an RTX
+# 3060 desktop) to CPU rendering — compositor and every Qt window — no matter
+# what this script decided.
 force_pixman() {
     export WLR_RENDERER=pixman
     export WLR_NO_HARDWARE_CURSORS=1
+    # Mesa fallback for GL apps run inside a session whose host can't drive
+    # EGL — without it they try the hardware path and fail at runtime.
+    export LIBGL_ALWAYS_SOFTWARE=1
+    # VMware's vmwgfx DRM rejects atomic page-flips/modesets: wlroots spams
+    # "Atomic commit failed: Device or resource busy" and the display
+    # flickers/stalls. Force the legacy modesetting path it handles reliably.
+    export WLR_DRM_NO_ATOMIC=1
 }
 
 if [ -r /sys/class/dmi/id/sys_vendor ]; then
