@@ -161,7 +161,7 @@ Window {
         asynchronous: true
         onStatusChanged: {
             if (status === Loader.Error)
-                console.warn("Lilith avatar failed to load (QtQuick3D missing?) — shell continues without it");
+                console.warn("Lilith avatar failed to load (see the QML error above) — shell continues without it");
         }
     }
 

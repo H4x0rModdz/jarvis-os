@@ -507,8 +507,12 @@ Window {
                 asynchronous: true
                 source: Qt.resolvedUrl("LilithAvatarView.qml")
                 onStatusChanged: {
+                    // Don't guess the cause: the real reason is in the QML error
+                    // printed just above this line. Claiming "QtQuick3D missing"
+                    // once sent us hunting a packaging problem when the actual
+                    // fault was a wrong import inside LilithAvatarView.
                     if (status === Loader.Error)
-                        console.warn("HUD avatar: QtQuick3D unavailable — feed only");
+                        console.warn("HUD avatar failed to load (see the QML error above) — feed only");
                 }
             }
 
