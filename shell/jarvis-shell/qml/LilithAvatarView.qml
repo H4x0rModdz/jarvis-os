@@ -1,6 +1,11 @@
 import QtQuick
 import QtQuick3D
-import QtQuick3D.Helpers
+// RuntimeLoader (the VRM/glTF drop-in below) lives in AssetUtils, NOT in
+// Helpers. Importing Helpers made the whole component fail to compile with
+// "RuntimeLoader is not a type", which the Loader reported as QtQuick3D being
+// unavailable — so the avatar silently never rendered even with qt6-qtquick3d
+// installed. Helpers is not used here at all.
+import QtQuick3D.AssetUtils
 import Jarvis.Shell
 
 /// Reusable 3D avatar viewport (ADR 0028) — the View3D + VRM/fallback with no
