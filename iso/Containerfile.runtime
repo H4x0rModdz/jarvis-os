@@ -89,16 +89,24 @@ RUN dnf -y install \
 # forcing Zink lands it on lavapipe — software Vulkan. It also has no CUDA,
 # which we want for running Lilith's models on the GPU.
 #
-# akmod-nvidia-open: for Turing and newer, NVIDIA recommends the OPEN kernel
-# modules and they are the default since driver 560. Only the kernel module is
-# open — GL/Vulkan/CUDA userspace is the same proprietary blob either way — so
-# this is the vendor-recommended configuration at no extra cost. The tainted
-# repo carries it.
+# akmod-nvidia is RPM Fusion's mainstream path, and on a supported GPU it
+# already builds NVIDIA's OPEN kernel modules — which is what NVIDIA recommends
+# for Turing and newer, and the default since driver 560. Note "open" describes
+# the *kernel module* only: GL, Vulkan and CUDA userspace are the proprietary
+# blob either way. We deliberately do NOT use the tainted repo's explicit
+# akmod-nvidia-open swap; it buys the same modules on this hardware while adding
+# a repo and a swap step we cannot test here.
 #
 # The module is compiled HERE, against the kernel that ships in this very
 # image. That is the right model for bootc: the kernel lives inside the image,
 # so the module can never be built for a different kernel than the one that
-# boots, and every base rebuild rebuilds it. `modinfo` at the end turns a
+# boots, and every base rebuild rebuilds it.
+#
+# kernel-devel MUST match kernel-core exactly or akmods silently builds nothing
+# useful — this is the fragile part of the whole recipe (Universal Blue ships
+# its own kernel RPMs and versionlocks the pair to dodge it). We pin to the
+# installed kernel's exact NVR and let the build fail loudly if that package is
+# no longer in the repos. The `modinfo` check is the backstop: it turns a
 # silent build failure into a failed image build instead of a black screen on
 # someone's desktop.
 RUN KVER=$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core | tail -1) \
@@ -106,8 +114,7 @@ RUN KVER=$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core | tail -1) \
     && dnf -y install \
         "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${FEDORA}.noarch.rpm" \
         "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${FEDORA}.noarch.rpm" \
-    && dnf -y install rpmfusion-nonfree-release-tainted \
-    && dnf -y install "kernel-devel-${KVER}" akmod-nvidia-open xorg-x11-drv-nvidia-cuda \
+    && dnf -y install "kernel-devel-${KVER}" akmod-nvidia xorg-x11-drv-nvidia-cuda \
     && akmods --force --kernels "${KVER}" \
     && depmod -a "${KVER}" \
     && modinfo -k "${KVER}" nvidia > /dev/null \
