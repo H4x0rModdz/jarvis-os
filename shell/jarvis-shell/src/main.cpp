@@ -46,6 +46,27 @@ int main(int argc, char** argv)
     // labwc, so we catch it once at the application level. See escape_closer.h.
     app.installEventFilter(new EscapeCloser(&app));
 
+    // Single instance, enforced BEFORE any window exists.
+    //
+    // `com.jarvis.Shell` doubles as the lock: DBus grants the name to exactly
+    // one connection and releases it automatically when that process dies, so
+    // there is no stale-lockfile failure mode. Owning it late — after the QML
+    // engine had already created the top bar, dock and desktop — meant a second
+    // instance merely logged "window control disabled" and then kept running:
+    // two full shells, each painting a fullscreen desktop layer, fighting over
+    // the same layer-shell slots ("already has a shell integration") and
+    // doubling every timer and repaint. On a wide display that alone is enough
+    // to make the session feel broken, and it is easy to hit by launching the
+    // shell from a terminal while the session's own instance is up.
+    //
+    // Losing the race is not an error: the desktop is already running.
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.registerService(QStringLiteral("com.jarvis.Shell"))) {
+        qInfo("jarvis-shell: another instance already owns com.jarvis.Shell (%s) — exiting",
+              qPrintable(bus.lastError().message()));
+        return 0;
+    }
+
     // App icons. The shell is a pure Qt/Wayland app with no GTK platform
     // theme, so QIcon has no active icon theme by default and every
     // `image://theme/<name>` lookup would miss — leaving the dock/launcher on
@@ -178,18 +199,13 @@ int main(int argc, char** argv)
     }
 #endif
 
-    // Window control service (ADR 0025). Owns a wlr-foreign-toplevel client
-    // and serves com.jarvis.Shell so the Action Bus can focus/minimize/
-    // maximize/close windows on labwc. Best-effort: if the name is already
-    // taken (a second shell instance) we log and carry on — the desktop UI
-    // doesn't depend on owning it.
+    // Window control service (ADR 0025). Owns a wlr-foreign-toplevel client and
+    // serves com.jarvis.Shell so the Action Bus can focus/minimize/maximize/
+    // close windows on labwc. The name itself was already claimed up top as the
+    // single-instance lock, so only the object still needs exporting here.
     auto* windowControl = new WindowControlService(&app);
-    QDBusConnection bus = QDBusConnection::sessionBus();
-    if (!bus.registerService(QStringLiteral("com.jarvis.Shell"))) {
-        qWarning("jarvis-shell: could not own com.jarvis.Shell — window control disabled (%s)",
-                 qPrintable(bus.lastError().message()));
-    } else if (!bus.registerObject(QStringLiteral("/com/jarvis/Shell"), windowControl,
-                                   QDBusConnection::ExportAllSlots)) {
+    if (!bus.registerObject(QStringLiteral("/com/jarvis/Shell"), windowControl,
+                            QDBusConnection::ExportAllSlots)) {
         qWarning("jarvis-shell: could not export /com/jarvis/Shell — window control disabled");
     }
 
