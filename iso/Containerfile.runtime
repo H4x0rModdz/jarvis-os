@@ -59,6 +59,30 @@ RUN dnf -y install \
         qemu-guest-agent \
     && dnf clean all
 
+# ── GPU acceleration ────────────────────────────────────────────────────
+# Without these the desktop silently SOFTWARE-renders: Mesa falls back to
+# llvmpipe and the whole shell — the HUD, the glass panels, every Qt window —
+# is drawn on the CPU. Observed on real hardware: an RTX 3060 correctly bound
+# to nouveau still reported `OpenGL renderer string: llvmpipe`, and opening any
+# Qt panel lagged. `mesa-dri-drivers` alone is not enough:
+#
+#   * <vendor>-gpu-firmware — nouveau needs NVIDIA's signed GSP firmware to
+#     bring up the engines on Turing and newer at all; AMD and Intel need
+#     theirs for the same reason. fedora-bootc does not pull these in, so any
+#     machine with a discrete GPU quietly lands on llvmpipe.
+#   * mesa-vulkan-drivers — ships NVK. Since Mesa 25.1 the OpenGL path for
+#     Turing+ is NVK + Zink; with no Vulkan driver installed there is nothing
+#     for Zink to sit on, so GL falls to llvmpipe even once firmware loads.
+#
+# All of it is open source and redistributable (Fedora main repo) — no RPM
+# Fusion, no proprietary blob, no per-kernel akmod build in CI.
+RUN dnf -y install \
+        mesa-vulkan-drivers \
+        nvidia-gpu-firmware \
+        amd-gpu-firmware \
+        intel-gpu-firmware \
+    && dnf clean all
+
 # Guest-integration daemons for VMs. open-vm-tools (VMware) gives
 # host time-sync + guest info; qemu-guest-agent covers QEMU/KVM.
 # Both are no-ops on bare metal / a non-matching hypervisor, so
