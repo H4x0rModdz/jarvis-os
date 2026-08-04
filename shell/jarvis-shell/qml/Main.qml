@@ -157,6 +157,10 @@ Window {
     // shell loads normally. The avatar appears once the runtime ships Quick3D.
     Loader {
         id: avatarLoader
+        // No VRM, no floating avatar: the model is the user's own file and we
+        // ship no stand-in, so without one there is nothing to show — and an
+        // idle View3D still repaints every frame.
+        active: AvatarModelPresent
         source: Qt.resolvedUrl("LilithAvatar.qml")
         asynchronous: true
         onStatusChanged: {

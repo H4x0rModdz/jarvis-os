@@ -505,6 +505,9 @@ Window {
                 // centrepiece, and the feed below still takes the remainder.
                 Layout.preferredHeight: Math.max(240, lilithPanel.height * 0.42)
                 asynchronous: true
+                // No VRM, no 3D at all: we ship no stand-in model, and an idle
+                // View3D still costs a repaint every frame.
+                active: AvatarModelPresent
                 source: Qt.resolvedUrl("LilithAvatarView.qml")
                 onStatusChanged: {
                     // Don't guess the cause: the real reason is in the QML error
