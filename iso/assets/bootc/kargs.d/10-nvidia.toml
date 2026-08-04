@@ -16,8 +16,13 @@
 # Harmless on machines without an NVIDIA GPU: the arguments simply have nothing
 # to apply to, which is why this ships in the single image rather than gating a
 # separate variant (ADR 0032).
+#   nvidia-drm.fbdev=1     Lets the NVIDIA DRM driver own the framebuffer
+#                          console instead of leaving simpledrm in place.
+#                          Without it the handover to the compositor can leave
+#                          a blank or mismatched console.
 kargs = [
     "nvidia-drm.modeset=1",
+    "nvidia-drm.fbdev=1",
     "rd.driver.blacklist=nouveau",
     "modprobe.blacklist=nouveau",
 ]

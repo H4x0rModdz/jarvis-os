@@ -46,8 +46,35 @@ kernel ships inside the image, so the module is always built against exactly
 the kernel it will boot, and every base rebuild rebuilds it. There is no
 "module didn't build after a kernel update" failure mode on the user's machine.
 
-Kernel arguments (`nvidia-drm.modeset=1`, nouveau blacklist) ship via
-`/usr/lib/bootc/kargs.d/`, which bootc applies at install **and** on upgrade.
+Kernel arguments (`nvidia-drm.modeset=1`, `nvidia-drm.fbdev=1`, nouveau
+blacklist) ship via `/usr/lib/bootc/kargs.d/`, which bootc applies at install
+**and** on upgrade.
+
+**Installing the driver is not enough for our compositor.** Desktops built on
+GNOME or KDE need no extra configuration — those compositors handle NVIDIA
+themselves, which is why Bazzite's entire NVIDIA config is power management.
+**wlroots does not.** `jarvis-session-launch` therefore exports, *only when
+`nvidia_drm` is loaded*:
+
+- `GBM_BACKEND=nvidia-drm` — use NVIDIA's GBM, not Mesa's.
+- `__GLX_VENDOR_LIBRARY_NAME=nvidia` — route GLX through NVIDIA's vendor library.
+- `WLR_NO_HARDWARE_CURSORS=1` — NVIDIA dGPUs can only scan out surfaces already
+  in video memory, so wlroots' hardware cursor path gives an **invisible
+  cursor**. This is the most-reported wlroots-on-NVIDIA symptom.
+
+The gate matters as much as the values: hardcoding them for every host is
+precisely the mistake the labwc `environment` file made with pixman.
+
+These three were taken from projects running our actual stack (wlroots), not
+from GNOME/KDE-based images. Deliberately **not** adopted from those setups:
+
+- `WLR_RENDERER=vulkan` — plausibly better on NVIDIA and the usual answer to
+  flicker/tearing, but a renderer that fails to initialise means no desktop at
+  all. Left commented in the launcher as the documented next lever.
+- `XWAYLAND_NO_GLAMOR=1` — fixes X11 corruption by making Xwayland software
+  render, which is the opposite of what we are trying to achieve.
+- `__GL_GSYNC_ALLOWED=0` / `__GL_VRR_ALLOWED=0` — stability workarounds that
+  give up features nobody has reported needing.
 
 [nv-open]: https://developer.nvidia.com/blog/nvidia-transitions-fully-towards-open-source-gpu-kernel-modules.md/
 
