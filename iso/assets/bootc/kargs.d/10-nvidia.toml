@@ -1,0 +1,23 @@
+# Kernel arguments for the NVIDIA driver (ADR 0032).
+#
+# bootc applies files in /usr/lib/bootc/kargs.d at install AND on upgrade, so
+# these reach already-installed machines through `bootc upgrade` — unlike a
+# bootloader edit, which would only affect fresh installs.
+#
+#   nvidia-drm.modeset=1   Required for Wayland. Without KMS the DRM device
+#                          exposes no modesetting and wlroots can't drive the
+#                          display through the NVIDIA driver at all.
+#   *blacklist=nouveau     nouveau and the NVIDIA module both bind the same
+#                          PCI device; whichever loads first wins, so the open
+#                          driver has to be kept out of the way. RPM Fusion
+#                          also drops a modprobe.d blacklist, but the initrd
+#                          needs the rd.* form to stop nouveau loading early.
+#
+# Harmless on machines without an NVIDIA GPU: the arguments simply have nothing
+# to apply to, which is why this ships in the single image rather than gating a
+# separate variant (ADR 0032).
+kargs = [
+    "nvidia-drm.modeset=1",
+    "rd.driver.blacklist=nouveau",
+    "modprobe.blacklist=nouveau",
+]
