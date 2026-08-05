@@ -125,6 +125,18 @@ RUN KVER=$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core | tail -1) \
 # installed machines via `bootc upgrade` rather than only fresh installs.
 COPY iso/assets/bootc/kargs.d/10-nvidia.toml /usr/lib/bootc/kargs.d/10-nvidia.toml
 
+# Preserve VRAM across suspend — without it the desktop returns corrupted or
+# black, the most common NVIDIA + Wayland suspend complaint.
+COPY iso/assets/modprobe/nvidia-power.conf /usr/lib/modprobe.d/nvidia-power.conf
+
+# The suspend/hibernate/resume units RPM Fusion ships are what actually save and
+# restore that video memory. They are not enabled by default, and they gate
+# themselves on the driver being present, so enabling them here is inert on a
+# machine with no NVIDIA GPU. `|| true` keeps the build green if a future
+# package drops one of them.
+RUN systemctl enable nvidia-suspend.service nvidia-hibernate.service \
+        nvidia-resume.service 2>/dev/null || true
+
 # Guest-integration daemons for VMs. open-vm-tools (VMware) gives
 # host time-sync + guest info; qemu-guest-agent covers QEMU/KVM.
 # Both are no-ops on bare metal / a non-matching hypervisor, so

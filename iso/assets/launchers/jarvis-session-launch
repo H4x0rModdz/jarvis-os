@@ -55,6 +55,37 @@ if [ -z "${WLR_RENDERER-}" ] && [ ! -e /dev/dri/renderD128 ]; then
     force_pixman
 fi
 
+# NVIDIA proprietary driver in use (ADR 0032). Desktops built on GNOME/KDE need
+# nothing here — those compositors handle NVIDIA themselves, which is why
+# Bazzite's NVIDIA config is only power management. wlroots does NOT: without
+# these it either fails to pick the NVIDIA GBM backend or runs with an invisible
+# cursor, the single most-reported wlroots-on-NVIDIA symptom.
+#
+# Gated on nvidia_drm actually being loaded, so an AMD/Intel box or a VM never
+# sees them. That gate is the whole point: hardcoding these for every host is
+# exactly the mistake the labwc `environment` file made with pixman.
+if [ -d /sys/module/nvidia_drm ]; then
+    # Tell Mesa/EGL to use NVIDIA's GBM implementation rather than the Mesa one.
+    export GBM_BACKEND=nvidia-drm
+    # Route GLX through NVIDIA's vendor library (libglvnd dispatch).
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+    # NVIDIA dGPUs can only scan out surfaces already in video memory, so
+    # wlroots' hardware cursor path yields an invisible cursor. Software cursor
+    # is the standard workaround and costs nothing perceptible.
+    export WLR_NO_HARDWARE_CURSORS=1
+    # Hardware video decode (VA-API) through NVIDIA rather than Mesa's driver —
+    # this is what keeps video playback off the CPU in Firefox and friends.
+    export LIBVA_DRIVER_NAME=nvidia
+
+    # NEXT LEVER IF THE DISPLAY FLICKERS OR TEARS: wlroots can render through
+    # Vulkan instead of GLES2, and NVIDIA's Vulkan is its strongest path — the
+    # wlroots-on-NVIDIA guides set it for exactly this. Left OFF by default
+    # because we cannot test it here and a renderer that fails to initialise
+    # means no desktop at all, which is a worse failure than imperfect output.
+    # To try it, uncomment; to undo, `sudo bootc rollback`.
+    #export WLR_RENDERER=vulkan
+fi
+
 # Flatpak exports its `.desktop` files outside XDG_DATA_DIRS' defaults,
 # which means QStandardPaths::ApplicationsLocation (and therefore the
 # launcher's app grid) doesn't see Flatpak apps unless we prepend them
