@@ -195,6 +195,25 @@ void SystemStatsBridge::sampleUptime()
 
 void SystemStatsBridge::sampleProcs()
 {
+    // Task count comes from /proc/loadavg's "running/total" field — ONE read,
+    // every tick. It used to be a by-product of the full scan below, which is
+    // an absurd price for a single number.
+    const QString load = readAll(QStringLiteral("/proc/loadavg"));
+    const QStringList lf = load.split(' ', Qt::SkipEmptyParts);
+    if (lf.size() >= 4) {
+        const int slash = lf[3].indexOf('/');
+        if (slash >= 0) m_taskCount = lf[3].mid(slash + 1).toInt();
+    }
+
+    // The top-5-by-memory table is the expensive part: two file reads per
+    // process (statm + comm), so ~800 open/read/close per pass on a desktop
+    // with ~400 tasks — on the GUI thread, which stalls rendering every time.
+    // At 1 Hz that was a visible hitch once a second. The table is a glance
+    // widget, not a profiler: 5 s is plenty, and it cuts the syscall load by
+    // 80%.
+    if (++m_procScanTick < kProcScanEvery) return;
+    m_procScanTick = 0;
+
     QDir proc(QStringLiteral("/proc"));
     const QStringList entries = proc.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
     const long pageSize = sysconf(_SC_PAGESIZE);
@@ -206,12 +225,10 @@ void SystemStatsBridge::sampleProcs()
         double mem;
     };
     QVector<Proc> procs;
-    int count = 0;
     for (const QString& e : entries) {
         bool ok = false;
         const int pid = e.toInt(&ok);
         if (!ok) continue; // only numeric pid dirs
-        ++count;
         const QString statm = readAll(QStringLiteral("/proc/%1/statm").arg(e));
         if (statm.isEmpty()) continue;
         const QStringList sp = statm.split(' ', Qt::SkipEmptyParts);
@@ -221,7 +238,6 @@ void SystemStatsBridge::sampleProcs()
         QString name = readAll(QStringLiteral("/proc/%1/comm").arg(e)).trimmed();
         procs.append({pid, name, memPct});
     }
-    m_taskCount = count;
 
     std::sort(procs.begin(), procs.end(),
               [](const Proc& a, const Proc& b) { return a.mem > b.mem; });

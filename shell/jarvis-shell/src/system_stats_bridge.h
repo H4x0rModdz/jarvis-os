@@ -147,5 +147,12 @@ private:
     quint64 m_prevTx = 0;
     bool m_haveNetPrev = false;
 
+    // The top-processes table walks every /proc/<pid> and reads two files per
+    // process — the one genuinely expensive sample, and it runs on the GUI
+    // thread. Everything else is a handful of reads, so only this one is
+    // throttled: once every kProcScanEvery ticks instead of every tick.
+    static constexpr int kProcScanEvery = 5;
+    int m_procScanTick = kProcScanEvery; // scan on the very first tick
+
     static constexpr int kHistory = 48;
 };
