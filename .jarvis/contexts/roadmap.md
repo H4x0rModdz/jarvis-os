@@ -103,6 +103,38 @@ The quick, additive, low-risk batch — most daily value per effort.
   exists; making 2+ monitors + fractional scaling actually work needs real
   hardware to validate (the VM can't exercise it). Partly blocked on the
   Smithay compositor (P001) for full window/output control.
+- **Remote companion — talk to your PC's Lilith from anywhere — GG (weeks).**
+  While the PC is on, reach Lilith from your phone through a chat platform
+  (Discord / Telegram / WhatsApp bot, or a small self-hosted relay) and give
+  her commands from far away — she runs them locally through the Action Bus and
+  reports back. Optional proactivity: on a remote task she can offer "quer ver a
+  tela?" and start a live screen-share + voice narration into that same channel,
+  so you watch and hear what she's doing like a call.
+  - **Security is the whole design, not a footnote (see `ai-safety`).**
+    - **No inbound ports.** Do NOT open the home router / expose the PC. The
+      companion is an *outbound* client: the PC connects OUT to the platform
+      (how Discord/Telegram bots already work) or to a relay we host. That
+      sidesteps NAT, port-forwarding, and a huge attack surface.
+    - **Bind the channel to one identity.** A paired remote user + rotating
+      session token; unknown senders are ignored. Rate-limited, fully audited
+      (every remote command through the same audit log as local ones).
+    - **A stricter remote permission profile.** Remote context is higher-risk
+      than sitting at the machine, so it gets its own allow-list: safe actions
+      (open apps, status, screenshots, media) flow; dangerous ones
+      (`terminal.execute`, delete, install) require an explicit confirm step
+      answered from the phone — never silent. The permission model already
+      exists (ADR 0004 + permissions.md); this adds a "remote" caller class.
+  - **Pieces.** (1) a `companion-bridge` daemon (outbound bot client → Action
+    Bus over DBus), (2) a remote caller identity + permission profile, (3)
+    screen-share = PipeWire screencast → WebRTC into the call/channel, (4) TTS
+    narration piped to the same call. Each is independently useful; ship the
+    text-command bridge first, screen-share + voice later.
+  - **Open decisions for the ADR.** Which platform first (Telegram bot API is
+    the simplest self-serve; Discord if we want built-in voice/video; WhatsApp
+    is the heaviest to do legitimately). Self-hosted relay vs riding the
+    platform's infra. How video actually lands in the chosen platform (native
+    call vs a WebRTC link she sends). Wake/availability signalling when the PC
+    is asleep.
 
 ## Principles Governing Prioritization
 
