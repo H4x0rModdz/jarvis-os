@@ -42,13 +42,27 @@ Item {
     readonly property bool inRedline: ratio >= redlineFrom
     readonly property color live: inRedline ? danger : accent
 
-    /// What the needle is actually drawn at (0..1). It chases `ratio` instead
-    /// of snapping — 250ms ease-out, the house motion rule.
+    /// What the needle is actually drawn at (0..1). Big moves are eased over
+    /// 250ms; small ones snap.
+    ///
+    /// The snap is a performance decision, not a stylistic one. Qt Quick has no
+    /// partial updates — ANY animation repaints the WHOLE window, and this HUD
+    /// lives in a fullscreen one. Easing every 1 Hz sample meant ~15 full-screen
+    /// repaints per second per gauge, for ever. At 5-8 megapixels that is the
+    /// cost that scales with the display, and it is measurable: the same scene
+    /// is smooth at 1280x800 and drags at 4K. Idle CPU jitter of a couple of
+    /// percent does not need to be animated; a real jump still is.
     property real displayRatio: 0
+    property bool easeNextChange: false
     Behavior on displayRatio {
+        enabled: root.easeNextChange
         NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
     }
-    onRatioChanged: if (!bootSweep.running) displayRatio = ratio
+    onRatioChanged: {
+        if (bootSweep.running) return;
+        easeNextChange = Math.abs(ratio - displayRatio) >= 0.08;
+        displayRatio = ratio;
+    }
 
     // Instrument-cluster startup sweep: the needle runs to full scale and back
     // before settling on the live reading, the way a car's cluster self-tests.
