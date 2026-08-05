@@ -24,13 +24,14 @@ Item {
             ColorAnimation { duration: Theme.animNormal; easing.type: Easing.OutQuad }
         }
 
-        // Soft pulse when idle and reachable.
-        SequentialAnimation on opacity {
-            running: root.reachable && !root.busy
-            loops: Animation.Infinite
-            NumberAnimation { from: 1.0; to: 0.55; duration: 900; easing.type: Easing.InOutSine }
-            NumberAnimation { from: 0.55; to: 1.0; duration: 900; easing.type: Easing.InOutSine }
-        }
+        // No idle pulse. This used to breathe forever while `reachable &&
+        // !busy` — i.e. during the normal, healthy, nothing-is-happening state.
+        // An infinite animation there means the top bar repaints at 60 fps for
+        // the entire life of the session and neither Qt's render loop nor the
+        // compositor ever goes idle, which costs real frames on a wide display
+        // and burns power for no information: the dot's COLOUR already says
+        // reachable / unreachable / busy. Motion is reserved for the transient
+        // state below, per the house rule that animation must be purposeful.
 
         // Faster pulse while waiting on a reply.
         SequentialAnimation on scale {
