@@ -32,11 +32,13 @@ the roadmap, and the open stack has no CUDA at all.
 
 Ship the **NVIDIA driver from RPM Fusion**, baked into the runtime base image.
 
-Use the **open kernel modules** (`akmod-nvidia-open`): for Turing and newer,
-[NVIDIA recommends them and they are the default since driver 560][nv-open],
-with equivalent or better performance. Only the *kernel module* is open — the
-userspace (GL, Vulkan, CUDA) is the proprietary blob either way, so this costs
-us nothing and is the vendor-recommended configuration for this GPU.
+Install `akmod-nvidia` — RPM Fusion's mainstream path, which on a supported GPU
+already builds NVIDIA's **open kernel modules**, [what NVIDIA recommends for
+Turing and newer and the default since driver 560][nv-open]. "Open" describes
+the *kernel module* only; GL, Vulkan and CUDA userspace are the proprietary blob
+either way. We do not take the tainted repo's explicit `akmod-nvidia-open` swap:
+on this hardware it yields the same modules while adding a repo and a swap step
+we cannot verify without the hardware.
 
 The kmod is compiled **at image build time** against the kernel in the image
 (`akmods --force --kernels <kver>`). This is the correct model for bootc: the
@@ -84,14 +86,23 @@ non-NVIDIA hardware work, and they are why an AMD machine won't repeat this.
 - **A separate `jarvis-os-nvidia` image variant** (the Universal Blue model).
   Correct at scale, but doubles CI for a project whose image build has already
   been fighting for disk. Revisit if the size cost bites.
-- **Prebuilt akmods from `ghcr.io/ublue-os/akmods`.** Saves build time but ties
-  us to another project's kernel/Fedora tags; a mismatch yields a module that
-  silently won't load. Building against our own kernel is self-contained.
+- **Prebuilt akmods from `ghcr.io/ublue-os/akmods`.** This is what Universal
+  Blue itself does — `COPY --from=ghcr.io/ublue-os/akmods-nvidia:main-44` and
+  install the ready-made `kmod-nvidia` RPMs — precisely because matching
+  `kernel-devel` to the running kernel is the fragile step (they go further and
+  ship their own kernel RPMs, `versionlock`ed with `kernel-devel`). It saves
+  build time, but ties us to another project's kernel and Fedora tags, and a
+  mismatch produces a module that silently refuses to load. Building against
+  our own kernel keeps the image self-contained; the `modinfo` check makes the
+  mismatch a loud build failure instead of a silent one.
 
 ## Follow-ups
 
-- Sign the kmod with our own key + document MOK enrolment, so Secure Boot can
-  stay on.
+- **Sign the kmod with our own key + document MOK enrolment**, so Secure Boot
+  can stay on. Universal Blue does exactly this — they ship the certificates
+  (`ubmok101.cer`, `ubmok102.cer`) in the image for users to enrol — which is
+  the pattern to copy. Until then, Secure Boot must be off, and on a dual-boot
+  machine that is a real imposition.
 - Point Ollama at CUDA now that it exists (currently CPU-only).
 - Revisit the `-nvidia` image split if OTA size becomes painful.
 
