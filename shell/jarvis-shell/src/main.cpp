@@ -140,10 +140,24 @@ int main(int argc, char** argv)
     //   Main    → "jarvis-topbar"  (top menu bar)
     //   Dock    → "jarvis-dock"    (floating bottom dock + Lilith orb)
     //   Desktop → "jarvis-desktop" (desktop icons, bottom layer)
-    engine.loadFromModule("Jarvis.Shell", "Main");
-    engine.loadFromModule("Jarvis.Shell", "Dock");
-    engine.loadFromModule("Jarvis.Shell", "Desktop");
+    // JARVIS_SHELL_SURFACES isolates surfaces for performance diagnosis.
+    // Multiple QQuickWindows in one process share frame pacing, and both Qt's
+    // own docs (threaded loop is smooth "as long as there is exactly one
+    // window") and QTBUG-52372 make several windows a suspect for the
+    // whole-shell stutter seen on real hardware. Running e.g.
+    // `JARVIS_SHELL_SURFACES=topbar jarvis-shell` answers "is one window
+    // smooth where three are not?" without a special build. Unset → all three.
+    const QString surfaces = qEnvironmentVariable("JARVIS_SHELL_SURFACES",
+                                                  QStringLiteral("topbar,dock,desktop"));
+    if (surfaces.contains(QLatin1String("topbar")))
+        engine.loadFromModule("Jarvis.Shell", "Main");
+    if (surfaces.contains(QLatin1String("dock")))
+        engine.loadFromModule("Jarvis.Shell", "Dock");
+    if (surfaces.contains(QLatin1String("desktop")))
+        engine.loadFromModule("Jarvis.Shell", "Desktop");
     if (engine.rootObjects().isEmpty()) {
+        qWarning("jarvis-shell: no surfaces loaded (JARVIS_SHELL_SURFACES=%s)",
+                 qPrintable(surfaces));
         return 1;
     }
 
