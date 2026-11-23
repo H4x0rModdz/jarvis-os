@@ -87,6 +87,11 @@ podman build \
     --tag "$IMAGE" \
     .
 
+# The installer must never choose a disk on its own (it once wiped every disk
+# in the machine — see iso/build.toml). Refuse to build an ISO from a config
+# that would.
+bash tools/check-installer-kickstart.sh
+
 echo "─── Converting to ISO via bootc-image-builder ───"
 # --pull=never: use the image we JUST built in local (rootful) storage as the
 # ISO payload, NOT whatever is on ghcr. The installed system's origin is still
@@ -105,6 +110,10 @@ podman run --rm -it \
     --rootfs btrfs \
     --config /config.toml \
     "$IMAGE"
+
+# …and refuse to hand over an ISO whose GENERATED kickstart selects disks,
+# whatever the config said.
+bash tools/check-installer-kickstart.sh "$OUTPUT_DIR/manifest-iso.json"
 
 echo "─── Done ───"
 echo "ISO:"

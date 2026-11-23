@@ -72,3 +72,40 @@ Two backlog items from the legal/privacy review remained: a "custom installer"
 - ADR 0027 (at-rest hardening — LUKS over app-level crypto).
 - ADR 0029 (custom installer — Phase A shipped; this supersedes Phase B).
 - `iso/Containerfile` (os-release rewrite), `iso/build.toml`, `iso/README.md`.
+
+## Incident — 2026-11-23: the ISO wiped every disk in the machine
+
+**What happened.** Installing from the ISO on a real PC formatted all connected
+disks, not just the target.
+
+**Cause.** `iso/build.toml` carried only a `[[customizations.user]]` block.
+With no kickstart of ours, bootc-image-builder generates one for a fully
+unattended install; the build manifest of the shipped ISO shows
+`"clearpart": {"all": true}` with nothing limiting which disks it applies to,
+followed by automatic partitioning and a reboot. This ADR's premise — "Anaconda
+already does partitioning, LUKS and user creation reliably", i.e. the user goes
+through the normal installer — was never true for our ISO: the installer asked
+nothing. In a VM with one empty disk that is indistinguishable from a
+convenient install.
+
+**Fix.** `iso/build.toml` now supplies its own kickstart with **no storage
+commands**, which switches the builder to "deploy the image, leave the rest to
+the kickstart". Anaconda stops at *Installation Destination*; the user picks
+the disk and confirms what is erased. Language, keyboard and time zone are
+asked too (they were silently en_US / us / UTC). The install ends on the
+"complete" screen instead of rebooting by itself. Verified by generating the
+manifest with the new config: no `clearpart`, `zerombr`, `autopart`,
+`ignoredisk` or `reboot`.
+
+**Guard.** `tools/check-installer-kickstart.sh` fails when the config has no
+kickstart of ours, when the kickstart contains any disk-selecting command or a
+reboot, and when a generated manifest contains one. It runs in `ci.yml` on
+every PR, and in `build-iso.yml` / `tools/build-iso.sh` before the ISO is built
+and again on the generated manifest before anything is uploaded.
+
+**Not yet verified:** a real install from a rebuilt ISO. Before it touches
+hardware again, boot it in a VM with **two** virtual disks and confirm the
+installer stops and asks.
+
+**Every ISO built before this change is unsafe** on a machine with more than
+one disk and must not be used or left published.

@@ -26,6 +26,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Cheap and first: the ISO installer must never pick a disk by itself
+      # (see iso/build.toml). Runs on every PR so a bad config cannot merge.
+      - name: Installer kickstart must not select disks
+        run: bash tools/check-installer-kickstart.sh
+
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq

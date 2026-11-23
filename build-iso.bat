@@ -9,7 +9,8 @@ REM  toolchain live.
 REM
 REM  Usage (from this folder, in a terminal):
 REM      build-iso.bat            normal build (reuses builder base)
-REM      build-iso.bat rebuild    force a fresh builder base too
+REM      build-iso.bat rebuild    force fresh builder + runtime bases too
+REM                               (needed after changing a base Containerfile)
 REM
 REM  Output:
 REM      iso\output\bootiso\install.iso   (Windows-visible — the
@@ -67,7 +68,7 @@ echo.
 echo === LilithOS ISO build ===
 echo   Distro : %DISTRO%
 echo   Repo   : %REPO%
-echo   Rebuild builder base: %REBUILD%
+echo   Rebuild builder + runtime bases: %REBUILD%
 echo.
 echo Voce sera solicitado a senha do sudo do WSL.
 echo.
@@ -75,7 +76,7 @@ echo.
 REM Run the whole pipeline under sudo inside a login shell (login
 REM shell so cargo/podman are on PATH). REBUILD_BUILDER is read by
 REM tools/build-iso.sh.
-wsl -d %DISTRO% bash -lc "cd '%REPO%' && sudo REBUILD_BUILDER=%REBUILD% bash tools/build-iso.sh"
+wsl -d %DISTRO% bash -lc "cd '%REPO%' && sudo REBUILD_BUILDER=%REBUILD% REBUILD_RUNTIME=%REBUILD% bash tools/build-iso.sh"
 set "RC=%errorlevel%"
 
 echo.

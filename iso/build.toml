@@ -1,22 +1,59 @@
 # bootc-image-builder configuration.
 #
 # Turns the OCI image produced by `Containerfile` into an installable ISO.
-# See: https://github.com/osbuild/bootc-image-builder
 
-[customizations]
+# ── The installer must NEVER choose a disk on its own ────────────────────
+#
+# This file used to contain only a `[[customizations.user]]` block. With no
+# kickstart of ours, bootc-image-builder generates one for a fully UNATTENDED
+# install, and that generated kickstart contains
+#
+#     clearpart --all
+#     autopart …
+#     reboot
+#
+# with nothing restricting which disks it applies to. Booting the ISO on a
+# real PC therefore wiped EVERY disk the installer could see — the target,
+# the Windows drive, the data drives — without asking a single question.
+# (Verified in the build manifest of the shipped ISO: `"clearpart": {"all":
+# true}`.) In a VM with one empty disk that looks like a convenient
+# zero-click install, which is how it went unnoticed.
+#
+# Supplying our own kickstart switches the builder to "we handle installing
+# the image, your kickstart handles everything else": it adds only the
+# command that deploys the container image. Ours deliberately contains NO
+# storage commands, so Anaconda stops at "Installation Destination" and the
+# person at the keyboard picks the disk and confirms what gets erased.
+#
+# DO NOT add any of these here, ever — each one makes the installer touch
+# disks without the user choosing them:
+#
+#     clearpart   zerombr   autopart   ignoredisk   part / partition
+#     logvol      volgroup  raid       btrfs        reqpart
+#
+# CI enforces this: tools/check-installer-kickstart.sh fails the build if one
+# appears, and again if the generated ISO manifest contains a clearpart.
+#
+# Nor `lang`, `keyboard` or `timezone`: left out, the installer asks, which is
+# also how a non-US keyboard gets configured. Nor `reboot`: the user reads
+# the "installation complete" screen and removes the USB stick.
 
-# Anaconda installer is on by default — we keep it so the user goes through
-# a normal Fedora installer in the VM. Phase 2 will swap for a custom
-# Jarvis-branded installer.
+[customizations.installer.kickstart]
+contents = """
+# LilithOS installer — interactive. Storage is chosen by the user in the
+# installer; see iso/build.toml for why nothing here may select a disk.
 
-[[customizations.user]]
-name = "jarvis"
-# Default dev password. The first-boot updater will prompt the user to
-# change this. Production builds replace this with a runtime-prompted
-# kickstart.
-password = "jarvis"
-groups = ["wheel"]
+# Dev default account (a user customization cannot be combined with a custom
+# kickstart, so it lives here). The first-boot wizard makes the user set a
+# real password (ADR 0029); release images are to drop this (daily-driver
+# plan, Phase 1c).
+user --name=jarvis --groups=wheel --password=jarvis --plaintext
+rootpw --lock
 
-[customizations.kernel]
-# Wayland session works best when we keep the kernel boot params minimal.
-append = "quiet rhgb"
+network --bootproto=dhcp --device=link --activate --onboot=on
+
+# Kernel arguments for the installed system. (`[customizations.kernel]` is
+# not applied when a custom kickstart is present.) This sets arguments only;
+# it does not pick a boot disk.
+bootloader --append="quiet rhgb"
+"""

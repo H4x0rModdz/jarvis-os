@@ -5,6 +5,17 @@ follows the path locked in by [`.jarvis/decisions/0005-fedora-atomic-base.md`](.
 **Fedora Atomic (bootc) + labwc + our Rust/Qt stack baked into an
 immutable OS image**.
 
+## ⚠ Installing: you choose the disk
+
+The installer is interactive. It stops at **Installation Destination** and
+erases only the disk(s) you select there.
+
+**ISOs built before 2026-11-23 are dangerous:** they ran an unattended
+install with `clearpart --all` and wiped *every* disk in the machine without
+asking. Do not use them on a PC with more than one disk — rebuild. Details:
+`.jarvis/decisions/0030-installer-rebrand-and-at-rest-luks.md` § Incident,
+and the rules at the top of `iso/build.toml`.
+
 ## What's in v0.0.1
 
 | Component | Notes |
