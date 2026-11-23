@@ -43,7 +43,13 @@ run_labwc() {
 
 if [ "$choice" = hyprland ] && command -v Hyprland >/dev/null 2>&1; then
     export XDG_CURRENT_DESKTOP=Hyprland
-    log="${XDG_RUNTIME_DIR:-/tmp}/jarvis-hyprland.log"
+    # Log into the session's private runtime dir (0700, ours) — never a fixed
+    # name under /tmp, which another local user could pre-create or symlink.
+    log=/dev/null
+    if [ -n "${XDG_RUNTIME_DIR-}" ] && [ -d "$XDG_RUNTIME_DIR" ] && [ -O "$XDG_RUNTIME_DIR" ]; then
+        log="$XDG_RUNTIME_DIR/jarvis-hyprland.log"
+        [ -L "$log" ] && rm -f -- "$log"
+    fi
     start=$(date +%s)
     Hyprland -c /usr/share/jarvis/hypr/hyprland.lua > "$log" 2>&1
     code=$?
@@ -54,7 +60,12 @@ if [ "$choice" = hyprland ] && command -v Hyprland >/dev/null 2>&1; then
         exit "$code"
     fi
     echo "Hyprland exited with $code after ${ran}s — falling back to labwc" >> "$log"
-    cp "$log" "${HOME:-/tmp}/.jarvis-hyprland-failed.log" 2>/dev/null || true
+    # Keep a copy where it survives the session (the runtime dir is wiped at
+    # logout). Only into a real home directory.
+    if [ "$log" != /dev/null ] && [ -n "${HOME-}" ] && [ -d "$HOME" ] && [ -O "$HOME" ]; then
+        rm -f -- "$HOME/.jarvis-hyprland-failed.log"
+        cp -- "$log" "$HOME/.jarvis-hyprland-failed.log" 2>/dev/null || true
+    fi
 fi
 
 run_labwc

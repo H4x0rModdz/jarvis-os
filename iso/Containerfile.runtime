@@ -376,28 +376,27 @@ COPY iso/assets/theme/gtk-settings.ini /etc/gtk-4.0/settings.ini
 # MOZ_ENABLE_WAYLAND) force Flatpaks onto Wayland: this session has no
 # working XWayland/DISPLAY, so apps that default to X11 fail at launch.
 # NOTE: --system overrides live under /var, which bootc only seeds on
-# install — an OTA upgrade does NOT refresh them. The labwc autostart
-# re-applies the same --user override each login so existing VMs get it
-# without a reinstall; this block covers fresh installs.
+# install — an OTA upgrade does NOT refresh them. The session autostart
+# re-applies the Wayland part as a --user override each login so existing
+# installs get it without a reinstall; this block covers fresh installs.
+#
+# No writable filesystem access is granted here. Every app used to get
+# --filesystem=xdg-download and Firefox --filesystem=home, which let any
+# sandboxed app read and rewrite the user's downloads and gave a browser
+# exploit the whole home directory. Firefox's manifest already grants it
+# Downloads; anything else goes through the file-chooser portal. The two
+# host paths below are read-only theme data. (Installs made before this
+# change keep the old system-level grants until reinstalled; the user-level
+# ones are cleared by the session autostart.)
 RUN flatpak override --system \
         --filesystem=/usr/share/themes:ro \
         --filesystem=/usr/share/icons:ro \
-        --filesystem=xdg-download \
         --env=GTK_THEME=WhiteSur-Dark \
         --env=XCURSOR_THEME=WhiteSur-cursors \
         --socket=wayland \
         --env=QT_QPA_PLATFORM=wayland \
         --env=GDK_BACKEND=wayland \
         --env=MOZ_ENABLE_WAYLAND=1
-
-# Firefox (the daily-driver browser) gets FULL home access — saving/opening
-# downloads must work anywhere the user expects. The global xdg-download above
-# proved too narrow: Firefox kept dumping into its private sandbox dir (feels
-# like a temp folder; Dolphin can't see it), so downloads were unopenable.
-# NOTE: --system overrides live under /var (seeded on install only); the labwc
-# autostart re-applies the same --user override each login, so already-installed
-# VMs get it via OTA without a reinstall.
-RUN flatpak override --system --filesystem=home org.mozilla.firefox
 
 # Nested user namespaces so Flatpak apps with their own inner sandbox
 # (Firefox's content process) can start. Without a budget the nested

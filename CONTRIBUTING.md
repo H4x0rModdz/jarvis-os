@@ -162,7 +162,7 @@ and let a maintainer sanity-check the direction before you build it.
 
 Open an issue with: what you did, what you expected, what happened, and the
 environment (VM or hardware, `bootc status` output if it's an OS-level
-issue). Logs live under `~/.jarvis/logs/` and `/tmp/labwc-autostart.log` —
+issue). Logs live under `~/.jarvis/logs/` and `$XDG_RUNTIME_DIR/jarvis-session-autostart.log` —
 attach the relevant tail.
 
 ---

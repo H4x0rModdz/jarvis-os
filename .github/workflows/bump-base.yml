@@ -53,15 +53,24 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "summary=$(grep '^# kernel: ' iso/Containerfile.runtime | sed 's/^# //')" >> "$GITHUB_OUTPUT"
           fi
+          # Only the fixed strings "true"/"false" are written to GITHUB_OUTPUT.
+          # Text that originates in a registry never goes through it: a value
+          # with a newline could otherwise define extra step outputs.
 
       - name: Open or update the PR
         if: steps.bump.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SUMMARY: ${{ steps.bump.outputs.summary }}
         run: |
+          # The summary and the log end up in a commit message and a PR body,
+          # and their content comes from image labels. bump-base.sh already
+          # refuses values that do not have the expected shape; this is the
+          # second fence — keep one line, and only characters that cannot
+          # break out of Markdown or a code block.
+          SUMMARY=$(grep -m1 '^# kernel: ' iso/Containerfile.runtime | sed 's/^# //' \
+                      | tr -d '\r\n' | tr -cd 'A-Za-z0-9 .:_+?-' | cut -c1-160)
+          tr -cd 'A-Za-z0-9 .:_+?@/()\n-' < bump.log | head -n 20 > bump.clean.log
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B chore/bump-base
@@ -74,7 +83,7 @@ jobs:
             echo "**Now:** ${SUMMARY}"
             echo
             echo '```'
-            cat bump.log
+            cat bump.clean.log
             echo '```'
             echo
             echo "Merging rebuilds the runtime base (\`build-runtime.yml\`). The build itself"
