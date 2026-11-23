@@ -22,11 +22,26 @@ int firstPercent(const QString& s)
 AudioBridge::AudioBridge(QObject* parent) : QObject(parent)
 {
     // 3 s refresh — sink list changes when the user plugs / unplugs
-    // headphones; not worth polling more aggressively.
+    // headphones; not worth polling more aggressively. Off until
+    // startPolling(): the only consumer is the Preferences panel, and
+    // spawning two `pactl` processes every 3 s for the whole session to feed
+    // a panel that is closed is pure waste (same rule as NetworkBridge).
     m_pollTimer.setInterval(3000);
     QObject::connect(&m_pollTimer, &QTimer::timeout, this, &AudioBridge::poll);
-    m_pollTimer.start();
+    // One initial probe so the panel has a sink list the first time it opens.
     refresh();
+}
+
+void AudioBridge::startPolling()
+{
+    if (m_pollTimer.isActive()) return;
+    refresh();
+    m_pollTimer.start();
+}
+
+void AudioBridge::stopPolling()
+{
+    m_pollTimer.stop();
 }
 
 void AudioBridge::refresh()

@@ -9,16 +9,15 @@ import Jarvis.Shell
 ///
 /// Polling lifecycle: starts on `requestOpen`, stops on hide so
 /// we're not forking nmcli every 5 s when the panel isn't visible.
-Window {
+PopupSurface {
+    placement: "top-right"
+    scope: "jarvis-popover"
     id: root
-    visible: false
-    width: 380
-    height: 480
-    color: "transparent"
+    panelWidth: 380
+    panelHeight: 480
     // Qt.Dialog (not Qt.Tool): under labwc a Tool window is non-activatable,
     // so it never gets keyboard focus — the Escape Shortcut never fires.
     // Qt.Dialog gets the activation the Launcher/JarvisMenu rely on.
-    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Wi-Fi")
 
     /// SSID currently being password-edited, or "" when no row is in
@@ -27,28 +26,14 @@ Window {
 
     // Suppress the spurious first deactivate wlroots fires between show and
     // the compositor granting focus — without it the panel closes instantly.
-    property bool _ignoreDeactivate: false
-    Timer { id: armTimer; interval: 250; onTriggered: root._ignoreDeactivate = false }
 
     function requestOpen() {
-        if (Qt.application.screens.length > 0) {
-            const s = Qt.application.screens[0];
-            x = s.virtualX + s.width - width - 16;
-            y = s.virtualY + s.height - height - Theme.barHeight - 16;
-        }
         editingSsid = "";
-        _ignoreDeactivate = true;
-        visible = true;
-        requestActivate();
-        armTimer.restart();
+        present();
         NetworkBridge.startPolling();
         NetworkBridge.scan();
     }
 
-    Shortcut {
-        sequence: "Escape"
-        onActivated: root.visible = false
-    }
 
     onVisibleChanged: {
         if (!visible) {
@@ -57,13 +42,10 @@ Window {
         }
     }
 
-    onActiveChanged: {
-        if (!active && !_ignoreDeactivate && visible) root.visible = false;
-    }
 
     GlassPanel {
         anchors.fill: parent
-        anchors.margins: 8
+        backdrop: true
 
         ColumnLayout {
             anchors.fill: parent
@@ -91,6 +73,7 @@ Window {
                     implicitWidth: 44
                     implicitHeight: 24
                     radius: 12
+                    visible: NetworkBridge.wifiAvailable
                     color: NetworkBridge.wifiEnabled ? Theme.accent : Qt.rgba(1, 1, 1, 0.08)
                     border.color: NetworkBridge.wifiEnabled ? Theme.accent : Theme.border
                     border.width: 1
@@ -158,25 +141,34 @@ Window {
                         anchors.margins: -6
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.visible = false
+                        onClicked: root.dismiss()
                     }
                 }
             }
 
-            // ── Radio-off state ──────────────────────────────────────
+            // ── No adapter / radio off ───────────────────────────────
+            // Fills the panel so the header stays at the top (with nothing
+            // stretching, the layout would spread the rows out).
             Text {
-                visible: !NetworkBridge.wifiEnabled
-                text: qsTr("Wi-Fi desativado.")
+                visible: !NetworkBridge.wifiAvailable || !NetworkBridge.wifiEnabled
+                text: !NetworkBridge.wifiAvailable
+                    ? (SystemStatsBridge.online
+                        ? qsTr("Nenhum adaptador Wi-Fi encontrado.
+Conectado por cabo (%1).").arg(SystemStatsBridge.primaryIface)
+                        : qsTr("Nenhum adaptador Wi-Fi encontrado."))
+                    : qsTr("Wi-Fi desativado.")
                 color: Theme.textDim
-                font.pixelSize: 13
+                font.pixelSize: Theme.fontBody
+                lineHeight: 1.4
                 Layout.fillWidth: true
+                Layout.fillHeight: true
                 horizontalAlignment: Text.AlignHCenter
-                Layout.topMargin: 24
+                verticalAlignment: Text.AlignVCenter
             }
 
             // ── Network list ─────────────────────────────────────────
             ListView {
-                visible: NetworkBridge.wifiEnabled
+                visible: NetworkBridge.wifiAvailable && NetworkBridge.wifiEnabled
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 clip: true
@@ -329,7 +321,7 @@ Window {
 
             // ── Error footer ─────────────────────────────────────────
             Text {
-                visible: NetworkBridge.lastError.length > 0
+                visible: NetworkBridge.wifiAvailable && NetworkBridge.lastError.length > 0
                 Layout.fillWidth: true
                 text: NetworkBridge.lastError
                 color: Theme.danger

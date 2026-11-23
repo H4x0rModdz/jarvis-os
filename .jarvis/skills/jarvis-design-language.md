@@ -12,16 +12,32 @@ LilithOS should feel:
 
 The UI should look like it belongs in 2030, but remain practical for 8-hour work sessions.
 
-## Inspirations
+## Reference
 
-- Windows 11 (familiarity, taskbar ergonomics)
-- macOS (polish, animation quality, hierarchy)
-- KDE Plasma (customization, Linux-native feel)
-- Sci-fi HUD systems (futuristic depth and glow)
+One reference, not a blend: the **Liquid Glass** language of macOS 26
+(dark appearance) — ADR 0035. A fully transparent menu bar, a floating glass
+dock, menus and panels as translucent material with a specular rim, one blue
+accent, large soft radii, white labels at graded opacity.
+
+We reproduce the *language* — layout, materials, proportions, motion. We do
+not ship Apple's *assets*: no SF fonts (UI face is Inter), no Apple icons,
+wallpapers, sounds, logo or names.
+
+All values live in `shell/jarvis-shell/qml/Theme.qml`. A component never
+spells out a colour, a radius or a duration — add a token instead.
+
+The sci-fi command-centre HUD (ADR 0031) is an opt-in desktop *mode* with
+its own palette, not part of this language.
 
 ## Motion Rules
 
 - Animations must be <= 250ms
+- Motion is modelled on Hyprland's defaults: surfaces **pop in** from 87 %
+  scale on a strongly front-loaded curve (`Theme.curveOut`) and leave fast
+  and linear (`Theme.animPopIn` / `animPopOut`). Use the tokens.
+- Every menu, popover and dialog closes with Escape and with a click
+  outside, and dialogs also have a visible ✕ — build them on
+  `PopupSurface`, which gives all three.
 - Prefer ease-out curves for all transitions
 - Never animate more than one focal element simultaneously
 - Blur and glass effects must never flicker or pop
@@ -47,27 +63,25 @@ The UI should look like it belongs in 2030, but remain practical for 8-hour work
 
 ### Implementation Rules
 
-- Blur radius: 8–20px, never more
-- Background opacity: 0.6–0.85, never fully transparent
-- Always test blur on low-end GPU before shipping
-- Glass should be optional/fallback on systems without GPU acceleration
-- Canonical glass surface: `qml/GlassPanel.qml`. New panels start from
-  it instead of stacking a fresh `Rectangle + top highlight` recipe.
-  Real backdrop-blur (desktop visible through panels) needs the
-  Jarvis Smithay compositor — labwc can't expose a blur protocol, so
-  GlassPanel keeps the colour stack opaque enough that "no real
-  blur" reads as deliberate flat-glass, not as a missing feature.
+- Glass = blurred backdrop → tint → 1 px specular rim → soft shadow, and it
+  is one component: `qml/GlassPanel.qml`. New surfaces start from it.
+- The backdrop is the wallpaper, blurred ONCE (`WallpaperBackdropProvider`)
+  and cropped to where the surface sits. Nothing is blurred per frame.
+- A surface over application windows (or one the user can move) uses the
+  opaque material: a wallpaper backdrop would be wrong there. Real blur of
+  windows is a compositor feature (ADR 0034).
+- Never wrap changing content in `layer.enabled` + an effect.
 
 ## Color & Depth
 
-- Prefer a dark base with subtle luminous accents
+- Dark appearance; one accent (system blue). Semantic green / yellow / red only for state
 - Use layered depth (z-levels) to communicate hierarchy
 - Avoid flat design that removes all spatial cues
 - Shadow systems should be soft, not harsh
 
 ## Typography
 
-- Prefer system fonts or a single, clean sans-serif
+- One UI typeface: Inter. Monospace only for code and terminals
 - Minimum readable body size: 13px
 - Never sacrifice legibility for aesthetics
 - Line-height >= 1.4 for all body text

@@ -93,6 +93,9 @@ class RunningAppsModel : public QAbstractListModel
     /// that call isRunning() reference `revision` so they re-evaluate as
     /// windows open and close (isRunning is a method, not a property).
     Q_PROPERTY(int revision READ revision NOTIFY changed)
+    /// app_id of the focused window, or "" when nothing is focused (the
+    /// desktop). The menu bar shows it as the active application's name.
+    Q_PROPERTY(QString activeAppId READ activeAppId NOTIFY changed)
 
 public:
     enum Roles {
@@ -110,6 +113,7 @@ public:
 
     int count() const { return m_handles.size(); }
     int revision() const { return m_revision; }
+    QString activeAppId() const;
 
     /// Does any running window correspond to this pinned desktop id?
     /// Normalised match: `org.mozilla.firefox` <-> `firefox`,

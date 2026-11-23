@@ -2,16 +2,23 @@
 
 #include <QObject>
 #include <QString>
-#include <QTimer>
+#include <QThread>
 #include <QVariantList>
-#include <QVector>
 #include <qqmlintegration.h>
 
+#include "system_stats_sampler.h"
+
 /// Live system telemetry for the eDEX-style desktop HUD (the "command
-/// center" panels on the home surface — see Desktop.qml). Polls /proc once
-/// a second and exposes CPU / memory / network / uptime / top-processes as
-/// QML properties. One `updated()` signal fires per tick; QML re-reads all
-/// bindings off it (same pattern as PowerBridge's stateChanged).
+/// center" panels on the home surface — see Desktop.qml): CPU / memory /
+/// network / disk / uptime / top-processes as QML properties.
+///
+/// The reading happens on a worker thread (SystemStatsSampler); this object
+/// only receives finished samples and republishes them. Each group of
+/// properties has its own change signal, emitted only when a value the HUD
+/// would draw differently has actually changed — so a quiet machine triggers
+/// almost no binding re-evaluation, no relayout and no repaint. (One blanket
+/// `updated()` per second used to re-evaluate every binding on the desktop
+/// and rebuild both Repeaters' delegates, changed or not.)
 ///
 /// Pure read-only telemetry from /proc — no subprocess, no privilege. On a
 /// non-Linux dev host the /proc reads just yield zeros, which renders an
@@ -22,49 +29,51 @@ class SystemStatsBridge : public QObject
     QML_ELEMENT
     QML_SINGLETON
 
-    Q_PROPERTY(int cpuPercent READ cpuPercent NOTIFY updated)
-    Q_PROPERTY(QVariantList perCore READ perCore NOTIFY updated)
-    Q_PROPERTY(QVariantList cpuHistory READ cpuHistory NOTIFY updated)
-    Q_PROPERTY(int memPercent READ memPercent NOTIFY updated)
-    Q_PROPERTY(double memUsedGiB READ memUsedGiB NOTIFY updated)
-    Q_PROPERTY(double memTotalGiB READ memTotalGiB NOTIFY updated)
-    Q_PROPERTY(double swapUsedGiB READ swapUsedGiB NOTIFY updated)
-    Q_PROPERTY(QString uptimeText READ uptimeText NOTIFY updated)
-    Q_PROPERTY(double netUpKBs READ netUpKBs NOTIFY updated)
-    Q_PROPERTY(double netDownKBs READ netDownKBs NOTIFY updated)
-    Q_PROPERTY(QVariantList netUpHistory READ netUpHistory NOTIFY updated)
-    Q_PROPERTY(QVariantList netDownHistory READ netDownHistory NOTIFY updated)
-    Q_PROPERTY(bool online READ online NOTIFY updated)
+    Q_PROPERTY(int cpuPercent READ cpuPercent NOTIFY cpuChanged)
+    /// Per-core load, 0..100, indexed by core. Drive a Repeater with
+    /// `coreCount` (stable) and read `perCore[index]` inside the delegate —
+    /// using this list as the model would rebuild every delegate each second.
+    Q_PROPERTY(QVariantList perCore READ perCore NOTIFY cpuChanged)
+    Q_PROPERTY(int coreCount READ coreCount NOTIFY coreCountChanged)
+    Q_PROPERTY(QVariantList cpuHistory READ cpuHistory NOTIFY cpuChanged)
+    Q_PROPERTY(int memPercent READ memPercent NOTIFY memChanged)
+    Q_PROPERTY(double memUsedGiB READ memUsedGiB NOTIFY memChanged)
+    Q_PROPERTY(double memTotalGiB READ memTotalGiB NOTIFY memChanged)
+    Q_PROPERTY(double swapUsedGiB READ swapUsedGiB NOTIFY memChanged)
+    Q_PROPERTY(QString uptimeText READ uptimeText NOTIFY uptimeChanged)
+    Q_PROPERTY(double netUpKBs READ netUpKBs NOTIFY netRateChanged)
+    Q_PROPERTY(double netDownKBs READ netDownKBs NOTIFY netRateChanged)
+    Q_PROPERTY(QVariantList netUpHistory READ netUpHistory NOTIFY netRateChanged)
+    Q_PROPERTY(QVariantList netDownHistory READ netDownHistory NOTIFY netRateChanged)
     // Network identity of the default-route interface (wired or wifi) — empty
     // when offline. NetworkBridge is WiFi-only and exposes no IP/gateway.
-    Q_PROPERTY(QString ipAddress READ ipAddress NOTIFY updated)
-    Q_PROPERTY(QString gateway READ gateway NOTIFY updated)
-    Q_PROPERTY(QString primaryIface READ primaryIface NOTIFY updated)
-    // Disk usage for the root filesystem ("/") and the user's home. bootc keeps
-    // /usr read-only and /home a separate subvolume, so the two fill up for very
-    // different reasons — worth showing both. `*Percent` is 0..100.
-    Q_PROPERTY(double diskUsedGiB READ diskUsedGiB NOTIFY updated)
-    Q_PROPERTY(double diskTotalGiB READ diskTotalGiB NOTIFY updated)
-    Q_PROPERTY(int diskPercent READ diskPercent NOTIFY updated)
-    Q_PROPERTY(double homeUsedGiB READ homeUsedGiB NOTIFY updated)
-    Q_PROPERTY(double homeTotalGiB READ homeTotalGiB NOTIFY updated)
-    Q_PROPERTY(int homePercent READ homePercent NOTIFY updated)
+    Q_PROPERTY(bool online READ online NOTIFY netIdentityChanged)
+    Q_PROPERTY(QString ipAddress READ ipAddress NOTIFY netIdentityChanged)
+    Q_PROPERTY(QString gateway READ gateway NOTIFY netIdentityChanged)
+    Q_PROPERTY(QString primaryIface READ primaryIface NOTIFY netIdentityChanged)
+    // Usage of the writable store (/var on bootc; "/" elsewhere). `diskPercent`
+    // is 0..100.
+    Q_PROPERTY(double diskUsedGiB READ diskUsedGiB NOTIFY diskChanged)
+    Q_PROPERTY(double diskTotalGiB READ diskTotalGiB NOTIFY diskChanged)
+    Q_PROPERTY(int diskPercent READ diskPercent NOTIFY diskChanged)
     // Hottest CPU core in °C from /sys/class/hwmon, or 0 when no sensor is
     // readable (common in a VM) — the UI hides the row when 0.
-    Q_PROPERTY(int cpuTempC READ cpuTempC NOTIFY updated)
-    Q_PROPERTY(int taskCount READ taskCount NOTIFY updated)
+    Q_PROPERTY(int cpuTempC READ cpuTempC NOTIFY cpuTempChanged)
+    Q_PROPERTY(int taskCount READ taskCount NOTIFY taskCountChanged)
     Q_PROPERTY(QString cpuModel READ cpuModel CONSTANT)
     // "LilithOS <version>" from /etc/os-release, read once — the currently
     // *booted* build. (UpdaterBridge only knows the *available* image.)
     Q_PROPERTY(QString osRelease READ osRelease CONSTANT)
     /// [{ pid:int, name:string, mem:double (percent) }], top 5 by RSS.
-    Q_PROPERTY(QVariantList topProcesses READ topProcesses NOTIFY updated)
+    Q_PROPERTY(QVariantList topProcesses READ topProcesses NOTIFY topProcessesChanged)
 
 public:
     explicit SystemStatsBridge(QObject* parent = nullptr);
+    ~SystemStatsBridge() override;
 
     int cpuPercent() const { return m_cpuPercent; }
     QVariantList perCore() const { return m_perCore; }
+    int coreCount() const { return int(m_perCore.size()); }
     QVariantList cpuHistory() const { return m_cpuHistory; }
     int memPercent() const { return m_memPercent; }
     double memUsedGiB() const { return m_memUsedGiB; }
@@ -82,9 +91,6 @@ public:
     double diskUsedGiB() const { return m_diskUsedGiB; }
     double diskTotalGiB() const { return m_diskTotalGiB; }
     int diskPercent() const { return m_diskPercent; }
-    double homeUsedGiB() const { return m_homeUsedGiB; }
-    double homeTotalGiB() const { return m_homeTotalGiB; }
-    int homePercent() const { return m_homePercent; }
     int cpuTempC() const { return m_cpuTempC; }
     int taskCount() const { return m_taskCount; }
     QString cpuModel() const { return m_cpuModel; }
@@ -92,22 +98,24 @@ public:
     QVariantList topProcesses() const { return m_topProcesses; }
 
 signals:
-    void updated();
+    void cpuChanged();
+    void coreCountChanged();
+    void memChanged();
+    void uptimeChanged();
+    void netRateChanged();
+    void netIdentityChanged();
+    void diskChanged();
+    void cpuTempChanged();
+    void taskCountChanged();
+    void topProcessesChanged();
 
 private:
-    void tick();
-    void sampleCpu();
-    void sampleMem();
-    void sampleNet();
-    void sampleUptime();
-    void sampleProcs();
-    void sampleDisk();
-    void sampleTemp();
-    void sampleNetIdentity();
+    void apply(const StatsSample& s);
     static QString readCpuModel();
     static QString readOsRelease();
 
-    QTimer m_timer;
+    /// Runs the SystemStatsSampler.
+    QThread m_samplerThread;
 
     int m_cpuPercent = 0;
     QVariantList m_perCore;
@@ -128,31 +136,12 @@ private:
     double m_diskUsedGiB = 0.0;
     double m_diskTotalGiB = 0.0;
     int m_diskPercent = 0;
-    double m_homeUsedGiB = 0.0;
-    double m_homeTotalGiB = 0.0;
-    int m_homePercent = 0;
     int m_cpuTempC = 0;
     int m_taskCount = 0;
     QString m_cpuModel;
     QString m_osRelease;
     QVariantList m_topProcesses;
 
-    // Previous CPU jiffies (aggregate + per-core) for delta computation.
-    quint64 m_prevTotal = 0;
-    quint64 m_prevIdle = 0;
-    QVector<quint64> m_prevCoreTotal;
-    QVector<quint64> m_prevCoreIdle;
-    // Previous network byte totals (summed across non-loopback interfaces).
-    quint64 m_prevRx = 0;
-    quint64 m_prevTx = 0;
-    bool m_haveNetPrev = false;
-
-    // The top-processes table walks every /proc/<pid> and reads two files per
-    // process — the one genuinely expensive sample, and it runs on the GUI
-    // thread. Everything else is a handful of reads, so only this one is
-    // throttled: once every kProcScanEvery ticks instead of every tick.
-    static constexpr int kProcScanEvery = 5;
-    int m_procScanTick = kProcScanEvery; // scan on the very first tick
-
+    /// Points kept in each history graph.
     static constexpr int kHistory = 48;
 };

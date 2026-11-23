@@ -178,6 +178,14 @@ int RunningAppsModel::runState(const QString& desktopId) const
     return anyRunning ? 2 : 0;
 }
 
+QString RunningAppsModel::activeAppId() const
+{
+    for (const ForeignToplevelHandle* h : m_handles) {
+        if (h->isActivated()) return h->appId();
+    }
+    return QString();
+}
+
 QStringList RunningAppsModel::runningAppIds() const
 {
     QStringList ids;

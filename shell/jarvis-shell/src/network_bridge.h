@@ -31,6 +31,9 @@ class NetworkBridge : public QObject
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
+    /// False when NetworkManager sees no Wi-Fi adapter (cabled desktop, or an
+    /// adapter with no driver/firmware).
+    Q_PROPERTY(bool wifiAvailable READ wifiAvailable NOTIFY wifiAvailableChanged)
     Q_PROPERTY(bool wifiEnabled READ wifiEnabled NOTIFY wifiEnabledChanged)
     Q_PROPERTY(QVariantMap activeConnection READ activeConnection NOTIFY activeConnectionChanged)
     Q_PROPERTY(QVariantList availableNetworks READ availableNetworks NOTIFY availableNetworksChanged)
@@ -41,6 +44,7 @@ public:
     explicit NetworkBridge(QObject* parent = nullptr);
 
     bool wifiEnabled() const { return m_wifiEnabled; }
+    bool wifiAvailable() const { return m_wifiAvailable; }
     QVariantMap activeConnection() const { return m_activeConnection; }
     QVariantList availableNetworks() const { return m_availableNetworks; }
     QString lastError() const { return m_lastError; }
@@ -70,6 +74,7 @@ public:
 
 signals:
     void wifiEnabledChanged();
+    void wifiAvailableChanged();
     void activeConnectionChanged();
     void availableNetworksChanged();
     void lastErrorChanged();
@@ -90,6 +95,7 @@ private:
 
     QTimer m_pollTimer;
     bool m_wifiEnabled = false;
+    bool m_wifiAvailable = false;
     QVariantMap m_activeConnection;
     QVariantList m_availableNetworks;
     QString m_lastError;

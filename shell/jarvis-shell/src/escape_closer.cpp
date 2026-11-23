@@ -47,7 +47,15 @@ bool EscapeCloser::eventFilter(QObject* watched, QEvent* event)
     const auto windows = QGuiApplication::topLevelWindows();
     for (QWindow* w : windows) {
         if (w->isVisible() && !isProtected(w)) {
-            w->setVisible(false);
+            // A PopupSurface closes through its `shown` property so it can
+            // play its closing animation; hiding it directly would also
+            // leave `shown` stuck at true and the popup unable to reopen.
+            if (w->property("shown").isValid()) {
+                if (!w->property("shown").toBool()) continue;
+                w->setProperty("shown", false);
+            } else {
+                w->setVisible(false);
+            }
             ++closed;
         }
     }

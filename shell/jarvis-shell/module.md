@@ -3,8 +3,8 @@
 ## Purpose
 
 The LilithOS desktop shell — a Qt6/QML application that paints the
-macOS-style **top menu bar**, the floating **bottom dock** (app tiles +
-the Lilith orb), the **desktop icons**, the launcher overlay, permission
+transparent **menu bar**, the floating glass **dock** (app tiles +
+the Lilith orb), an optional desktop HUD, the launcher, permission
 approval dialogs, the first-boot updater splash, the preferences panel,
 notification toasts + drawer, and Lilith's conversation popup. Lives in
 user space, talks to every Jarvis daemon via DBus, and anchors its three
@@ -35,58 +35,87 @@ protocol. See ADR 0022 for the menu-bar/dock/orb layout decision.
 The Qt module is registered as `Jarvis.Shell`. Components are split
 across `src/` (C++ bridges) and `qml/`.
 
-### Top menu bar
+### How the surfaces are placed
+
+Every shell window is a `wlr-layer-shell` surface (`main.cpp` switches Qt's
+Wayland integration to layer-shell before the app is created) and **declares
+its own placement in QML** with the `org.kde.layershell` attached properties:
+`LayerShell.Window.scope` (the namespace compositor rules match on), `.layer`,
+`.anchors`, `.exclusionZone`, `.keyboardInteractivity`. A Wayland client
+cannot position a window with x/y, so:
+
+- menus, popovers and dialogs do not place a small window at all: they are a
+  `PopupSurface` (a transparent surface covering the output, with the panel
+  positioned inside it) — see Design system below;
+- any other window anchors explicitly; one left to LayerShellQt's default
+  (all four edges) is stretched fullscreen;
+- the values must be set declaratively, before the window is first shown; a
+  namespace set after the surface exists is silently refused.
+
+### Design system
 
 | File | Role |
 |---|---|
-| `qml/Main.qml` | Root layer-shell window (objectName `jarvis-topbar`, anchored top). Holds `TopBar` + every sibling popup Window (JarvisMenu, AboutDialog, Launcher, ApprovalDialog, UpdaterSplash, SettingsPanel, DisplayPanel, NotificationToast/Drawer, LilithPopup, ConnectivityPanel, BluetoothPanel, FirstBootWizard). Listens to `ShellBus` for intents from the dock. |
-| `qml/TopBar.qml` | The menu-bar content — Jarvis logo (left, opens the Jarvis menu) + reused wifi/bluetooth/battery/bell/gear indicators + clock (right). |
-| `qml/JarvisMenu.qml` | Apple-menu analogue dropping from the logo: Sobre, Configurações, Atualização, Bloquear/Suspender/Reiniciar/Desligar (the last four dispatch `system.power`). |
-| `qml/AboutDialog.qml` | "Sobre este PC" card. |
-| `qml/BarGearButton.qml` | Gear glyph (opens the settings panel). |
-| `qml/BarBellButton.qml` | Bell glyph (opens the notification drawer). |
-| `qml/Clock.qml` | HH:MM:SS time, updates every second. |
-| `qml/Theme.qml` | Singleton design tokens (colors, radii, animation durations). |
+| `qml/Theme.qml` | Singleton design tokens — colour, glass materials, radii, type, motion (ADR 0035). The only place a literal value may appear. |
+| `qml/GlassPanel.qml` | The glass surface all chrome is made of: blurred wallpaper backdrop → tint → specular rim → shadow. `backdrop: true` + `windowX/Y` where the surface's screen position is known; otherwise the opaque material. |
+| `qml/PopupSurface.qml` | Base of every menu, popover and dialog: a fullscreen transparent layer surface holding the panel, so Escape always closes it (exclusive keyboard), a click outside closes it, and it animates in/out. `present()` / `dismiss()` / `shown` — never assign `visible`. |
+| `qml/SymbolIcon.qml` | A `-symbolic` status glyph from the icon theme, tinted to a colour, with a character fallback. |
+| `src/wallpaper_backdrop_provider.*` | `image://backdrop/blur` — the wallpaper, blurred once at tiny resolution. |
+| `src/icon_image_provider.*` | `image://theme/<name>` — freedesktop icons. |
+
+### Menu bar
+
+| File | Role |
+|---|---|
+| `qml/Main.qml` | Root layer surface (scope `jarvis-topbar`, anchored top, exclusive zone = bar height). Holds `TopBar` + every popup Window. Listens to `ShellBus` for intents from the dock. |
+| `qml/TopBar.qml` | The transparent bar: system mark + focused app name (left); Lilith, battery, Bluetooth, network, search, Control Centre, date/time (right). Minute-resolution clock. |
+| `qml/BarItem.qml` | One clickable bar item with the hover / open highlight. |
+| `qml/JarvisMenu.qml` | The system menu under the mark: about, settings, update, sleep/restart/shut down/lock (the power rows dispatch `system.power`). |
 | `qml/ShellBus.qml` | Singleton signal bus carrying cross-surface UI intents (dock → top-bar popups): `toggleLilith` / `openLauncher` / `openSettings` / `openNotifications`. |
 
 ### Dock
 
 | File | Role |
 |---|---|
-| `qml/Dock.qml` | Floating bottom dock (objectName `jarvis-dock`): a glass pill of pinned app tiles + a divider + the Lilith orb. `main.cpp` anchors it to the bottom edge only (compositor-centered), Top layer, no exclusive zone — maximized windows float under it. App tiles dispatch `app.open`; the Launchpad tile and orb route through `ShellBus`. |
-| `qml/DockIcon.qml` | One dock tile — theme/path icon with hover magnification + monogram fallback. |
-| `qml/LilithOrb.qml` | Lilith's dock presence. Glyph encodes state — `◉` idle, `◎` listening, `◌◌◌` thinking, `◉◉◉` speaking (from `VoiceBridge.state` + `LilithBridge.busy`). Click → `ShellBus.toggleLilith`; press-and-hold → `VoiceBridge.toggle` (push-to-talk). Subsumes the retired status LED + mic button. |
+| `qml/Dock.qml` | Floating glass dock (scope `jarvis-dock`), anchored bottom, centred by the compositor; exclusive zone = the glass bar, so maximized windows stop above it. Pinned apps + running apps + divider + the Lilith orb. App tiles dispatch `app.open`; the launcher tile and orb route through `ShellBus`. |
+| `qml/DockIcon.qml` | One tile: theme icon (letter stand-in if the theme has none), magnifies upward on hover, name bubble, running dot, context menu. |
+| `qml/LilithOrb.qml` | Lilith's dock presence — a luminous orb whose colour and breathing carry her state (idle / listening / thinking / speaking / offline). Click → `ShellBus.toggleLilith`; press-and-hold → push-to-talk. |
 
-> **Retired:** `Bar.qml` (the old single bottom bar) and its bar-only
-> `LilithInput` / `MicButton` / `StatusIndicator` / `BarMenuButton` are
-> no longer instantiated (see ADR 0022). The files remain in the module
-> until a follow-up cleanup removes them.
-
-### Desktop surface
+### Desktop
 
 | File | Role |
 |---|---|
-| `qml/Desktop.qml` | Second top-level Window (objectName `jarvis-desktop`) holding the desktop icon column. `main.cpp` anchors it to all four output edges on the wlr-layer-shell *bottom* layer — above swaybg's wallpaper, below app windows — with no keyboard focus. Icons activate via `app.open`: Computador → `computer:///`, Lixeira → `trash:///` (both pinned to Dolphin in `iso/assets/xdg/mimeapps.list`), Pasta Pessoal → the `HomePath` context property. |
-| `qml/DesktopIcon.qml` | One labelled desktop icon. Single click selects (accent highlight), double click activates. Theme icon via `image://theme/`, monogram fallback, outlined label for legibility over any wallpaper. |
+| `qml/Desktop.qml` | The optional command-centre HUD (scope `jarvis-desktop`, bottom layer, all four edges). **Off by default** — the desktop is the wallpaper; turned on in Preferências (`desktop.hud`). |
+| `qml/HudGauge.qml`, `qml/HudGraph.qml` | The HUD's dials and line graphs. |
 
-### Overlays
+### Popups and dialogs
 
-| File | Role |
-|---|---|
-| `qml/Launcher.qml` | App-grid overlay with search, backed by `DesktopAppsModel`. |
-| `qml/AppCell.qml` | Single app tile inside the launcher grid. |
-| `qml/ApprovalDialog.qml` | Modal-ish window driven by `PermissionBridge.hasPending`. |
-| `qml/ApprovalButton.qml` | Pill button used inside ApprovalDialog. |
-| `qml/UpdaterSplash.qml` | First-boot + OS-upgrade splash, three states (active / os-prompt / reboot). |
-| `qml/SettingsPanel.qml` | Preferences window with the live values from `SettingsBridge`. |
-| `qml/NotificationToast.qml` | Bottom-right toast for incoming notifications, including action buttons. |
-| `qml/NotificationDrawer.qml` | Right-edge drawer listing recent history (newest first). |
+| File | Placement | Role |
+|---|---|---|
+| `qml/Launcher.qml` | top-centre | Spotlight-style app search + grid, backed by `DesktopAppsModel`. |
+| `qml/AppCell.qml` | — | One app tile in the launcher grid. |
+| `qml/ConnectivityPanel.qml`, `qml/BluetoothPanel.qml`, `qml/NotificationDrawer.qml` | top-right | Wi-Fi, Bluetooth, notification history. |
+| `qml/NotificationToast.qml` | top-right | Incoming notification, with action buttons; takes no focus. |
+| `qml/LilithPopup.qml` | bottom-centre, above the dock | The Lilith conversation. |
+| `qml/SettingsPanel.qml`, `qml/DisplayPanel.qml`, `qml/AboutDialog.qml` | centred | Preferences, displays, about. |
+| `qml/ApprovalDialog.qml` (+ `ApprovalButton.qml`) | centred | Driven by `PermissionBridge.hasPending`. |
+| `qml/UpdaterSplash.qml`, `qml/FirstBootWizard.qml` | centred | First-boot / OS-upgrade splash; first-run wizard. |
+| `qml/LilithAvatar.qml`, `qml/LilithAvatarView.qml` | bottom-right | The 3D avatar (ADR 0028), only when a VRM is present. |
+
+### Looking at it
+
+`tools/dev/shell-preview.sh live` opens a window with the shell running in it;
+`… shot <name>` writes `.preview/<name>.png`. Both build the shell with the
+OS's Qt inside a container and run it under labwc with the session's `rc.xml`
+and window theme. Dev switches read by `main.cpp`: `JARVIS_SKIP_FIRST_BOOT`,
+`JARVIS_HUD`, `JARVIS_ICON_THEME`, `JARVIS_WALLPAPER`, `JARVIS_SHELL_SURFACES`,
+`JARVIS_QML_PATH`.
 
 ### Bridges (C++ singletons exposed as `Jarvis.Shell.*`)
 
 | Bridge | Talks to | What it does |
 |---|---|---|
-| `LilithBridge` | `com.jarvis.Lilith` | `Command(text)` + ping for reachability + busy state. |
+| `LilithBridge` | `com.jarvis.Lilith` | `Command(text)` + reachability (DBus name watcher, not a poll) + busy state. |
 | `PermissionBridge` | `com.jarvis.PermissionSystem` | Subscribes to `ApprovalRequested`, exposes pending state, sends `ResolveApproval`. |
 | `ActionBusBridge` | `com.jarvis.ActionBus` | Direct `Dispatch(json)` for shell-internal callers (launcher tile click). |
 | `UpdaterBridge` | `com.jarvis.Updater` | Progress + Completed + OSUpdateAvailable signals, `applyOSUpgrade()`. |
@@ -94,6 +123,37 @@ across `src/` (C++ bridges) and `qml/`.
 | `SettingsBridge` | `com.jarvis.Settings` | Sync getters + async setters + Changed signal re-emit. |
 | `NotificationsBridge` | `com.jarvis.Notifications` + `org.freedesktop.Notifications` | Re-emit NotificationPosted, `invokeAction(id, key)`, history list. |
 | `DesktopAppsModel` | XDG `applications/` dirs | Scan + filter for the launcher. |
+| `SystemStatsBridge` | `/proc`, `/sys` | HUD telemetry. Sampling runs on a worker thread (`SystemStatsSampler`); the bridge republishes with one change signal per property group, emitted only on a visible change. |
+| `MediaBridge` | `playerctl --follow` | Now-playing line + transport controls for the HUD. Event-driven — one long-lived child process, nothing polled. |
+| `AudioBridge` | `pactl` | Output-device list for Preferences. Polls only while the panel is open (`startPolling`/`stopPolling`). |
+| `NetworkBridge` / `BluetoothBridge` | `nmcli` / `bluetoothctl` | Wi-Fi and Bluetooth panels. Poll only while their panel is open. |
+
+## Performance rules
+
+All three surfaces and every popup share **one GUI thread**. Anything that
+stalls it freezes the bar, the dock and the HUD at once, so these are not
+style preferences — each one is here because breaking it caused a visible
+hitch on real hardware:
+
+1. **Nothing blocks the GUI thread.** No `waitForFinished()`, no synchronous
+   DBus `call()`, no directory walks. Subprocesses are async; file sampling
+   that repeats belongs on a worker thread (see `SystemStatsSampler`).
+2. **Events over polling.** If the source can tell us when it changed (a DBus
+   signal, a name-owner change, a `--follow` stream), a timer is the wrong
+   tool. Where polling is unavoidable, it runs only while its UI is visible.
+3. **Notify only what changed.** A bridge with many properties gets one
+   change signal per group and compares before emitting. One blanket
+   `updated()` re-evaluates every binding that touches the bridge.
+4. **Repeater models must be stable.** A list property that is replaced on
+   every update destroys and recreates all its delegates. Drive the Repeater
+   with a count and read values by index when only the values change.
+5. **No `layer.enabled` + effect around changing content.** It re-renders
+   the subtree to a texture and re-runs the effect on every change inside.
+   `GlassPanel` draws its shadow as a separate item behind the body for
+   this reason.
+6. **The desktop surface is fullscreen** — one changed pixel re-renders and
+   recomposites the whole output. Nothing on it animates at rest, and 1 Hz
+   telemetry snaps rather than tweens.
 
 ## DBus Surface
 
@@ -137,10 +197,10 @@ com.jarvis.Notifications
 
 ## Build
 
-Out-of-tree CMake. Qt 6.5+ required (the QML singleton mechanism
-Theme depends on misbehaves under the `REQUIRES 6.4` compat mode).
-Fedora 42 ships Qt 6.10 which is what the ISO build uses; local dev
-on Ubuntu 24.04 needs Qt 6.5+ via aqtinstall.
+Out-of-tree CMake. Qt 6.9+ required (`GlassPanel` uses `RectangularShadow`,
+added in 6.9). Fedora 44 ships Qt 6.11, which is what the image build uses;
+local dev on Ubuntu 24.04 needs Qt 6.9+ via aqtinstall, or build inside the
+`jarvis-builder` container.
 
 ```bash
 cmake -S shell/jarvis-shell -B /tmp/jarvis-shell-build \

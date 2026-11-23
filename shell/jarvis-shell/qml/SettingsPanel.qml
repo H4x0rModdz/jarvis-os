@@ -11,26 +11,20 @@ import Jarvis.Shell
 ///
 /// Opens via `SettingsPanel.requestOpen()` from outside (gear button on
 /// the bar). Esc closes.
-Window {
+PopupSurface {
+    placement: "center"
+    scope: "jarvis-dialog"
+    dim: true
     id: root
-    visible: false
-    width: 520
-    height: 380
+    panelWidth: 760
+    panelHeight: 600
     title: qsTr("Preferências do LilithOS")
-    color: "transparent"
-    flags: Qt.Dialog | Qt.WindowStaysOnTopHint
 
     function requestOpen() {
-        if (Qt.application.screens.length > 0) {
-            const s = Qt.application.screens[0];
-            x = s.virtualX + Math.floor((s.width - width) / 2);
-            y = s.virtualY + Math.floor((s.height - height) / 2);
-        }
         // Pull a fresh enrolled-users list — daemon state may have
         // changed since the panel was last opened (CLI enroll, etc.).
         VoiceBridge.refreshEnrolledUsers();
-        visible = true;
-        requestActivate();
+        present();
     }
 
     /// Signal up to Main.qml, which owns the DisplayPanel instance.
@@ -41,10 +35,9 @@ Window {
 
     function openDisplay() { displayRequested(); }
 
-    Shortcut {
-        sequence: "Escape"
-        onActivated: root.visible = false
-    }
+    // The audio-output list is only live while this panel is on screen.
+    onVisibleChanged: visible ? AudioBridge.startPolling() : AudioBridge.stopPolling()
+
 
     // Bind to SettingsBridge.valueChanged so the panel re-resolves
     // current values when the daemon broadcasts. The number is a
@@ -57,7 +50,7 @@ Window {
 
     GlassPanel {
         anchors.fill: parent
-        anchors.margins: 8
+        backdrop: true
 
         ColumnLayout {
             anchors.fill: parent
@@ -86,7 +79,7 @@ Window {
                         anchors.margins: -6
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.visible = false
+                        onClicked: root.dismiss()
                     }
                 }
             }
@@ -204,6 +197,56 @@ Window {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: SettingsBridge.setBool("voice.tts_enabled", !ttsSwitch.checked)
+                    }
+                }
+            }
+
+            // ── Row: command-centre HUD on the desktop ────────────────
+            // Off by default: the desktop is the wallpaper. On, the bottom
+            // layer shows the SYSTEM / LILITH / NETWORK panels (ADR 0031).
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 12
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    spacing: 2
+                    Text {
+                        text: qsTr("Central de comando na mesa")
+                        color: Theme.text
+                        font.pixelSize: 14
+                    }
+                    Text {
+                        text: qsTr("Mostra os painéis de sistema, Lilith e rede atrás das janelas, no lugar do papel de parede limpo.")
+                        color: Theme.textDim
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                Rectangle {
+                    id: hudSwitch
+                    Layout.alignment: Qt.AlignVCenter
+                    implicitWidth: 44
+                    implicitHeight: 24
+                    radius: 12
+                    property bool checked: (root._settingsTick, SettingsBridge.getBool("desktop.hud", false))
+                    color: checked ? Theme.accent : Theme.fill
+                    border.color: checked ? Theme.accent : Theme.border
+                    border.width: 1
+                    Behavior on color { ColorAnimation { duration: Theme.animFast } }
+
+                    Rectangle {
+                        width: 18; height: 18; radius: 9
+                        color: Theme.text
+                        anchors.verticalCenter: parent.verticalCenter
+                        x: parent.checked ? parent.width - width - 3 : 3
+                        Behavior on x { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: SettingsBridge.setBool("desktop.hud", !hudSwitch.checked)
                     }
                 }
             }

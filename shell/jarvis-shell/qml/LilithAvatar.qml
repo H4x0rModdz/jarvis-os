@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
 /// Lilith's embodied presence — a floating, draggable 3D companion window
@@ -18,6 +19,13 @@ Window {
     height: 340
     color: "transparent"
     // Qt.Dialog (not Tool): under labwc a Tool window is non-activatable.
+    // Placement: a layer surface. Unanchored = centred at its own size (left
+    // to its defaults, LayerShellQt anchors all four edges and the window is
+    // stretched over the whole screen).
+    LayerShell.Window.scope: "jarvis-avatar"
+    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+    LayerShell.Window.anchors: LayerShell.Window.AnchorBottom | LayerShell.Window.AnchorRight
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
     flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Lilith")
 

@@ -2,104 +2,76 @@ import QtQuick
 import QtQuick.Window
 import Jarvis.Shell
 
-/// The Jarvis menu — the macOS Apple-menu analogue that drops from the
-/// logo at the top-left of the menu bar. A separate frameless popup
-/// Window (menus extend past the thin top-bar surface, so they can't
-/// live inside it). Hosted by Main.qml, which positions it under the
-/// logo and listens to its signals.
+/// The system menu — drops from the mark at the left end of the menu bar:
+/// about, settings, updates, and the power actions. Its own layer surface
+/// anchored to the top-left corner (a menu extends past the thin bar surface,
+/// so it cannot live inside it).
 ///
-/// Power items dispatch the system.power Action Bus action; Sobre /
-/// Configurações bubble up as signals so Main opens the dialog / panel
-/// it owns.
-Window {
+/// Power items dispatch the `system.power` Action Bus action; Sobre /
+/// Configurações bubble up as signals so Main opens the window it owns.
+PopupSurface {
     id: root
-    width: 240
-    height: col.implicitHeight + 16
-    color: "transparent"
-    // Qt.Dialog (not Qt.Tool): under labwc a Tool window is treated as
-    // non-activatable, so it never receives focus — which means neither
-    // the Escape Shortcut nor the click-outside (onActiveChanged → !active)
-    // dismiss ever fires and the menu gets stuck open. Qt.Dialog gets the
-    // same activation the Launcher relies on to close on focus loss.
-    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    visible: false
+    placement: "top-left"
+    scope: "jarvis-menu"
+    panelWidth: 250
+    panelHeight: col.implicitHeight + 10
+
 
     signal aboutRequested()
     signal settingsRequested()
 
-    // Suppress the spurious first deactivate that wlroots fires between
-    // show and the compositor granting focus (same gate the Launcher
-    // uses) — without it the menu closes the instant it opens.
-    property bool _ignoreDeactivate: false
-
-    function openAt(px, py) {
-        x = px;
-        y = py;
-        _ignoreDeactivate = true;
-        visible = true;
-        requestActivate();
-        armTimer.restart();
-    }
-    function close() { visible = false; }
-
-    Timer { id: armTimer; interval: 250; onTriggered: root._ignoreDeactivate = false }
-    onActiveChanged: if (!active && !_ignoreDeactivate && visible) close()
-
-    Shortcut {
-        sequence: "Escape"
-        onActivated: root.close()
-    }
+    function open() { present(); }
+    function close() { dismiss(); }
 
     GlassPanel {
         anchors.fill: parent
-        anchors.margins: 4
+        radius: 12
+        backdrop: true
 
         Column {
             id: col
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.margins: 6
+            anchors.margins: 5
             spacing: 0
 
-            // Menu rows. `power` carries a system.power op; `divider`
-            // draws a separator; otherwise a signal/handler fires.
+            // `power` rows carry a system.power op; `divider` draws a
+            // separator; the rest raise a signal.
             Repeater {
                 model: [
-                    { label: qsTr("Sobre este PC"),          kind: "about" },
+                    { label: qsTr("Sobre o LilithOS"),       kind: "about" },
                     { divider: true },
-                    { label: qsTr("Configurações…"),         kind: "settings" },
-                    { label: qsTr("Atualização do sistema"), kind: "update" },
+                    { label: qsTr("Ajustes do Sistema…"),    kind: "settings" },
+                    { label: qsTr("Atualização de Software…"), kind: "update" },
                     { divider: true },
-                    { label: qsTr("Bloquear tela"),          kind: "power", op: "lock" },
-                    { label: qsTr("Suspender"),              kind: "power", op: "suspend" },
+                    { label: qsTr("Repousar"),               kind: "power", op: "suspend" },
                     { label: qsTr("Reiniciar…"),             kind: "power", op: "reboot" },
-                    { label: qsTr("Desligar…"),              kind: "power", op: "poweroff" }
+                    { label: qsTr("Desligar…"),              kind: "power", op: "poweroff" },
+                    { divider: true },
+                    { label: qsTr("Bloquear Tela"),          kind: "power", op: "lock", hint: "Super L" }
                 ]
 
                 delegate: Item {
                     width: col.width
-                    height: modelData.divider === true ? 9 : 30
+                    height: modelData.divider === true ? 11 : 24
 
-                    // Separator line.
                     Rectangle {
                         visible: modelData.divider === true
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.left: parent.left
                         anchors.right: parent.right
-                        anchors.leftMargin: 6
-                        anchors.rightMargin: 6
+                        anchors.leftMargin: 9
+                        anchors.rightMargin: 9
                         height: 1
-                        color: Theme.border
+                        color: Theme.separator
                     }
 
                     Rectangle {
                         visible: modelData.divider !== true
                         anchors.fill: parent
                         radius: 6
-                        color: rowArea.containsMouse
-                            ? Qt.rgba(Theme.accent.r, Theme.accent.g, Theme.accent.b, 0.22)
-                            : "transparent"
+                        color: rowArea.containsMouse ? Theme.accent : "transparent"
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
@@ -107,14 +79,22 @@ Window {
                             anchors.leftMargin: 10
                             text: modelData.label || ""
                             color: Theme.text
-                            font.pixelSize: 13
+                            font.pixelSize: Theme.fontBody
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            visible: modelData.hint !== undefined
+                            text: modelData.hint || ""
+                            color: rowArea.containsMouse ? Theme.text : Theme.textDim
+                            font.pixelSize: Theme.fontBody
                         }
 
                         MouseArea {
                             id: rowArea
                             anchors.fill: parent
                             hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 root.close();
                                 switch (modelData.kind) {

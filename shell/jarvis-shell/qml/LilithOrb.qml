@@ -1,24 +1,23 @@
 import QtQuick
 import Jarvis.Shell
 
-/// Lilith's presence in the dock. A glyph orb whose symbol encodes
-/// state — the set the user asked for:
-///   ◉    idle       — solid, calm
-///   ◎    listening   — hollow ring (mic engaged)
-///   ◌◌◌  thinking    — dotted, animated (Lilith busy / voice processing)
-///   ◉◉◉  speaking    — triple solid, pulsing (TTS playing)
+/// Lilith's presence in the dock: a luminous orb whose colour and motion
+/// carry her state.
+///   idle       — calm blue→violet, still
+///   listening  — cyan, breathing (mic engaged)
+///   thinking   — violet, breathing + a slow sweep of light
+///   speaking   — green, pulsing with the voice
+///   offline    — grey
 ///
-/// Folds in the retired bar's status LED (color = reachability/state),
-/// mic button (press-and-hold = push-to-talk) and the popup trigger
-/// (click → ShellBus.toggleLilith, which Main.qml routes to LilithPopup).
+/// Click toggles the conversation popup (ShellBus.toggleLilith); press and
+/// hold engages push-to-talk (VoiceBridge.toggle).
 Item {
     id: root
-    implicitWidth: 56
-    implicitHeight: 56
+    implicitWidth: Theme.dockIcon + 6
+    implicitHeight: Theme.dockIcon + 10
 
     // One state string from the two bridges. Priority: listening (mic
     // live) > speaking (TTS out) > thinking (busy/processing) > idle.
-    // VoiceBridge.state ∈ {idle, listening, processing, speaking}.
     readonly property string lilithState: {
         const v = VoiceBridge.state;
         if (v === "listening") return "listening";
@@ -26,92 +25,109 @@ Item {
         if (LilithBridge.busy || v === "processing") return "thinking";
         return "idle";
     }
+    readonly property bool active: lilithState !== "idle"
 
-    readonly property color stateColor: {
+    // Top and bottom of the orb's gradient, per state.
+    readonly property color hi: {
+        if (!LilithBridge.reachable && !active) return "#8e8e93";
         switch (lilithState) {
-        case "listening": return "#46d6ff";                        // cyan
-        case "thinking":  return Theme.accent;                     // purple
-        case "speaking":  return Theme.success;                    // green
-        default:          return LilithBridge.reachable ? Theme.accent : Theme.textDim;
+        case "listening": return "#9be7ff";
+        case "speaking":  return "#8bf5a6";
+        case "thinking":  return "#d0a6ff";
+        default:          return "#7fd4ff";
         }
     }
-
-    readonly property string glyph: {
+    readonly property color lo: {
+        if (!LilithBridge.reachable && !active) return "#48484a";
         switch (lilithState) {
-        case "listening": return "◎";
-        case "thinking":  return "◌◌◌";
-        case "speaking":  return "◉◉◉";
-        default:          return "◉";
+        case "listening": return "#0a84ff";
+        case "speaking":  return "#248a3d";
+        case "thinking":  return "#5e5ce6";
+        default:          return "#5e5ce6";
         }
     }
 
-    // Circular glass backplate so the orb reads as a dock tile.
-    Rectangle {
-        id: plate
-        anchors.centerIn: parent
-        width: 48
-        height: 48
-        radius: 24
-        color: area.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05)
-        border.width: 1
-        border.color: Qt.rgba(root.stateColor.r, root.stateColor.g, root.stateColor.b, 0.55)
-        Behavior on border.color { ColorAnimation { duration: Theme.animFast } }
-
-        // Breathing while active (not idle).
-        SequentialAnimation on scale {
-            running: root.lilithState !== "idle"
-            loops: Animation.Infinite
-            NumberAnimation { to: 1.06; duration: 700; easing.type: Easing.InOutSine }
-            NumberAnimation { to: 1.00; duration: 700; easing.type: Easing.InOutSine }
-        }
-    }
-
-    Text {
-        anchors.centerIn: parent
-        text: root.glyph
-        color: root.stateColor
-        // Single-glyph states want a big symbol; the triple-glyph states
-        // (◌◌◌ / ◉◉◉) want a smaller size so they fit the plate.
-        font.pixelSize: (root.lilithState === "idle" || root.lilithState === "listening") ? 24 : 13
-        font.letterSpacing: 1
-        Behavior on color { ColorAnimation { duration: Theme.animFast } }
-
-        // Pulse the multi-dot glyphs so they read as "working".
-        SequentialAnimation on opacity {
-            running: root.lilithState === "thinking" || root.lilithState === "speaking"
-            loops: Animation.Infinite
-            NumberAnimation { to: 0.45; duration: 500; easing.type: Easing.InOutSine }
-            NumberAnimation { to: 1.00; duration: 500; easing.type: Easing.InOutSine }
-        }
-    }
-
-    // Hover / active label above the orb.
-    Text {
-        anchors.bottom: parent.top
+    Item {
+        id: tile
+        width: Theme.dockIcon
+        height: Theme.dockIcon
         anchors.horizontalCenter: parent.horizontalCenter
-        text: {
-            switch (root.lilithState) {
-            case "listening": return qsTr("Ouvindo…");
-            case "thinking":  return qsTr("Pensando…");
-            case "speaking":  return qsTr("Falando…");
-            default:          return qsTr("Lilith");
+        anchors.top: parent.top
+        transformOrigin: Item.Bottom
+        scale: area.pressed ? 1.08 : (area.containsMouse ? 1.22 : 1.0)
+        Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
+
+        Rectangle {
+            id: orb
+            anchors.fill: parent
+            anchors.margins: 4
+            radius: width / 2
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: root.hi; Behavior on color { ColorAnimation { duration: Theme.animNormal } } }
+                GradientStop { position: 1.0; color: root.lo; Behavior on color { ColorAnimation { duration: Theme.animNormal } } }
+            }
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.35)
+
+            // Glass highlight: a soft bright cap on the upper half.
+            Rectangle {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: parent.height * 0.08
+                width: parent.width * 0.62
+                height: parent.height * 0.34
+                radius: height / 2
+                gradient: Gradient {
+                    GradientStop { position: 0.0; color: Qt.rgba(1, 1, 1, 0.55) }
+                    GradientStop { position: 1.0; color: Qt.rgba(1, 1, 1, 0.0) }
+                }
+            }
+
+            // Breathing while she is doing something. Nothing animates at
+            // rest — an always-running animation keeps the dock rendering.
+            SequentialAnimation on scale {
+                running: root.active
+                loops: Animation.Infinite
+                alwaysRunToEnd: true
+                NumberAnimation { to: 1.07; duration: 650; easing.type: Easing.InOutSine }
+                NumberAnimation { to: 1.00; duration: 650; easing.type: Easing.InOutSine }
             }
         }
-        color: Theme.text
-        font.pixelSize: 10
-        opacity: (area.containsMouse || root.lilithState !== "idle") ? 0.9 : 0.0
+    }
+
+    // State label above the dock, in the same bubble as the app names.
+    Rectangle {
+        anchors.bottom: tile.top
+        anchors.bottomMargin: 16
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: stateLabel.implicitWidth + 18
+        height: 24
+        radius: 12
+        color: Theme.glassSolid
+        border.width: 1
+        border.color: Theme.glassRim
+        opacity: (area.containsMouse || root.active) ? 1.0 : 0.0
+        visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: Theme.animFast } }
-        style: Text.Outline
-        styleColor: Qt.rgba(0, 0, 0, 0.6)
+        Text {
+            id: stateLabel
+            anchors.centerIn: parent
+            text: {
+                switch (root.lilithState) {
+                case "listening": return qsTr("Ouvindo…");
+                case "thinking":  return qsTr("Pensando…");
+                case "speaking":  return qsTr("Falando…");
+                default:          return qsTr("Lilith");
+                }
+            }
+            color: Theme.text
+            font.pixelSize: Theme.fontCaption + 1
+        }
     }
 
     MouseArea {
         id: area
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
-        // Click toggles the conversation popup; press-and-hold engages
-        // push-to-talk (same VoiceBridge.toggle the old MicButton fired).
         onClicked: ShellBus.toggleLilith()
         onPressAndHold: VoiceBridge.toggle()
     }

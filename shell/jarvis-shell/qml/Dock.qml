@@ -1,12 +1,13 @@
 import QtQuick
 import QtQuick.Window
 import QtQuick.Layouts
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
-/// The macOS-style dock: a centered glass pill with the launcher tile, the
-/// pinned apps, any running-but-unpinned apps, then a divider and the Lilith
-/// orb. A second top-level layer-shell root (objectName "jarvis-dock");
-/// main.cpp anchors it to the bottom edge, centered, on the Top layer.
+/// The dock: a floating glass bar centred at the bottom of the screen with
+/// the launcher tile, the pinned apps, any running-but-unpinned apps, then a
+/// divider and the Lilith orb. Its own layer-shell surface, anchored to the
+/// bottom edge only so the compositor centres it at its natural width.
 ///
 /// Tiles show open vs minimized state (DockIcon.runStateValue) and offer a
 /// right-click menu (open/focus, pin/unpin, close). Pins persist in
@@ -16,10 +17,21 @@ Window {
     objectName: "jarvis-dock"
     visible: true
     color: "transparent"
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+    flags: Qt.FramelessWindowHint
 
-    width: pill.implicitWidth + 32
-    height: pill.implicitHeight + 28
+    // The window is taller than the glass bar: `headroom` above it is where
+    // a hovered icon grows into and where its name bubble appears; `Theme.edge`
+    // below is the gap to the screen edge (and room for the shadow).
+    readonly property int headroom: 46
+    width: pill.implicitWidth + 40
+    height: pill.implicitHeight + headroom + Theme.edge
+
+    LayerShell.Window.scope: "jarvis-dock"
+    LayerShell.Window.layer: LayerShell.Window.LayerTop
+    LayerShell.Window.anchors: LayerShell.Window.AnchorBottom
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
+    // Maximized windows stop just above the glass bar, not above the headroom.
+    LayerShell.Window.exclusionZone: pill.implicitHeight + Theme.edge + 6
 
     // Default pins, used until the user customises `dock.pinned`. `desktopId`
     // is what app.open resolves (Flatpak ids / binary names).
@@ -102,18 +114,26 @@ Window {
 
     GlassPanel {
         id: pill
-        anchors.centerIn: parent
-        implicitWidth: dockRow.implicitWidth + 28
-        implicitHeight: 64
-        // The pill is short and wide — the top-accent bloom would wash the
-        // whole dock violet. Keep the clean glass + a larger pill radius.
-        topAccent: false
-        radius: Theme.radiusLarge
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.edge
+        width: implicitWidth
+        height: implicitHeight
+        implicitWidth: dockRow.implicitWidth + 20
+        implicitHeight: Theme.dockIcon + 22
+        radius: Theme.radiusDock
+
+        // Frosted glass over the wallpaper. The surface is anchored
+        // bottom-centre with no margin, so its screen position is known.
+        backdrop: true
+        windowX: (Screen.width - root.width) / 2
+        windowY: Screen.height - root.height
 
         RowLayout {
             id: dockRow
             anchors.centerIn: parent
-            spacing: 8
+            anchors.verticalCenterOffset: 2
+            spacing: 4
 
             Repeater {
                 model: root.tiles
@@ -156,9 +176,11 @@ Window {
 
             Rectangle {
                 Layout.preferredWidth: 1
-                Layout.preferredHeight: 36
+                Layout.preferredHeight: Theme.dockIcon - 8
                 Layout.alignment: Qt.AlignVCenter
-                color: Theme.border
+                Layout.leftMargin: 6
+                Layout.rightMargin: 6
+                color: Theme.separator
             }
 
             LilithOrb {

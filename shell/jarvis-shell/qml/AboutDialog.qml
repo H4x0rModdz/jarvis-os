@@ -5,38 +5,26 @@ import Jarvis.Shell
 /// "Sobre este PC" — a small centered card opened from the Jarvis menu.
 /// Static product info; no live system probing in V1 (the proactive
 /// daemon already owns real telemetry, and a dialog doesn't need it).
-Window {
+PopupSurface {
+    placement: "center"
+    scope: "jarvis-dialog"
+    dim: true
     id: root
-    width: 360
-    height: 240
-    color: "transparent"
-    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
-    visible: false
+    panelWidth: 360
+    panelHeight: 240
 
     // Gate the spurious first deactivate wlroots fires before granting
     // focus (mirrors the Launcher), else the dialog self-closes on open.
-    property bool _ignoreDeactivate: false
 
     function requestOpen() {
-        if (Qt.application.screens.length > 0) {
-            const s = Qt.application.screens[0];
-            x = s.virtualX + Math.floor((s.width - width) / 2);
-            y = s.virtualY + Math.floor((s.height - height) / 2);
-        }
-        _ignoreDeactivate = true;
-        visible = true;
-        requestActivate();
-        armTimer.restart();
+        present();
     }
-    function close() { visible = false; }
+    function close() { dismiss(); }
 
-    Timer { id: armTimer; interval: 250; onTriggered: root._ignoreDeactivate = false }
-    onActiveChanged: if (!active && !_ignoreDeactivate && visible) close()
-    Shortcut { sequence: "Escape"; onActivated: root.close() }
 
     GlassPanel {
         anchors.fill: parent
-        anchors.margins: 8
+        backdrop: true
 
         Column {
             anchors.centerIn: parent

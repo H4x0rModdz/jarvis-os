@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import org.kde.layershell as LayerShell
 import QtQuick.Layouts
 import Jarvis.Shell
 
@@ -15,6 +16,13 @@ Window {
     height: 240
     title: qsTr("Permissão necessária")
     color: "transparent"
+    // Placement: a layer surface. Unanchored = centred at its own size (left
+    // to its defaults, LayerShellQt anchors all four edges and the window is
+    // stretched over the whole screen).
+    LayerShell.Window.scope: "jarvis-dialog"
+    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+    LayerShell.Window.anchors: LayerShell.Window.AnchorNone
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityOnDemand
     flags: Qt.Dialog | Qt.WindowStaysOnTopHint
 
     // Re-center each time it opens.
