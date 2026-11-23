@@ -44,6 +44,7 @@ Before doing any work, read and internalize the following files in order:
 
 - `.jarvis/contexts/current-goals.md` — what we're working on now
 - `.jarvis/contexts/roadmap.md` — where we're going
+- `.jarvis/contexts/daily-driver-plan.md` — the plan to make it usable every day (phases + exit tests)
 - `.jarvis/contexts/active-problems.md` — open unsolved problems
 - `.jarvis/contexts/known-limitations.md` — deliberate out-of-scope items
 
