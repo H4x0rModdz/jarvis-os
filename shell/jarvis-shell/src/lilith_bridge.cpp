@@ -4,10 +4,12 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
+#include <QDBusServiceWatcher>
 #include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QTimer>
 #include <QVariantMap>
 
 namespace {
@@ -16,7 +18,6 @@ Q_LOGGING_CATEGORY(lcLilith, "jarvis.shell.lilith")
 constexpr const char* kService = "com.jarvis.Lilith";
 constexpr const char* kPath = "/com/jarvis/Lilith";
 constexpr const char* kIface = "com.jarvis.Lilith";
-constexpr int kPingIntervalMs = 3000;
 constexpr int kCommandTimeoutMs = 120000; // matches the Ollama-aware timeout in Lilith
 }
 
@@ -56,9 +57,22 @@ LilithBridge::LilithBridge(QObject* parent) : QObject(parent)
                             << "nudge=" << nudgeOk;
     }
 
-    // Probe reachability immediately, then on a slow heartbeat.
-    QObject::connect(&m_pingTimer, &QTimer::timeout, this, &LilithBridge::ping);
-    m_pingTimer.start(kPingIntervalMs);
+    // Reachability is event-driven: the bus tells us when com.jarvis.Lilith
+    // gains or loses its owner, so there is nothing to poll. (This used to
+    // call ListFacts every 3 s for the whole session — making the daemon
+    // serialise its entire fact store, and waking the shell to parse the
+    // reply, just to learn that nothing had changed.)
+    auto* watcher = new QDBusServiceWatcher(
+        QString::fromLatin1(kService), bus,
+        QDBusServiceWatcher::WatchForRegistration
+            | QDBusServiceWatcher::WatchForUnregistration,
+        this);
+    // Owning the name is not quite "ready": confirm with one real call.
+    QObject::connect(watcher, &QDBusServiceWatcher::serviceRegistered, this,
+                     &LilithBridge::ping);
+    QObject::connect(watcher, &QDBusServiceWatcher::serviceUnregistered, this,
+                     [this] { setReachable(false); });
+    // Initial state — the daemon is normally already up when the shell starts.
     ping();
 }
 
@@ -73,6 +87,13 @@ void LilithBridge::ping()
         [this](QDBusPendingCallWatcher* w) {
             QDBusPendingReply<QString> reply = *w;
             setReachable(!reply.isError());
+            // ServiceUnknown = not on the bus; the watcher will call us when it
+            // appears. Any other error means the name is owned but the daemon
+            // isn't answering yet (still exporting its object) — look again
+            // shortly rather than staying "offline" until it restarts.
+            if (reply.isError() && reply.error().type() != QDBusError::ServiceUnknown) {
+                QTimer::singleShot(3000, this, &LilithBridge::ping);
+            }
             w->deleteLater();
         });
 }

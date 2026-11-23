@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
 /// Floating conversation panel that auto-shows above the bar whenever
@@ -28,6 +29,12 @@ Window {
     // so even after toggle()'s requestActivate() the Escape Shortcut never
     // fires. Qt.Dialog gets real keyboard focus. No onActiveChanged handler
     // here, so this can't cause a spurious close — auto-open stays unfocused.
+    // Placement: a layer surface anchored to a screen corner/edge (a Wayland
+    // client cannot position itself with x/y).
+    LayerShell.Window.scope: "jarvis-lilith"
+    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+    LayerShell.Window.anchors: LayerShell.Window.AnchorBottom
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityOnDemand
     flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Lilith")
 

@@ -25,11 +25,12 @@ on:
       - "iso/assets/xdg/mimeapps.list"
       - "iso/assets/xdg-desktop-portal/labwc-portals.conf"
       - "iso/assets/sysctl/99-jarvis-userns.conf"
-  # Weekly rebuild so kernel + security updates from the fedora-bootc base
-  # keep flowing. The base (and thus the kernel) now lives in this rarely-
-  # rebuilt image, so without this it would freeze between code changes.
+  # Weekly rebuild so package updates (Mesa, Qt, everything this file installs
+  # with dnf) keep flowing. The fedora-bootc base itself — and with it the
+  # kernel — is pinned by digest (ADR 0033) and only moves when bump-base.yml's
+  # weekly PR is merged, which triggers this workflow through the path filter.
   # build-iso.yml has a cron a few hours later that republishes the OS image
-  # on the freshly-pulled base, so `bootc upgrade` actually delivers it.
+  # on the fresh base, so `bootc upgrade` actually delivers it.
   schedule:
     - cron: "0 6 * * 1"  # Mondays 06:00 UTC
   workflow_dispatch:
@@ -94,8 +95,8 @@ jobs:
           # then can't ship in an image built against the old base. Asset-only
           # tweaks still rely on this workflow's normal trigger.
           HASH=$(sha256sum iso/Containerfile.runtime | cut -d' ' -f1)
-          # --pull=newer: always re-pull the fedora-bootc base so the weekly
-          # rebuild actually picks up new kernel/security layers. Storage + blob
+          # The base images are pinned by digest in the Containerfile (ADR
+          # 0033), so --pull=newer only matters for a cold cache. Storage + blob
           # staging live on /mnt (see the "Move container storage to /mnt" step).
           sudo podman build \
             --pull=newer \

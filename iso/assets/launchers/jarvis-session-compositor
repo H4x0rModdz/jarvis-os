@@ -1,0 +1,71 @@
+#!/bin/sh
+# /usr/libexec/jarvis-session-compositor — start the session's compositor.
+#
+# Hyprland is the compositor (ADR 0036): window animations, real backdrop blur
+# behind the shell's glass, rounded windows. labwc stays in the image as the
+# fallback, because Hyprland cannot run everywhere:
+#
+#   * it needs a GPU. On hosts where jarvis-session-launch forced software
+#     rendering (VMware, VirtualBox, no DRM render node) we go straight to
+#     labwc, which renders on the CPU;
+#   * if Hyprland dies right after starting (driver problem, bad config), the
+#     session falls back to labwc instead of bouncing the user to the login
+#     screen with no desktop.
+#
+# Choosing by hand, in order of precedence:
+#   JARVIS_COMPOSITOR=labwc|hyprland          (e.g. in /etc/jarvis/session.env)
+#   ~/.config/jarvis/compositor               (one word; no root needed)
+#
+# Runs after jarvis-session-launch, so the renderer / NVIDIA / keyboard
+# environment is already set.
+
+choice="${JARVIS_COMPOSITOR-}"
+if [ -z "$choice" ] && [ -r "${HOME-}/.config/jarvis/compositor" ]; then
+    choice=$(head -n 1 "$HOME/.config/jarvis/compositor" | tr -d ' \t\r')
+fi
+[ -n "$choice" ] || choice=hyprland
+
+# Software rendering was forced for this host: Hyprland cannot do that.
+if [ "${WLR_RENDERER-}" = pixman ]; then
+    choice=labwc
+fi
+
+# What labwc gets from /etc/xdg/labwc/environment, for both compositors:
+# no input-method framework (it swallowed Escape before it reached the shell)
+# and quiet text-input warnings.
+export QT_IM_MODULE=none
+export QT_LOGGING_RULES="${QT_LOGGING_RULES:-qt.qpa.wayland.textinput.warning=false}"
+
+run_labwc() {
+    export XDG_CURRENT_DESKTOP=labwc:wlroots
+    exec labwc
+}
+
+if [ "$choice" = hyprland ] && command -v Hyprland >/dev/null 2>&1; then
+    export XDG_CURRENT_DESKTOP=Hyprland
+    # Log into the session's private runtime dir (0700, ours) — never a fixed
+    # name under /tmp, which another local user could pre-create or symlink.
+    log=/dev/null
+    if [ -n "${XDG_RUNTIME_DIR-}" ] && [ -d "$XDG_RUNTIME_DIR" ] && [ -O "$XDG_RUNTIME_DIR" ]; then
+        log="$XDG_RUNTIME_DIR/jarvis-hyprland.log"
+        [ -L "$log" ] && rm -f -- "$log"
+    fi
+    start=$(date +%s)
+    Hyprland -c /usr/share/jarvis/hypr/hyprland.lua > "$log" 2>&1
+    code=$?
+    ran=$(( $(date +%s) - start ))
+    # A clean exit, or a session that ran for a while, is the user logging
+    # out. A failure within seconds means it never came up.
+    if [ "$code" -eq 0 ] || [ "$ran" -ge 20 ]; then
+        exit "$code"
+    fi
+    echo "Hyprland exited with $code after ${ran}s — falling back to labwc" >> "$log"
+    # Keep a copy where it survives the session (the runtime dir is wiped at
+    # logout). Only into a real home directory.
+    if [ "$log" != /dev/null ] && [ -n "${HOME-}" ] && [ -d "$HOME" ] && [ -O "$HOME" ]; then
+        rm -f -- "$HOME/.jarvis-hyprland-failed.log"
+        cp -- "$log" "$HOME/.jarvis-hyprland-failed.log" 2>/dev/null || true
+    fi
+fi
+
+run_labwc

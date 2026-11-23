@@ -153,7 +153,7 @@ ARG JARVIS_VERSION=0.0.1
 # Repeat from stage 1 — Containerfile ARGs don't cross stages.
 ARG BUILD_COMPOSITOR=0
 LABEL org.opencontainers.image.title="LilithOS"
-LABEL org.opencontainers.image.description="AI-native desktop OS, built on Fedora Atomic + labwc"
+LABEL org.opencontainers.image.description="AI-native desktop OS, built on Fedora Atomic + Hyprland"
 LABEL org.opencontainers.image.version="${JARVIS_VERSION}"
 LABEL org.opencontainers.image.source="https://github.com/H4x0rModdz/jarvis-os"
 
@@ -298,6 +298,23 @@ COPY iso/assets/systemd/logind.conf.d/jarvis.conf \
 COPY iso/assets/launchers/jarvis-session-launch /usr/libexec/jarvis-session-launch
 RUN chmod 0755 /usr/libexec/jarvis-session-launch
 
+# Restarts the shell if it crashes (started from the labwc autostart).
+COPY iso/assets/launchers/jarvis-shell-supervise /usr/libexec/jarvis-shell-supervise
+RUN chmod 0755 /usr/libexec/jarvis-shell-supervise
+
+# Compositor selection (ADR 0036): Hyprland, with labwc as the automatic
+# fallback on hosts without a GPU or when Hyprland fails to come up. Both
+# run the same session autostart.
+COPY iso/assets/launchers/jarvis-session-compositor        /usr/libexec/jarvis-session-compositor
+COPY iso/assets/launchers/jarvis-session-autostart /usr/libexec/jarvis-session-autostart
+RUN chmod 0755 /usr/libexec/jarvis-session-compositor /usr/libexec/jarvis-session-autostart
+COPY iso/assets/hypr/hyprland.lua /usr/share/jarvis/hypr/hyprland.lua
+
+# Per-machine session overrides (read by jarvis-session-launch). Ships fully
+# commented out — it documents the levers and gives the user a file to edit.
+# /etc is writable and 3-way merged on upgrade, so local edits are kept.
+COPY iso/assets/launchers/session.env /etc/jarvis/session.env
+
 # polkit rule: let the per-user updater run `bootc` via pkexec without a
 # password prompt (wheel users only, /usr/bin/bootc only). Without it the
 # user-session updater can't reach `bootc upgrade --check` and the UI
@@ -339,6 +356,10 @@ COPY iso/assets/labwc/autostart    /etc/xdg/labwc/autostart
 COPY iso/assets/labwc/rc.xml       /etc/xdg/labwc/rc.xml
 COPY iso/assets/labwc/environment  /etc/xdg/labwc/environment
 RUN chmod 0755 /etc/xdg/labwc/autostart
+
+# Window decorations: dark title bar + traffic-light buttons, selected by
+# <theme><name>LilithOS</name> in rc.xml.
+COPY iso/assets/labwc/theme /usr/share/themes/LilithOS/labwc
 
 # Default wallpaper — swaybg (launched from the labwc autostart)
 # reads it from here. on disk under /usr/share so the session can

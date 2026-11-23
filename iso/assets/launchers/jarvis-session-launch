@@ -82,8 +82,8 @@ if [ -d /sys/module/nvidia_drm ]; then
     # wlroots-on-NVIDIA guides set it for exactly this. Left OFF by default
     # because we cannot test it here and a renderer that fails to initialise
     # means no desktop at all, which is a worse failure than imperfect output.
-    # To try it, uncomment; to undo, `sudo bootc rollback`.
-    #export WLR_RENDERER=vulkan
+    # To try it on a machine, set WLR_RENDERER=vulkan in
+    # /etc/jarvis/session.env (see below) — no image rebuild needed.
 fi
 
 # Flatpak exports its `.desktop` files outside XDG_DATA_DIRS' defaults,
@@ -109,5 +109,65 @@ fi
 export XCURSOR_THEME="${XCURSOR_THEME:-WhiteSur-cursors}"
 export XCURSOR_SIZE="${XCURSOR_SIZE:-24}"
 export GTK_THEME="${GTK_THEME:-WhiteSur-Dark}"
+
+# Keyboard layout. The installer asks for it and systemd records the answer in
+# /etc/vconsole.conf (XKBLAYOUT=…, older setups: the X11 keyboard snippet).
+# wlroots compositors read none of that — they take the layout from
+# XKB_DEFAULT_* — so without this every machine typed US regardless of what
+# was chosen, and an ABNT2 keyboard produced the wrong characters. Applies to
+# the login screen (cage) and the session (labwc) alike, since both start
+# through this script. Skipped when the variable is already set.
+if [ -z "${XKB_DEFAULT_LAYOUT-}" ]; then
+    kb_vconsole() {
+        [ -r /etc/vconsole.conf ] || return 0
+        sed -n "s/^$1=\"\{0,1\}\([^\"]*\)\"\{0,1\}[[:space:]]*\$/\1/p" /etc/vconsole.conf | head -n 1
+    }
+    kb_xorg() {
+        [ -r /etc/X11/xorg.conf.d/00-keyboard.conf ] || return 0
+        sed -n "s/.*Option[[:space:]]*\"$1\"[[:space:]]*\"\([^\"]*\)\".*/\1/p" \
+            /etc/X11/xorg.conf.d/00-keyboard.conf | head -n 1
+    }
+    # One source for all four values — never the layout from one file and
+    # the variant from the other.
+    kb_layout=$(kb_vconsole XKBLAYOUT)
+    if [ -n "$kb_layout" ]; then
+        kb_variant=$(kb_vconsole XKBVARIANT)
+        kb_model=$(kb_vconsole XKBMODEL)
+        kb_options=$(kb_vconsole XKBOPTIONS)
+    else
+        kb_layout=$(kb_xorg XkbLayout)
+        kb_variant=$(kb_xorg XkbVariant)
+        kb_model=$(kb_xorg XkbModel)
+        kb_options=$(kb_xorg XkbOptions)
+    fi
+    if [ -n "$kb_layout" ]; then
+        export XKB_DEFAULT_LAYOUT="$kb_layout"
+        if [ -n "$kb_variant" ]; then export XKB_DEFAULT_VARIANT="$kb_variant"; fi
+        if [ -n "$kb_model" ];   then export XKB_DEFAULT_MODEL="$kb_model"; fi
+        if [ -n "$kb_options" ]; then export XKB_DEFAULT_OPTIONS="$kb_options"; fi
+    fi
+fi
+
+# Per-machine overrides: /etc/jarvis/session.env, plain KEY=VALUE lines.
+#
+# Every graphics decision above is a guess about hardware we mostly cannot
+# test, and this script lives on the read-only /usr of an image — so without
+# this, trying a single variable on a real machine meant building and
+# shipping a whole OS image. /etc is writable and survives upgrades, which
+# makes it the right place for "on THIS machine, do X instead".
+#
+# Parsed, never sourced: a typo in that file must not be able to abort this
+# script, because this script is the only way into the desktop. Lines that
+# are not KEY=VALUE with a plain identifier as the key (comments, blanks,
+# typos) are ignored. Applied
+# last, so it wins over everything decided above.
+if [ -r /etc/jarvis/session.env ]; then
+    while IFS='=' read -r key value || [ -n "$key" ]; do
+        case "$key" in
+            ''|*[!A-Za-z0-9_]*|[0-9]*) continue ;;
+        esac
+        export "$key=$value"
+    done < /etc/jarvis/session.env
+fi
 
 exec "$@"

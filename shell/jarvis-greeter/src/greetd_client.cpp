@@ -198,13 +198,14 @@ void GreetdClient::requestStartSession()
     setState(QStringLiteral("starting_session"), {}, false, {});
     QJsonObject msg;
     msg.insert(QStringLiteral("type"), QStringLiteral("start_session"));
-    // Wrap labwc in the session launcher so it inherits the same
+    // Start the compositor (Hyprland, or labwc as fallback — see
+    // jarvis-session-compositor) through the session launcher so it inherits the same
     // renderer decision the greeter ran under — pixman on hosts where
     // EGL/dmabuf is broken (VirtualBox VMSVGA), GPU path everywhere
     // else. See iso/assets/launchers/jarvis-session-launch.
     QJsonArray cmd;
     cmd.append(QStringLiteral("/usr/libexec/jarvis-session-launch"));
-    cmd.append(QStringLiteral("labwc"));
+    cmd.append(QStringLiteral("/usr/libexec/jarvis-session-compositor"));
     msg.insert(QStringLiteral("cmd"), cmd);
     QJsonArray env;
     env.append(QStringLiteral("XDG_SESSION_TYPE=wayland"));

@@ -4,14 +4,13 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
-#include <QTimer>
 #include <QVariantList>
 #include <qqmlintegration.h>
 
 /// QObject bridge between QML and com.jarvis.Lilith.
 ///
 /// Exposes:
-///   - `reachable` (read-only Q_PROPERTY): true when the daemon answers a ping
+///   - `reachable` (read-only Q_PROPERTY): true while the daemon is on the bus
 ///   - `busy` (read-only): true between send() and replyReceived
 ///   - `streamingText`: the accumulated partial-reply text for the current
 ///     command — chunks land via the daemon's PartialReply signal
@@ -104,7 +103,6 @@ private:
                                 const QVariantList& chainSteps);
 
     QDBusInterface* m_iface = nullptr;
-    QTimer m_pingTimer;
     bool m_reachable = false;
     bool m_busy = false;
     QString m_emotion = QStringLiteral("neutral");

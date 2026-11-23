@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
 /// Updater splash. Three modes, derived from UpdaterBridge state:
@@ -22,6 +23,13 @@ Window {
     height: 340
     title: qsTr("LilithOS")
     color: "transparent"
+    // Placement: a layer surface. Unanchored = centred at its own size (left
+    // to its defaults, LayerShellQt anchors all four edges and the window is
+    // stretched over the whole screen).
+    LayerShell.Window.scope: "jarvis-dialog"
+    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+    LayerShell.Window.anchors: LayerShell.Window.AnchorNone
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityOnDemand
     flags: Qt.Dialog | Qt.WindowStaysOnTopHint
 
     onVisibleChanged: {

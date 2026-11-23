@@ -2,14 +2,15 @@ import QtQuick
 import QtQuick.Controls
 import Jarvis.Shell
 
-/// One dock tile. Hover lifts + scales the icon (macOS-style magnification,
-/// lite); LEFT click fires `activated`, RIGHT click opens a context menu
-/// (open/focus, pin/unpin, close). The running indicator under the tile
-/// distinguishes an open app (filled dot) from a minimized one (hollow ring).
+/// One dock tile. Hovering magnifies the icon from its base (it grows upward,
+/// out of the dock) and shows the app's name in a small bubble above; LEFT
+/// click fires `activated`, RIGHT click opens a context menu (open/focus,
+/// pin/unpin, close). A dot under the tile marks a running app — solid when a
+/// window is open, hollow when every window is minimized.
 Item {
     id: root
-    implicitWidth: 52
-    implicitHeight: 52
+    implicitWidth: Theme.dockIcon + 6
+    implicitHeight: Theme.dockIcon + 10
 
     property string iconName: ""   // freedesktop theme name OR absolute path
     property string label: ""
@@ -25,72 +26,119 @@ Item {
     signal pinToggle()
     signal quitRequested()
 
-    Image {
-        id: img
-        anchors.centerIn: parent
-        width: 44
-        height: 44
-        fillMode: Image.PreserveAspectFit
-        smooth: true
-        source: root.iconName.startsWith("/") ? "file://" + root.iconName
-              : root.iconName.length           ? "image://theme/" + root.iconName
-              : ""
-        visible: status === Image.Ready
-        scale: area.containsMouse ? 1.22 : 1.0
-        y: area.containsMouse ? -6 : 0
-        Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutBack } }
-        Behavior on y     { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
-    }
+    readonly property bool hovered: area.containsMouse
+    readonly property real zoom: area.pressed ? 1.08 : (hovered ? 1.22 : 1.0)
 
-    // Monogram fallback when the theme can't resolve the icon.
-    Rectangle {
-        anchors.centerIn: parent
-        width: 44
-        height: 44
-        radius: 10
-        visible: img.status !== Image.Ready
-        color: Qt.rgba(1, 1, 1, 0.06)
-        border.color: Theme.border
-        border.width: 1
-        scale: area.containsMouse ? 1.22 : 1.0
-        Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutBack } }
+    // ── Icon (or its stand-in), magnifying from the bottom edge ──────────
+    Item {
+        id: tile
+        width: Theme.dockIcon
+        height: Theme.dockIcon
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        transformOrigin: Item.Bottom
+        scale: root.zoom
+        Behavior on scale { NumberAnimation { duration: Theme.animFast; easing.type: Easing.OutCubic } }
 
-        Text {
-            anchors.centerIn: parent
-            text: root.label.length ? root.label.charAt(0).toUpperCase() : "?"
-            color: Theme.accent
-            font.pixelSize: 20
-            font.weight: Font.Bold
+        Image {
+            id: img
+            anchors.fill: parent
+            fillMode: Image.PreserveAspectFit
+            sourceSize: Qt.size(Theme.dockIcon * 2, Theme.dockIcon * 2)
+            smooth: true
+            visible: status === Image.Ready && !root.isLauncher
+            source: root.isLauncher ? ""
+                  : root.iconName.startsWith("/") ? "file://" + root.iconName
+                  : root.iconName.length           ? "image://theme/" + root.iconName
+                  : ""
+        }
+
+        // Launcher tile: a rounded square with a 3×3 grid, drawn here so it
+        // does not depend on the icon theme having an "apps" picture.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 3
+            visible: root.isLauncher
+            radius: width * 0.24
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#5a5a60" }
+                GradientStop { position: 1.0; color: "#2c2c30" }
+            }
+            border.width: 1
+            border.color: Theme.glassRim
+            Grid {
+                anchors.centerIn: parent
+                columns: 3
+                spacing: 4
+                Repeater {
+                    model: 9
+                    Rectangle {
+                        width: 7; height: 7; radius: 2
+                        color: ["#ff453a", "#ff9f0a", "#ffd60a", "#30d158", "#64d2ff",
+                                "#0a84ff", "#5e5ce6", "#bf5af2", "#ff375f"][index]
+                    }
+                }
+            }
+        }
+
+        // Stand-in when the theme has no icon for this app: its initial on a
+        // neutral rounded square.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 3
+            visible: !root.isLauncher && img.status !== Image.Ready
+            radius: width * 0.24
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "#4a4a50" }
+                GradientStop { position: 1.0; color: "#2a2a2e" }
+            }
+            border.width: 1
+            border.color: Theme.glassRim
+            Text {
+                anchors.centerIn: parent
+                text: root.label.length ? root.label.charAt(0).toUpperCase() : "?"
+                color: Theme.text
+                font.pixelSize: 22
+                font.weight: Font.DemiBold
+            }
         }
     }
 
-    // Running indicator. Open app → a filled accent dot; minimized app →
-    // a hollow accent ring (same footprint, clearly different state).
+    // ── Running indicator ────────────────────────────────────────────────
     Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 1
-        width: 5
-        height: 5
-        radius: 2.5
+        width: 4
+        height: 4
+        radius: 2
         visible: root.runStateValue > 0
-        color: root.runStateValue === 1 ? Theme.accent : "transparent"
-        border.color: Theme.accent
+        color: root.runStateValue === 1 ? Theme.text : "transparent"
+        border.color: Theme.text
         border.width: root.runStateValue === 2 ? 1 : 0
-        opacity: root.runStateValue === 1 ? 0.95 : 0.7
     }
 
-    // Hover tooltip above the dock.
-    Text {
-        anchors.bottom: parent.top
-        anchors.bottomMargin: 2
+    // ── Name bubble above the dock ───────────────────────────────────────
+    Rectangle {
+        anchors.bottom: tile.top
+        anchors.bottomMargin: 16
         anchors.horizontalCenter: parent.horizontalCenter
-        text: root.label
-        color: Theme.text
-        font.pixelSize: 10
-        visible: area.containsMouse && !contextMenu.visible
-        style: Text.Outline
-        styleColor: Qt.rgba(0, 0, 0, 0.6)
+        width: nameLabel.implicitWidth + 18
+        height: 24
+        radius: 12
+        color: Theme.glassSolid
+        border.width: 1
+        border.color: Theme.glassRim
+        opacity: (root.hovered && !contextMenu.visible) ? 1.0 : 0.0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Theme.animFast } }
+        Text {
+            id: nameLabel
+            anchors.centerIn: parent
+            text: root.label
+            color: Theme.text
+            font.pixelSize: Theme.fontCaption + 1
+        }
     }
 
     MouseArea {
@@ -98,7 +146,6 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        cursorShape: Qt.PointingHandCursor
         onClicked: function(mouse) {
             if (mouse.button === Qt.RightButton) {
                 if (!root.isLauncher) {

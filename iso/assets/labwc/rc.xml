@@ -5,8 +5,12 @@
 -->
 <labwc_config>
   <theme>
-    <name>Default</name>
-    <cornerRadius>10</cornerRadius>
+    <!-- /usr/share/themes/LilithOS/labwc — dark title bar + traffic-light
+         buttons (iso/assets/labwc/theme). -->
+    <name>LilithOS</name>
+    <cornerRadius>12</cornerRadius>
+    <font place="ActiveWindow" name="Inter" size="10" weight="bold" />
+    <font place="InactiveWindow" name="Inter" size="10" weight="bold" />
     <dropShadows>yes</dropShadows>
     <!-- macOS-style: close / minimize / maximize on the LEFT, nothing on
          the right. labwc button ids: close, iconify (minimize), max. The
@@ -20,6 +24,38 @@
   <core>
     <gap>0</gap>
   </core>
+
+  <!-- Drag a window to a screen edge to tile it to that half (to a corner
+       for a quarter); drag to the top edge to maximize. The overlay
+       previews where it will land before the button is released. -->
+  <snapping>
+    <range inner="12" outer="12" />
+    <overlay enabled="yes">
+      <delay inner="150" outer="150" />
+    </overlay>
+    <topMaximize>yes</topMaximize>
+  </snapping>
+
+  <!-- Alt+Tab: show the list of windows with a live outline of the one
+       that will be selected. -->
+  <windowSwitcher preview="yes" outlines="yes">
+    <osd show="yes" />
+  </windowSwitcher>
+
+  <!-- Pointing devices. labwc's defaults leave a laptop touchpad with no
+       tap-to-click and "backwards" scrolling; these are what people
+       expect from a modern laptop. A mouse keeps its defaults (wheel
+       scrolls the page, normal acceleration). -->
+  <libinput>
+    <device category="touchpad">
+      <naturalScroll>yes</naturalScroll>
+      <tap>yes</tap>
+      <tapButtonMap>lrm</tapButtonMap>
+      <tapAndDrag>yes</tapAndDrag>
+      <disableWhileTyping>yes</disableWhileTyping>
+      <clickMethod>clickfinger</clickMethod>
+    </device>
+  </libinput>
 
   <windowRules>
     <!-- foot ships no titlebar of its own (CSD-none), so it has no
@@ -38,6 +74,12 @@
   </windowRules>
 
   <keyboard>
+    <!-- Keep labwc's built-in bindings. Declaring ANY keybind replaces the
+         whole default set unless this element is present — without it
+         there was no Alt+Tab window switching and no Super+arrow snapping.
+         Our own binds below are added on top (a later bind for the same
+         key wins). -->
+    <default />
     <!-- Super (W) alone toggles voice input — the canonical "press to
          talk to the AI" gesture. Tapping it once starts listening,
          tapping again stops and routes the transcript into Lilith.

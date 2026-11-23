@@ -13,52 +13,34 @@ import Jarvis.Shell
 /// Mirrors ConnectivityPanel's lifecycle: opens via the bar's
 /// Bluetooth button, polls bluetoothctl every 5 s while visible,
 /// stops on close.
-Window {
+PopupSurface {
+    placement: "top-right"
+    scope: "jarvis-popover"
     id: root
-    visible: false
-    width: 400
-    height: 500
-    color: "transparent"
+    panelWidth: 400
+    panelHeight: 500
     // Qt.Dialog (not Qt.Tool): under labwc a Tool window is non-activatable,
     // so it never gets keyboard focus — the Escape Shortcut never fires.
     // Qt.Dialog gets the activation the Launcher/JarvisMenu rely on.
-    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Bluetooth")
 
     // Suppress the spurious first deactivate wlroots fires between show and
     // the compositor granting focus — without it the panel closes instantly.
-    property bool _ignoreDeactivate: false
-    Timer { id: armTimer; interval: 250; onTriggered: root._ignoreDeactivate = false }
 
     function requestOpen() {
-        if (Qt.application.screens.length > 0) {
-            const s = Qt.application.screens[0];
-            x = s.virtualX + s.width - width - 16;
-            y = s.virtualY + s.height - height - Theme.barHeight - 16;
-        }
-        _ignoreDeactivate = true;
-        visible = true;
-        requestActivate();
-        armTimer.restart();
+        present();
         BluetoothBridge.startPolling();
     }
 
-    Shortcut {
-        sequence: "Escape"
-        onActivated: root.visible = false
-    }
 
     onVisibleChanged: {
         if (!visible) BluetoothBridge.stopPolling();
     }
 
-    onActiveChanged: {
-        if (!active && !_ignoreDeactivate && visible) root.visible = false;
-    }
 
     GlassPanel {
         anchors.fill: parent
-        anchors.margins: 8
+        backdrop: true
 
         ColumnLayout {
             anchors.fill: parent
@@ -151,7 +133,7 @@ Window {
                         anchors.margins: -6
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.visible = false
+                        onClicked: root.dismiss()
                     }
                 }
             }

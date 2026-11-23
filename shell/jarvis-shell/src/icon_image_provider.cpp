@@ -16,7 +16,9 @@ QPixmap IconImageProvider::requestPixmap(const QString& id, QSize* size, const Q
     // Last-resort generic glyph so at least *something* recognisable shows
     // for an app whose own icon the theme lacks. Still themeable — it's a
     // standard freedesktop name.
-    if (icon.isNull()) {
+    // Not for `-symbolic` status glyphs: a generic "executable" picture in
+    // place of a missing Wi-Fi icon is worse than the caller's own fallback.
+    if (icon.isNull() && !id.endsWith(QLatin1String("-symbolic"))) {
         icon = QIcon::fromTheme(QStringLiteral("application-x-executable"));
     }
 

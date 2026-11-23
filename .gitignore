@@ -51,3 +51,6 @@ lilith-open.md
 /skills/
 skills-lock.json
 iso/output/
+
+# tools/dev/shell-preview.sh output (screenshots, build + shell logs)
+.preview/

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Window
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
 /// A single toast bubble that lives in the bottom-right of the primary
@@ -17,6 +18,12 @@ Window {
     title: qsTr("Notificação")
     color: "transparent"
     visible: false
+    // Placement: a layer surface anchored to a screen corner/edge (a Wayland
+    // client cannot position itself with x/y).
+    LayerShell.Window.scope: "jarvis-toast"
+    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+    LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorRight
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
                    | Qt.WindowDoesNotAcceptFocus
 

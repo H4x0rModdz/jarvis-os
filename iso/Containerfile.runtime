@@ -24,7 +24,24 @@
 # It stays a valid bootc base (FROM fedora-bootc), so the final image
 # layered on top remains OTA- and ISO-buildable.
 
-FROM quay.io/fedora/fedora-bootc:44
+# Base images, pinned by digest (ADR 0033). A tag like `:44` is whatever was
+# pushed most recently, so an unpinned build silently changes kernel, Mesa and
+# driver underneath us. Pinned, a base refresh is a reviewed one-line diff.
+#
+# The two MUST move together — the NVIDIA module is built for one exact kernel
+# (checked below) — so never edit these by hand: run `tools/bump-base.sh`,
+# which resolves both tags, confirms the kernels match and rewrites the lines.
+# .github/workflows/bump-base.yml does that weekly and opens a PR.
+#
+# kernel: 7.3.4-200.fc44.x86_64   nvidia: 620.73.04   resolved: 2026-11-23
+ARG FEDORA_BOOTC=quay.io/fedora/fedora-bootc@sha256:fb4c6080cacdd463079f862ec3523f6b16d90f6344b4bb6052fef35eede43aa9
+ARG UBLUE_NVIDIA=ghcr.io/ublue-os/akmods-nvidia-open@sha256:b243c085eab75e5c074ab8c9211ce59dc748bc06035c4fda3663aadc0206afb7
+
+# Prebuilt, signed NVIDIA kernel module + matching driver RPMs. Only mounted
+# into the NVIDIA step further down; nothing from this stage is copied wholesale.
+FROM ${UBLUE_NVIDIA} AS nvidia-rpms
+
+FROM ${FEDORA_BOOTC}
 
 # Desktop runtime: labwc compositor, foot terminal (default keybind),
 # greetd for autologin into the wayland session, Qt 6 + LayerShellQt for
@@ -37,8 +54,9 @@ RUN dnf -y install \
         qt6-qtbase qt6-qtdeclarative qt6-qtwayland qt6-qtquickcontrols2 \
         qt6-qtquick3d \
         layer-shell-qt \
+        rsms-inter-fonts \
         sqlite libnotify xdg-utils xdg-user-dirs jq curl \
-        seatd polkit NetworkManager \
+        seatd polkit lxqt-policykit NetworkManager \
         mesa-dri-drivers \
         wl-clipboard grim slurp \
         wtype \
@@ -59,6 +77,44 @@ RUN dnf -y install \
         qemu-guest-agent \
     && dnf clean all
 
+# ── Wi-Fi and Bluetooth that actually work ──────────────────────────────
+# `NetworkManager` alone cannot do Wi-Fi: the wireless support is a separate
+# plugin package, it needs wpa_supplicant to authenticate, and Intel adapters
+# (the most common ones in laptops and desktop boards) need iwlwifi firmware
+# that the minimal fedora-bootc base leaves out. Without these the Wi-Fi
+# panel had nothing to talk to — no adapter ever appeared, on any machine.
+# wireless-regdb carries the per-country channel/power rules.
+#
+# bluez was installed but nothing guaranteed its service was enabled, so
+# `bluetoothctl` could find no controller. Enable it explicitly; it is
+# D-Bus/udev-driven and idle on machines without a Bluetooth radio.
+RUN dnf -y install \
+        NetworkManager-wifi wpa_supplicant wireless-regdb \
+        iwlwifi-mvm-firmware iwlwifi-dvm-firmware iwlegacy-firmware \
+        brcmfmac-firmware \
+    && dnf clean all \
+    && systemctl enable bluetooth.service
+
+# ── Hyprland (ADR 0036) ─────────────────────────────────────────────────
+# The session's compositor: window animations, real backdrop blur behind the
+# shell's glass, rounded windows. labwc (installed above) stays as the
+# fallback for hosts without a GPU — see /usr/libexec/jarvis-session-compositor.
+#
+# Fedora does not package Hyprland; this comes from a COPR, i.e. a
+# third-party repository maintained by one person. That is a real dependency
+# risk (ADR 0036 spells it out) and the reason the repo is disabled again
+# right after the install: nothing else in the image may be pulled from it,
+# and a later `dnf` step cannot pick up a surprise Hyprland update.
+#   hyprland-plugin-hyprbars       title bars + buttons (Hyprland draws none)
+#   xdg-desktop-portal-hyprland    screen sharing / screenshots on Hyprland
+RUN dnf -y install dnf5-plugins \
+    && dnf -y copr enable sdegler/hyprland \
+    && dnf -y install hyprland hyprland-plugin-hyprbars xdg-desktop-portal-hyprland \
+    && dnf -y copr disable sdegler/hyprland \
+    && Hyprland --version | head -n 1 \
+    && test -f /usr/lib64/hyprland/libhyprbars.so \
+    && dnf clean all
+
 # ── GPU acceleration ────────────────────────────────────────────────────
 # Without these the desktop silently SOFTWARE-renders: Mesa falls back to
 # llvmpipe and the whole shell — the HUD, the glass panels, every Qt window —
@@ -75,7 +131,7 @@ RUN dnf -y install \
 #     for Zink to sit on, so GL falls to llvmpipe even once firmware loads.
 #
 # All of it is open source and redistributable (Fedora main repo) — no RPM
-# Fusion, no proprietary blob, no per-kernel akmod build in CI.
+# Fusion, no proprietary blob.
 RUN dnf -y install \
         mesa-vulkan-drivers \
         nvidia-gpu-firmware \
@@ -83,59 +139,95 @@ RUN dnf -y install \
         intel-gpu-firmware \
     && dnf clean all
 
-# ── NVIDIA driver (ADR 0032) ────────────────────────────────────────────
+# ── NVIDIA driver (ADR 0032, as amended by ADR 0033) ────────────────────
 # The open stack does not deliver working OpenGL on Ampere here: Vulkan/NVK
 # drives the GPU fine, but GL still lands on llvmpipe (Accelerated: no), and
 # forcing Zink lands it on lavapipe — software Vulkan. It also has no CUDA,
 # which we want for running Lilith's models on the GPU.
 #
-# akmod-nvidia is RPM Fusion's mainstream path, and on a supported GPU it
-# already builds NVIDIA's OPEN kernel modules — which is what NVIDIA recommends
-# for Turing and newer, and the default since driver 560. Note "open" describes
-# the *kernel module* only: GL, Vulkan and CUDA userspace are the proprietary
-# blob either way. We deliberately do NOT use the tainted repo's explicit
-# akmod-nvidia-open swap; it buys the same modules on this hardware while adding
-# a repo and a swap step we cannot test here.
+# The kernel module is NOT compiled here any more. It comes prebuilt and
+# SIGNED from Universal Blue's akmods image (the `nvidia-rpms` stage above),
+# together with the matching userspace driver and their install script — the
+# same artifacts Bazzite, Bluefin and Aurora ship. That fixes the two real
+# problems of building it ourselves with akmods:
 #
-# The module is compiled HERE, against the kernel that ships in this very
-# image. That is the right model for bootc: the kernel lives inside the image,
-# so the module can never be built for a different kernel than the one that
-# boots, and every base rebuild rebuilds it.
+#   * Secure Boot. Our module was unsigned, so it could not load with Secure
+#     Boot on. Theirs is signed with the "ublue kernel" key; a user enrols
+#     the public certificate once (see below) and the driver loads.
+#   * The kernel-devel pin. akmods needs kernel-devel for EXACTLY the kernel
+#     in the image, and Fedora's repos only keep the newest one — so the build
+#     broke whenever the base's kernel was a few days old. Nothing is compiled
+#     now, so nothing needs kernel-devel.
 #
-# kernel-devel MUST match kernel-core exactly or akmods silently builds nothing
-# useful — this is the fragile part of the whole recipe (Universal Blue ships
-# its own kernel RPMs and versionlocks the pair to dodge it). We pin to the
-# installed kernel's exact NVR and let the build fail loudly if that package is
-# no longer in the repos. The `modinfo` check is the backstop: it turns a
-# silent build failure into a failed image build instead of a black screen on
-# someone's desktop.
-RUN KVER=$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core | tail -1) \
-    && FEDORA=$(rpm -E %fedora) \
-    && dnf -y install \
-        "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-${FEDORA}.noarch.rpm" \
-        "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-${FEDORA}.noarch.rpm" \
-    && dnf -y install "kernel-devel-${KVER}" akmod-nvidia xorg-x11-drv-nvidia-cuda \
-    && akmods --force --kernels "${KVER}" \
-    && depmod -a "${KVER}" \
-    && modinfo -k "${KVER}" nvidia > /dev/null \
+# What makes a prebuilt module safe is the check below: the module is built
+# for one exact kernel, and both images are pinned by digest, so "the kernel
+# in this image is the kernel that module was built for" is verified at build
+# time and fails loudly instead of producing an image whose GPU driver
+# silently refuses to load. Universal Blue's `main` kernel is Fedora's own
+# kernel build (same vmlinuz, plus their signature), which is why our stock
+# kernel can load it.
+#
+# MULTILIB=0: no 32-bit driver libraries (parity with what we shipped before).
+# IMAGE_NAME is only read by the script to pick desktop-specific extras.
+# dnf5-plugins: their script drives repos with `dnf5 config-manager`, which the
+# minimal fedora-bootc base does not include.
+RUN --mount=type=bind,from=nvidia-rpms,source=/rpms,target=/tmp/akmods-rpms \
+    . /tmp/akmods-rpms/kmods/nvidia-vars \
+    && BASE_KERNEL=$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core | tail -1) \
+    && if [ "${BASE_KERNEL}" != "${KERNEL_VERSION}" ]; then \
+         echo "ERROR: fedora-bootc ships kernel ${BASE_KERNEL} but the NVIDIA module was built for ${KERNEL_VERSION}." ; \
+         echo "       The two pinned digests are out of step — run tools/bump-base.sh." ; \
+         exit 1 ; \
+       fi \
+    && dnf -y install dnf5-plugins \
+    && IMAGE_NAME=lilithos MULTILIB=0 AKMODNV_PATH=/tmp/akmods-rpms \
+         bash /tmp/akmods-rpms/ublue-os/nvidia-install.sh \
+    && modinfo -k "${KERNEL_VERSION}" nvidia > /dev/null \
     && dnf clean all
+
+# Secure Boot: the public half of the key that signed the module above. With
+# Secure Boot on, the kernel only loads modules signed by a key it trusts, so
+# the user enrols this certificate once:
+#
+#     sudo mokutil --import /etc/pki/akmods/certs/akmods-ublue.der
+#     (choose a one-time password, reboot, pick "Enroll MOK" on the blue screen)
+#
+# Without that — or with Secure Boot off — nothing changes from before. The
+# build verifies this is really the certificate the module was signed with
+# (modinfo's sig_key is the signing certificate's serial number), so a key
+# rotation upstream cannot leave us shipping a certificate that enrols nothing.
+COPY iso/assets/secureboot/akmods-ublue.der /etc/pki/akmods/certs/akmods-ublue.der
+RUN KVER=$(rpm -q --qf '%{VERSION}-%{RELEASE}.%{ARCH}' kernel-core | tail -1) \
+    && SIG=$(modinfo -k "${KVER}" -F sig_key nvidia | tr -d ':' | tr 'a-f' 'A-F') \
+    && CERT=$(openssl x509 -inform der -in /etc/pki/akmods/certs/akmods-ublue.der -noout -serial | cut -d= -f2) \
+    && if [ -z "${SIG}" ] || [ "${SIG}" != "${CERT}" ]; then \
+         echo "ERROR: nvidia.ko is signed by key ${SIG:-<unsigned>}, but the shipped certificate is ${CERT}." ; \
+         exit 1 ; \
+       fi
 
 # Kernel arguments the driver needs (nvidia-drm.modeset=1 for Wayland, nouveau
 # blacklist). bootc applies kargs.d at install and on upgrade, so these reach
 # installed machines via `bootc upgrade` rather than only fresh installs.
 COPY iso/assets/bootc/kargs.d/10-nvidia.toml /usr/lib/bootc/kargs.d/10-nvidia.toml
 
-# Preserve VRAM across suspend — without it the desktop returns corrupted or
-# black, the most common NVIDIA + Wayland suspend complaint.
-COPY iso/assets/modprobe/nvidia-power.conf /usr/lib/modprobe.d/nvidia-power.conf
+# The driver packages enable these units on every machine, but the image runs
+# on machines with no NVIDIA module loaded too (VMs, AMD/Intel, Secure Boot
+# before the key is enrolled), where they fail loudly on every boot. Gate them
+# on the module being present — see the drop-in for the full story.
+COPY iso/assets/systemd/system/nvidia-only-with-driver.conf \
+     /usr/lib/systemd/system/nvidia-persistenced.service.d/10-lilith-only-with-driver.conf
+COPY iso/assets/systemd/system/nvidia-only-with-driver.conf \
+     /usr/lib/systemd/system/nvidia-cdi-refresh.service.d/10-lilith-only-with-driver.conf
+COPY iso/assets/systemd/system/nvidia-only-with-driver.conf \
+     /usr/lib/systemd/system/nvidia-cdi-refresh.path.d/10-lilith-only-with-driver.conf
 
-# The suspend/hibernate/resume units RPM Fusion ships are what actually save and
-# restore that video memory. They are not enabled by default, and they gate
-# themselves on the driver being present, so enabling them here is inert on a
-# machine with no NVIDIA GPU. `|| true` keeps the build green if a future
-# package drops one of them.
-RUN systemctl enable nvidia-suspend.service nvidia-hibernate.service \
-        nvidia-resume.service 2>/dev/null || true
+# Suspend/resume needs nothing from us any more. The driver package installed
+# above ships /usr/lib/modprobe.d/nvidia.conf with
+# NVreg_PreserveVideoMemoryAllocations=1 (keep VRAM across suspend) and the
+# nouveau blacklist, so our own copy of that option was a duplicate, and this
+# driver generation no longer ships the nvidia-suspend/-resume/-hibernate
+# systemd units we used to enable (it hooks suspend inside the kernel module).
+# Resume on real hardware is still to be confirmed after this change — P005.
 
 # Guest-integration daemons for VMs. open-vm-tools (VMware) gives
 # host time-sync + guest info; qemu-guest-agent covers QEMU/KVM.
@@ -284,28 +376,27 @@ COPY iso/assets/theme/gtk-settings.ini /etc/gtk-4.0/settings.ini
 # MOZ_ENABLE_WAYLAND) force Flatpaks onto Wayland: this session has no
 # working XWayland/DISPLAY, so apps that default to X11 fail at launch.
 # NOTE: --system overrides live under /var, which bootc only seeds on
-# install — an OTA upgrade does NOT refresh them. The labwc autostart
-# re-applies the same --user override each login so existing VMs get it
-# without a reinstall; this block covers fresh installs.
+# install — an OTA upgrade does NOT refresh them. The session autostart
+# re-applies the Wayland part as a --user override each login so existing
+# installs get it without a reinstall; this block covers fresh installs.
+#
+# No writable filesystem access is granted here. Every app used to get
+# --filesystem=xdg-download and Firefox --filesystem=home, which let any
+# sandboxed app read and rewrite the user's downloads and gave a browser
+# exploit the whole home directory. Firefox's manifest already grants it
+# Downloads; anything else goes through the file-chooser portal. The two
+# host paths below are read-only theme data. (Installs made before this
+# change keep the old system-level grants until reinstalled; the user-level
+# ones are cleared by the session autostart.)
 RUN flatpak override --system \
         --filesystem=/usr/share/themes:ro \
         --filesystem=/usr/share/icons:ro \
-        --filesystem=xdg-download \
         --env=GTK_THEME=WhiteSur-Dark \
         --env=XCURSOR_THEME=WhiteSur-cursors \
         --socket=wayland \
         --env=QT_QPA_PLATFORM=wayland \
         --env=GDK_BACKEND=wayland \
         --env=MOZ_ENABLE_WAYLAND=1
-
-# Firefox (the daily-driver browser) gets FULL home access — saving/opening
-# downloads must work anywhere the user expects. The global xdg-download above
-# proved too narrow: Firefox kept dumping into its private sandbox dir (feels
-# like a temp folder; Dolphin can't see it), so downloads were unopenable.
-# NOTE: --system overrides live under /var (seeded on install only); the labwc
-# autostart re-applies the same --user override each login, so already-installed
-# VMs get it via OTA without a reinstall.
-RUN flatpak override --system --filesystem=home org.mozilla.firefox
 
 # Nested user namespaces so Flatpak apps with their own inner sandbox
 # (Firefox's content process) can start. Without a budget the nested

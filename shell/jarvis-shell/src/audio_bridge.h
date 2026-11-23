@@ -47,8 +47,13 @@ public:
 
     Q_INVOKABLE void setMute(const QString& sinkName, bool muted);
 
-    /// Manual refresh — settings panel calls this on open.
+    /// One-shot refresh of the sink list.
     Q_INVOKABLE void refresh();
+
+    /// Poll the sink list while a panel showing it is open (so plugging
+    /// headphones in shows up live); stop when it closes. Idempotent.
+    Q_INVOKABLE void startPolling();
+    Q_INVOKABLE void stopPolling();
 
 signals:
     void sinksChanged();

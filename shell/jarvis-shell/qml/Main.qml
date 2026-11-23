@@ -1,12 +1,17 @@
 import QtQuick
 import QtQuick.Window
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
-/// Top-level root: the macOS-style **menu bar** pinned to the top edge,
-/// plus every sibling popup window the shell owns (Launcher, dialogs,
-/// panels, notification surfaces, LilithPopup, the Jarvis menu). The
-/// dock and the desktop-icon surface are separate roots (Dock.qml /
-/// Desktop.qml); main.cpp anchors all three by objectName.
+/// Top-level root: the **menu bar** pinned to the top edge, plus every
+/// popup window the shell owns (system menu, launcher, dialogs, panels,
+/// notification surfaces, the Lilith conversation). The dock and the
+/// optional desktop HUD are separate roots (Dock.qml / Desktop.qml).
+///
+/// Every shell window is a wlr-layer-shell surface and declares its own
+/// placement with the `LayerShell.Window` attached properties — a Wayland
+/// client cannot position a window by setting x/y, so a popup that should
+/// hang under the menu bar anchors itself to that corner instead.
 ///
 /// Cross-surface UI intents arrive via the ShellBus singleton: the dock
 /// emits, this root opens the matching popup (which only it can reach).
@@ -14,20 +19,35 @@ Window {
     id: root
     objectName: "jarvis-topbar"
     visible: true
-    width: 1280
+    width: Screen.width
     height: Theme.topBarHeight
     color: "transparent"
     flags: Qt.FramelessWindowHint
+
+    LayerShell.Window.scope: "jarvis-topbar"
+    LayerShell.Window.layer: LayerShell.Window.LayerTop
+    LayerShell.Window.anchors: LayerShell.Window.AnchorTop
+                             | LayerShell.Window.AnchorLeft
+                             | LayerShell.Window.AnchorRight
+    LayerShell.Window.exclusionZone: Theme.topBarHeight
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
 
     // ── The menu bar ──────────────────────────────────────────────────
     TopBar {
         id: topbar
         anchors.fill: parent
 
-        onJarvisMenuRequested: {
-            const s = Qt.application.screens[0];
-            if (s) jarvisMenu.openAt(s.virtualX + 6, s.virtualY + Theme.topBarHeight + 2);
-        }
+        // Which popup is showing, so its bar item stays highlighted.
+        openPopup: jarvisMenu.shown ? "system"
+                 : connectivityPanel.shown ? "wifi"
+                 : bluetoothPanel.shown ? "bluetooth"
+                 : settingsPanel.shown ? "settings"
+                 : notificationDrawer.shown ? "notifications"
+                 : ""
+
+        onJarvisMenuRequested: jarvisMenu.shown ? jarvisMenu.close() : jarvisMenu.open()
+        onLilithRequested: lilithPopup.toggle()
+        onLauncherRequested: launcher.shown ? launcher.close() : launcher.open()
         onNetworksRequested: connectivityPanel.requestOpen()
         onBluetoothRequested: bluetoothPanel.requestOpen()
         onNotificationsRequested: notificationDrawer.requestOpen()
@@ -38,7 +58,7 @@ Window {
     Connections {
         target: ShellBus
         function onToggleLilith() { lilithPopup.toggle(); }
-        function onOpenLauncher() { launcher.visible ? launcher.close() : launcher.open(); }
+        function onOpenLauncher() { launcher.shown ? launcher.close() : launcher.open(); }
         function onOpenSettings() { settingsPanel.requestOpen(); }
         function onOpenNotifications() { notificationDrawer.requestOpen(); }
     }

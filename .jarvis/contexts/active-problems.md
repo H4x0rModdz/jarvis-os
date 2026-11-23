@@ -12,7 +12,10 @@
 - From scratch: full control, but 12-18 months of work before usable
 - Fork: fastest start, but divergence management is ongoing cost
 
-**Status:** Undecided — needs ADR
+**Status:** decided — ADR 0036: Hyprland, labwc as fallback (untested on hardware). A custom compositor is
+research, not the route to daily-driver features. Still open: which of
+wayfire / niri / KWin (if any) replaces labwc for real backdrop blur and
+better NVIDIA behaviour — decidable only on GPU hardware.
 
 ---
 
@@ -39,3 +42,28 @@ locally, making app-level crypto security theatre. Lilith's SQLite stores
 **RESOLVED** — See ADR 0005.
 Decision: Fedora Atomic, OCI image model (BlueBuild).
 Rationale: immutable base + atomic updates + proven Wine/Proton (Bazzite model) + best Wayland ecosystem.
+
+---
+
+### P005 — Frame pacing on real hardware (NVIDIA + labwc)
+**Problem:** on real hardware (RTX 3060, ultrawide) the shell stuttered even
+after rendering moved to the GPU.
+
+**What is fixed (in our code):** a `playerctl` call that blocked the GUI thread
+every 2 s; HUD sampling (incl. the `/proc` walk) on the GUI thread; one blanket
+stats signal that re-evaluated every HUD binding and rebuilt both Repeaters each
+second; a layer + multi-pass blur re-run on every change inside any glass panel;
+always-on polling (`pactl`, Lilith `ListFacts`); per-core bars and gauge needles
+that re-animated on every 1 Hz sample. Measured under software rendering
+(headless labwc, 2560x1080, all three surfaces): the idle shell went from 43%
+of a core to 2%. Rules to keep it that way are
+in `shell/jarvis-shell/module.md` § Performance rules.
+
+**What is still unverified:** whether any stutter remains that is *not* ours —
+i.e. wlroots/NVIDIA frame pacing, or three `QQuickWindow`s sharing a process.
+These can only be answered on the machine. The levers are in
+`/etc/jarvis/session.env` (no image rebuild): `WLR_RENDERER=vulkan`,
+`WLR_NO_HARDWARE_CURSORS=0`, `QSG_RENDER_LOOP=basic`,
+`JARVIS_SHELL_SURFACES=…`.
+
+**Status:** open until measured on-device after the fixes above ship.

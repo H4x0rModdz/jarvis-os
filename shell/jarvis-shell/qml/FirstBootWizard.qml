@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtQuick.Window
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
 /// First-boot wizard. Opens once after install — never again unless
@@ -21,6 +22,13 @@ Window {
     width: 720
     height: 540
     color: "transparent"
+    // Placement: a layer surface. Unanchored = centred at its own size (left
+    // to its defaults, LayerShellQt anchors all four edges and the window is
+    // stretched over the whole screen).
+    LayerShell.Window.scope: "jarvis-dialog"
+    LayerShell.Window.layer: LayerShell.Window.LayerOverlay
+    LayerShell.Window.anchors: LayerShell.Window.AnchorNone
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityOnDemand
     flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
     title: qsTr("Bem-vindo ao LilithOS")
 
@@ -28,7 +36,7 @@ Window {
     readonly property string completedKey: "first_boot.completed"
 
     function maybeOpen() {
-        if (SettingsBridge.getBool(completedKey, false)) return;
+        if (SkipFirstBoot || SettingsBridge.getBool(completedKey, false)) return;
         if (Qt.application.screens.length > 0) {
             const s = Qt.application.screens[0];
             x = s.virtualX + Math.floor((s.width - width) / 2);

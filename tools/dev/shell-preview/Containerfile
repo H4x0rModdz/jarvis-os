@@ -1,0 +1,18 @@
+# Image for tools/dev/shell-preview.sh: the builder (Qt devel, so it can
+# compile the shell) plus what a session needs to actually RUN it — labwc,
+# fonts, an icon theme, a wallpaper setter, a screenshot tool.
+#
+# Not part of the OS image. Rebuilt only when this file changes.
+ARG BUILDER_IMAGE=ghcr.io/h4x0rmoddz/jarvis-builder:latest
+FROM ${BUILDER_IMAGE}
+
+RUN dnf -y install \
+        labwc foot swaybg grim wlr-randr wayland-utils \
+        xorg-x11-server-Xwayland dbus-daemon \
+        mesa-dri-drivers mesa-libEGL \
+        qt6-qtwayland layer-shell-qt qt6-qtquick3d \
+        rsms-inter-fonts google-noto-sans-fonts google-noto-sans-mono-fonts \
+        google-noto-color-emoji-fonts \
+        papirus-icon-theme adwaita-icon-theme \
+        playerctl procps-ng wlrctl wtype lxqt-policykit \
+    && dnf clean all

@@ -9,50 +9,32 @@ import Jarvis.Shell
 ///
 /// V2 — read-only display. Future commits will add dismiss/clear
 /// actions and grouping by app.
-Window {
+PopupSurface {
+    placement: "top-right"
+    scope: "jarvis-popover"
     id: root
-    visible: false
-    width: 360
-    height: 640
+    panelWidth: 360
+    panelHeight: 640
     title: qsTr("Notificações")
-    color: "transparent"
     // Qt.Dialog (not Qt.Tool): under labwc a Tool window is non-activatable,
     // so it never gets keyboard focus — the Escape Shortcut never fires.
     // Qt.Dialog gets the activation the Launcher/JarvisMenu rely on.
-    flags: Qt.Dialog | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
 
     // Suppress the spurious first deactivate wlroots fires between show and
     // the compositor granting focus — without it the drawer closes instantly.
-    property bool _ignoreDeactivate: false
-    Timer { id: armTimer; interval: 250; onTriggered: root._ignoreDeactivate = false }
 
     function requestOpen() {
         NotificationsBridge.refreshHistory();
-        if (Qt.application.screens.length > 0) {
-            const s = Qt.application.screens[0];
-            x = s.virtualX + s.width - width - 16;
-            y = s.virtualY + 16;
-        }
-        _ignoreDeactivate = true;
-        visible = true;
-        requestActivate();
-        armTimer.restart();
+        present();
     }
 
     // Esc closes.
-    Shortcut {
-        sequence: "Escape"
-        onActivated: root.visible = false
-    }
 
     // Close when focus leaves us.
-    onActiveChanged: {
-        if (!active && !_ignoreDeactivate && visible) root.visible = false;
-    }
 
     GlassPanel {
         anchors.fill: parent
-        anchors.margins: 8
+        backdrop: true
 
         ColumnLayout {
             anchors.fill: parent

@@ -46,9 +46,21 @@ Item {
     /// of snapping — 250ms ease-out, the house motion rule.
     property real displayRatio: 0
     Behavior on displayRatio {
+        id: sweep
         NumberAnimation { duration: 250; easing.type: Easing.OutCubic }
     }
-    onRatioChanged: if (!bootSweep.running) displayRatio = ratio
+    /// Moves smaller than this fraction of the scale snap instead of sweeping.
+    /// An idle CPU reading wobbles by a point or two every second; sweeping
+    /// each wobble means ~15 frames of the fullscreen desktop surface per
+    /// second, forever, for a movement too small to see as motion. Real
+    /// changes still sweep.
+    property real sweepThreshold: 0.03
+    onRatioChanged: {
+        if (bootSweep.running) return;
+        sweep.enabled = Math.abs(ratio - displayRatio) >= sweepThreshold;
+        displayRatio = ratio;
+        sweep.enabled = true;
+    }
 
     // Instrument-cluster startup sweep: the needle runs to full scale and back
     // before settling on the live reading, the way a car's cluster self-tests.

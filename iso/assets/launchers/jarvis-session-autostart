@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# /usr/libexec/jarvis-session-autostart — run once when the session's
+# compositor is up (Hyprland: from hyprland.lua; labwc: from its autostart).
+#
+# Two responsibilities:
+#   1. Pull in `jarvis-session.target` once the user systemd manager is
+#      ready. The target's `WantedBy=` points at `graphical-session.target`,
+#      which most desktop sessions emit on their own — labwc does not, so
+#      without an explicit start the daemons stay inactive.
+#   2. Launch the shell after the daemons publish their bus names.
+#
+# Why the wait loop: on greetd autologin the labwc autostart can fire
+# before `user@<uid>.service` has finished bringing up the user systemd
+# manager, and `systemctl --user start` then silently no-ops. We retry
+# until the manager reports a usable state (running OR degraded — degraded
+# happens when an unrelated user unit is failed, which we don't care
+# about). A short log helps when something goes wrong.
+
+# The log lives in the session's private runtime directory (mode 0700, owned
+# by the user), never under /tmp: a fixed name in a world-writable directory
+# can be pre-created or symlinked by any other local user, and this script
+# would then append to — or through — their file. No usable runtime dir, no
+# log file.
+LOG_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [ -d "$LOG_DIR" ] && [ -O "$LOG_DIR" ]; then
+    LOG="$LOG_DIR/jarvis-session-autostart.log"
+    [ -L "$LOG" ] && rm -f -- "$LOG"
+    exec >> "$LOG" 2>&1
+else
+    exec > /dev/null 2>&1
+fi
+echo "=== $(date --iso=seconds) autostart starting (pid $$) ==="
+echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-unset}"
+echo "DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS:-unset}"
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+
+# Wallpaper. labwc paints a flat grey background on its own — without
+# this the desktop looks broken/empty. swaybg reads our shipped PNG
+# and stays running as the background surface. `-m fill` crops to the
+# output. Backgrounded so the rest of autostart proceeds.
+if command -v swaybg >/dev/null 2>&1; then
+    # A user-set wallpaper (written by the desktop.set_wallpaper action to
+    # this exact path) wins; otherwise the shipped default. Keeps the choice
+    # across reboots without needing to read Settings from this shell script.
+    WP="${XDG_DATA_HOME:-$HOME/.local/share}/jarvis/wallpaper"
+    [ -f "$WP" ] || WP=/usr/share/backgrounds/jarvis/wallpaper.jpg
+    swaybg -m fill -i "$WP" &
+fi
+
+# Automount removable media + a desktop notification when a drive is
+# plugged in (udisks2 does the mounting; udiskie drives it). --no-tray:
+# this session has no system tray, so we want only the automount + notify
+# behaviour, not the menu. (ADR 0026)
+if command -v udiskie >/dev/null 2>&1; then
+    udiskie --no-tray &
+fi
+
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    state=$(systemctl --user is-system-running 2>/dev/null || echo "unknown")
+    echo "attempt ${attempt}: user systemd state=${state}"
+    case "${state}" in
+        running|degraded)
+            break
+            ;;
+    esac
+    sleep 1
+done
+
+# Make the live Wayland session reachable to the user systemd manager and
+# to DBus-activated services BEFORE the daemons start. The Jarvis daemons
+# run as systemd --user services; without WAYLAND_DISPLAY (and the rest of
+# the graphical env) in their environment, any GUI app they spawn —
+# xdg-open for folders, `gio launch` for Flatpaks like Firefox — has no
+# compositor to connect to and silently fails to appear, even though the
+# spawn itself "succeeds". labwc exports these into our env; we hand them
+# off so the daemons inherit them.
+GRAPHICAL_ENV="WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_DATA_DIRS DISPLAY HYPRLAND_INSTANCE_SIGNATURE"
+systemctl --user import-environment $GRAPHICAL_ENV
+echo "import-environment: exit=$?"
+if command -v dbus-update-activation-environment >/dev/null 2>&1; then
+    dbus-update-activation-environment --systemd $GRAPHICAL_ENV
+    echo "dbus-update-activation-environment: exit=$?"
+fi
+
+# Make sure the XDG user dirs (~/Downloads, ~/Documents, ...) exist before we
+# hand Flatpaks access to them — bootc never seeds /home, and a fresh autologin
+# user may not have them yet. Without ~/Downloads, Firefox's "save to Downloads"
+# falls back into its private sandbox dir, which Dolphin can't see.
+if command -v xdg-user-dirs-update >/dev/null 2>&1; then
+    xdg-user-dirs-update
+fi
+mkdir -p "${XDG_DOWNLOAD_DIR:-$HOME/Downloads}"
+
+# Flatpak apps: use Wayland. Apps that default to X11 would otherwise depend
+# on Xwayland being up, and die with "no DISPLAY" when it is not. A --user
+# override sets the Wayland backend env + grants the wayland socket — the one
+# permission practically every graphical Flatpak declares anyway.
+#
+# What this deliberately does NOT do any more is hand out filesystem access:
+#   * every app used to get --filesystem=xdg-download, i.e. any sandboxed
+#     app could read and rewrite everything the user ever downloaded;
+#   * Firefox used to get --filesystem=home, i.e. a browser exploit could
+#     read ssh keys, the Lilith databases and every document.
+# Neither was needed. Firefox's own manifest already grants it the Downloads
+# folder, and saving or opening anywhere else goes through the file-chooser
+# portal (xdg-desktop-portal), which gives the app exactly the file the user
+# picked. The original "downloads vanish" bug was ~/Downloads not existing
+# yet, which the mkdir above fixes.
+#
+# Machines that ran the old script still carry those grants in
+# ~/.local/share/flatpak/overrides, so they are cleared once. Once only — a
+# reset on every login would also wipe overrides the user set on purpose.
+if command -v flatpak >/dev/null 2>&1; then
+    stamp="${XDG_STATE_HOME:-$HOME/.local/state}/jarvis/flatpak-overrides-v2"
+    if [ ! -e "$stamp" ]; then
+        flatpak override --user --reset 2>/dev/null
+        flatpak override --user --reset org.mozilla.firefox 2>/dev/null
+        mkdir -p "$(dirname "$stamp")" && : > "$stamp"
+        echo "flatpak: cleared the old broad filesystem overrides"
+    fi
+    flatpak override --user \
+        --socket=wayland \
+        --env=QT_QPA_PLATFORM=wayland \
+        --env=GDK_BACKEND=wayland \
+        --env=MOZ_ENABLE_WAYLAND=1 2>/dev/null \
+        && echo "flatpak wayland override: applied" \
+        || echo "flatpak override: failed"
+fi
+
+systemctl --user start jarvis-session.target
+echo "jarvis-session.target start: exit=$?"
+
+systemctl --user list-units --type=service --no-pager | grep jarvis || true
+
+# Authentication dialogs. Without a polkit agent in the session, anything
+# that needs admin rights — mounting an internal disk, a software centre,
+# `pkexec` — fails silently, because nobody is there to ask for the password.
+if [ -x /usr/libexec/lxqt-policykit-agent ]; then
+    /usr/libexec/lxqt-policykit-agent &
+fi
+
+# Give the daemons a moment to publish their bus names before the shell
+# starts pinging them. The supervisor restarts the shell if it crashes —
+# see /usr/libexec/jarvis-shell-supervise.
+( sleep 1 && exec /usr/libexec/jarvis-shell-supervise ) &
+
+# Idle auto-lock is now owned by jarvis-lock — the daemon reads
+# `lock.idle_timeout_seconds` from com.jarvis.Settings and respawns
+# swayidle whenever the setting changes. See system/lock/src/main.rs
+# (idle_lock_supervisor).

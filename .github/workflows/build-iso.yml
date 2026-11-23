@@ -257,6 +257,15 @@ jobs:
       # The ISO is just the first-install medium; routine updates go OTA
       # via the pushed image above, so we don't spend ~Anaconda time on
       # every main push.
+      # The installer must never choose a disk on its own. An earlier config
+      # made bootc-image-builder generate an unattended kickstart with
+      # `clearpart --all`, and the ISO wiped every disk in the machine. Check
+      # the config before building, and the generated manifest after — before
+      # anything is uploaded.
+      - name: Installer kickstart must not select disks (config)
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        run: bash tools/check-installer-kickstart.sh
+
       - name: Convert OCI to ISO
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         run: |
@@ -274,6 +283,13 @@ jobs:
             --rootfs btrfs \
             --config /config.toml \
             "ghcr.io/${OWNER}/jarvis-os:latest"
+
+      - name: Installer kickstart must not select disks (generated manifest)
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        run: |
+          MANIFEST=$(find iso/output -name 'manifest*.json' | head -1)
+          test -n "$MANIFEST" || { echo "no manifest produced — cannot verify the installer"; exit 1; }
+          bash tools/check-installer-kickstart.sh "$MANIFEST"
 
       - name: Locate ISO
         id: iso

@@ -16,7 +16,7 @@ set(CMAKE_AUTORCC ON)
 # Enable QML compile-time tooling and warnings.
 set(CMAKE_AUTOUIC OFF)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Quick Qml DBus QuickControls2 WaylandClient Quick3D)
+find_package(Qt6 6.9 REQUIRED COMPONENTS Core Gui Quick Qml DBus QuickControls2 WaylandClient Quick3D)
 
 # LayerShellQt is built out-of-tree against KDE's repo (see
 # .jarvis-os/memory) and installed alongside Qt. The find_package call below
@@ -29,7 +29,7 @@ else()
     message(STATUS "LayerShellQt NOT found — building Phase 1a toplevel variant")
 endif()
 
-qt_standard_project_setup(REQUIRES 6.5)
+qt_standard_project_setup(REQUIRES 6.9)
 
 qt_add_executable(jarvis-shell
     src/main.cpp
@@ -43,6 +43,8 @@ qt_add_executable(jarvis-shell
     src/desktop_apps_model.h
     src/icon_image_provider.cpp
     src/icon_image_provider.h
+    src/wallpaper_backdrop_provider.cpp
+    src/wallpaper_backdrop_provider.h
     src/escape_closer.cpp
     src/escape_closer.h
     src/updater_bridge.cpp
@@ -59,6 +61,8 @@ qt_add_executable(jarvis-shell
     src/power_bridge.h
     src/system_stats_bridge.cpp
     src/system_stats_bridge.h
+    src/system_stats_sampler.cpp
+    src/system_stats_sampler.h
     src/media_bridge.cpp
     src/media_bridge.h
     src/bluetooth_bridge.cpp
@@ -99,38 +103,29 @@ qt_add_qml_module(jarvis-shell
     VERSION 1.0
     QML_FILES
         qml/Main.qml
-        qml/Bar.qml
-        qml/BarMenuButton.qml
-        qml/Clock.qml
-        qml/LilithInput.qml
-        qml/StatusIndicator.qml
         qml/Theme.qml
         qml/ApprovalDialog.qml
         qml/ApprovalButton.qml
         qml/Launcher.qml
         qml/AppCell.qml
         qml/UpdaterSplash.qml
-        qml/MicButton.qml
         qml/SettingsPanel.qml
-        qml/BarGearButton.qml
         qml/NotificationToast.qml
         qml/NotificationDrawer.qml
-        qml/BarBellButton.qml
-        qml/BarWifiButton.qml
-        qml/BarBluetoothButton.qml
-        qml/BarBatteryIndicator.qml
         qml/BluetoothPanel.qml
         qml/ConnectivityPanel.qml
         qml/DisplayPanel.qml
         qml/FirstBootWizard.qml
         qml/GlassPanel.qml
+        qml/PopupSurface.qml
         qml/LilithPopup.qml
         qml/Desktop.qml
-        qml/DesktopIcon.qml
         qml/HudGraph.qml
         qml/HudGauge.qml
         qml/ShellBus.qml
         qml/TopBar.qml
+        qml/BarItem.qml
+        qml/SymbolIcon.qml
         qml/JarvisMenu.qml
         qml/AboutDialog.qml
         qml/Dock.qml

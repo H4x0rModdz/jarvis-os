@@ -1,6 +1,5 @@
 #include "media_bridge.h"
 
-#include <QProcess>
 #include <QStringList>
 
 namespace {
@@ -9,50 +8,78 @@ constexpr const char* kPlayerctl = "playerctl";
 
 MediaBridge::MediaBridge(QObject* parent) : QObject(parent)
 {
-    // 2 s is plenty for a now-playing line; the transport commands refresh on
-    // the next tick. playerctl is fast (<50 ms), so a synchronous poll on the
-    // GUI thread is fine.
-    m_timer.setInterval(2000);
-    QObject::connect(&m_timer, &QTimer::timeout, this, &MediaBridge::tick);
-    m_timer.start();
-    tick();
+    // Event-driven, not polled. `playerctl --follow` stays running and prints
+    // one line each time the active player's status or track changes (an empty
+    // line when the last player goes away), so an idle desktop costs nothing.
+    //
+    // This used to spawn playerctl every 2 s and block on it with
+    // waitForFinished() — on the GUI thread. Every fork+exec+DBus round trip
+    // was a stall in which no window of the shell could paint or take input:
+    // a guaranteed hitch every two seconds, for a line of text that changes a
+    // few times an hour.
+    m_follow.setProgram(QString::fromLatin1(kPlayerctl));
+    m_follow.setArguments({QStringLiteral("metadata"),
+                           QStringLiteral("--format"),
+                           QStringLiteral("{{status}}\t{{title}}\t{{artist}}"),
+                           QStringLiteral("--follow")});
+    QObject::connect(&m_follow, &QProcess::readyReadStandardOutput, this,
+                     &MediaBridge::readFollowOutput);
+    QObject::connect(&m_follow, &QProcess::finished, this, [this] {
+        // playerctl exited (crash, session bus restart): the last line we saw
+        // no longer describes anything, and the follower needs to come back.
+        setNowPlaying(false, {}, {}, {});
+        m_restart.start();
+    });
+    // A FailedToStart error (playerctl not installed) never reaches `finished`,
+    // so it is not retried; the HUD just keeps showing "Nada tocando".
+    m_restart.setSingleShot(true);
+    m_restart.setInterval(5000);
+    QObject::connect(&m_restart, &QTimer::timeout, this, [this] { m_follow.start(); });
+
+    m_follow.start();
 }
 
-void MediaBridge::tick()
+MediaBridge::~MediaBridge()
 {
-    QProcess p;
-    // One call yields status + title + artist, tab-separated.
-    p.start(QString::fromLatin1(kPlayerctl),
-            {QStringLiteral("metadata"),
-             QStringLiteral("--format"),
-             QStringLiteral("{{status}}\t{{title}}\t{{artist}}")});
-    const bool ok = p.waitForFinished(800)
-        && p.exitStatus() == QProcess::NormalExit
-        && p.exitCode() == 0;
+    // Don't let the `finished` handler re-arm the restart timer mid-teardown.
+    m_follow.disconnect(this);
+    m_follow.kill();
+    m_follow.waitForFinished(200);
+}
 
-    bool changed = false;
-    if (ok) {
-        const QString out = QString::fromUtf8(p.readAllStandardOutput()).trimmed();
-        const QStringList f = out.split('\t');
-        const QString st = f.value(0);
-        const QString ti = f.value(1);
-        const QString ar = f.value(2);
-        if (!m_hasPlayer || m_status != st || m_title != ti || m_artist != ar) {
-            m_hasPlayer = true;
-            m_status = st;
-            m_title = ti;
-            m_artist = ar;
-            changed = true;
-        }
-    } else if (m_hasPlayer) {
-        // No active player (playerctl exits non-zero) or it isn't installed.
-        m_hasPlayer = false;
-        m_status.clear();
-        m_title.clear();
-        m_artist.clear();
-        changed = true;
+void MediaBridge::readFollowOutput()
+{
+    // Only the newest complete line matters — a burst of changes collapses to
+    // the final state.
+    QByteArray last;
+    bool any = false;
+    while (m_follow.canReadLine()) {
+        last = m_follow.readLine();
+        any = true;
     }
-    if (changed) emit updated();
+    if (!any) return;
+
+    // Strip the newline only: trimming all whitespace would eat the tabs of a
+    // line whose status is set but whose title/artist are empty.
+    while (last.endsWith('\n') || last.endsWith('\r')) last.chop(1);
+    const QStringList f = QString::fromUtf8(last).split('\t');
+    const QString status = f.value(0).trimmed();
+    // An empty line (or empty status) is playerctl saying "no player".
+    setNowPlaying(!status.isEmpty(), status, f.value(1).trimmed(), f.value(2).trimmed());
+}
+
+void MediaBridge::setNowPlaying(bool hasPlayer, const QString& status,
+                                const QString& title, const QString& artist)
+{
+    if (m_hasPlayer == hasPlayer && m_status == status && m_title == title
+        && m_artist == artist) {
+        return;
+    }
+    m_hasPlayer = hasPlayer;
+    m_status = status;
+    m_title = title;
+    m_artist = artist;
+    emit updated();
 }
 
 void MediaBridge::previous()

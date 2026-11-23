@@ -1,25 +1,32 @@
 import QtQuick
 import QtQuick.Window
 import QtQuick.Layouts
+import org.kde.layershell as LayerShell
 import Jarvis.Shell
 
-/// The desktop surface — a second top-level Window alongside Main.qml's bar,
-/// recognised by `objectName` and anchored to all four output edges on the
-/// wlr-layer-shell *bottom* layer (above swaybg's wallpaper, below every app
-/// window). It takes no keyboard focus.
+/// The "command centre" HUD — an optional desktop mode. A layer surface
+/// anchored to all four output edges on the *bottom* layer (above the
+/// wallpaper, below every app window); it takes no keyboard focus.
 ///
-/// Hosts the eDEX-style "command center" HUD — SYSTEM (left), LILITH (center)
-/// and NETWORK (right) panels, fed by SystemStatsBridge (/proc), the Lilith
-/// bridges, and MediaBridge (playerctl now-playing). Lives behind app windows;
-/// a deliberate sci-fi *mode* aesthetic (its own cyan palette), distinct from
-/// the calm glass chrome of the bar/popups. No desktop icons — the HUD owns the
-/// home; app access is the launcher/dock.
+/// SYSTEM (left), LILITH (centre) and NETWORK (right) panels, fed by
+/// SystemStatsBridge (/proc), the Lilith bridges and MediaBridge. A deliberate
+/// sci-fi aesthetic with its own cyan palette (ADR 0031), which is why it is
+/// OFF by default: the default desktop is the wallpaper, and this is a mode
+/// the user turns on in Preferências (`desktop.hud`). JARVIS_HUD=1 forces it
+/// on for development.
 Window {
     id: root
     objectName: "jarvis-desktop"
-    visible: true
+    visible: HudForced || (root._settingsTick, SettingsBridge.getBool("desktop.hud", false))
     color: "transparent"
     flags: Qt.FramelessWindowHint
+
+    LayerShell.Window.scope: "jarvis-desktop"
+    LayerShell.Window.layer: LayerShell.Window.LayerBottom
+    LayerShell.Window.anchors: LayerShell.Window.AnchorTop | LayerShell.Window.AnchorBottom
+                             | LayerShell.Window.AnchorLeft | LayerShell.Window.AnchorRight
+    LayerShell.Window.exclusionZone: 0
+    LayerShell.Window.keyboardInteractivity: LayerShell.Window.KeyboardInteractivityNone
 
     // ── HUD palette / type (local — not the purple glass Theme) ──────────
     readonly property color hudCyan: "#18ffff"
@@ -64,9 +71,10 @@ Window {
         return "idle";
     }
 
-    // Ticking clock for the SYSTEM panel.
+    // Today's date for the SYSTEM panel. Only the date is shown (the top bar
+    // owns the clock), so once a minute is ample.
     property var now: new Date()
-    Timer { interval: 1000; running: true; repeat: true; onTriggered: root.now = new Date() }
+    Timer { interval: 60000; running: true; repeat: true; onTriggered: root.now = new Date() }
 
     Component.onCompleted: {
         const s = Qt.application.screens[0];
@@ -165,14 +173,23 @@ Window {
                 maxValue: 100
                 stroke: root.hudCyan
             }
-            // Per-core bars
+            // Per-core bars. The Repeater is driven by the core COUNT, which
+            // never changes, and each bar reads its own load by index. Using
+            // the load list itself as the model destroyed and rebuilt every
+            // delegate once a second — a relayout of the whole panel each tick.
+            //
+            // The bars snap rather than tween: a tween here would keep the
+            // fullscreen desktop surface rendering continuous frames for a
+            // large part of every second, forever, to animate 1 Hz telemetry.
             GridLayout {
+                id: coreGrid
                 Layout.fillWidth: true
                 columns: 2
                 rowSpacing: 3
                 columnSpacing: 8
+                readonly property var loads: SystemStatsBridge.perCore
                 Repeater {
-                    model: SystemStatsBridge.perCore
+                    model: SystemStatsBridge.coreCount
                     delegate: RowLayout {
                         Layout.fillWidth: true
                         spacing: 6
@@ -182,10 +199,9 @@ Window {
                             height: 6
                             color: Qt.rgba(1, 1, 1, 0.06)
                             Rectangle {
-                                width: parent.width * (modelData / 100.0)
+                                width: parent.width * ((coreGrid.loads[index] || 0) / 100.0)
                                 height: parent.height
                                 color: root.hudCyan
-                                Behavior on width { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
                             }
                         }
                     }

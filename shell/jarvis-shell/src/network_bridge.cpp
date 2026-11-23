@@ -65,6 +65,21 @@ void NetworkBridge::poll()
 
 void NetworkBridge::refreshAll()
 {
+    // Is there a Wi-Fi adapter at all? A desktop on a cable has none, and a
+    // machine whose adapter has no driver/firmware looks the same. The panel
+    // says so in words instead of showing a dead switch and a raw nmcli
+    // error. (code < 0 = nmcli itself is missing.)
+    runNmcli({"-t", "-f", "TYPE", "device"},
+        [this](int code, const QString& out, const QString&) {
+            const bool available = code == 0
+                && out.split(QLatin1Char('\n')).contains(QStringLiteral("wifi"));
+            if (available != m_wifiAvailable) {
+                m_wifiAvailable = available;
+                emit wifiAvailableChanged();
+            }
+            if (!available) setError({});
+        });
+
     // Radio state first — the other two queries are no-ops when off.
     runNmcli({"-t", "radio", "wifi"},
         [this](int code, const QString& out, const QString& err) {
