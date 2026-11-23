@@ -1,0 +1,88 @@
+name: Bump pinned base images
+
+# The runtime base pins fedora-bootc and Universal Blue's NVIDIA image by
+# digest (ADR 0033), so kernel + security updates no longer arrive on their
+# own — someone has to move the pins. This does it weekly: it runs
+# tools/bump-base.sh and, when the pins moved, opens (or updates) a PR that
+# shows exactly which kernel and driver the OS is about to change to.
+#
+# Merging that PR touches iso/Containerfile.runtime, which triggers
+# build-runtime.yml; build-iso.yml then republishes the OS image on the new
+# base, and `bootc upgrade` delivers it.
+#
+# Requires the repo setting "Allow GitHub Actions to create and approve pull
+# requests" (Settings → Actions → General). Without it the push still happens
+# and the job fails at `gh pr create` with a clear message — open the PR from
+# the `chore/bump-base` branch by hand.
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"  # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    name: Resolve digests + open PR
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve current digests
+        id: bump
+        run: |
+          set +e
+          bash tools/bump-base.sh | tee bump.log
+          rc=${PIPESTATUS[0]}
+          set -e
+          # 3 = Fedora's kernel is ahead of the NVIDIA module build. Not a
+          # failure: there is simply nothing safe to bump to yet.
+          if [ "$rc" = 3 ]; then
+            echo "Kernels out of step upstream — skipping this week's bump." >> "$GITHUB_STEP_SUMMARY"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [ "$rc" = 0 ] || exit "$rc"
+          if git diff --quiet -- iso/Containerfile.runtime; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "summary=$(grep '^# kernel: ' iso/Containerfile.runtime | sed 's/^# //')" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the PR
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUMMARY: ${{ steps.bump.outputs.summary }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B chore/bump-base
+          git commit -m "chore(image): bump pinned base images" -m "${SUMMARY}" \
+              -- iso/Containerfile.runtime
+          git push --force origin chore/bump-base
+          {
+            echo "Moves the pinned \`fedora-bootc\` and NVIDIA images forward together (ADR 0033)."
+            echo
+            echo "**Now:** ${SUMMARY}"
+            echo
+            echo '```'
+            cat bump.log
+            echo '```'
+            echo
+            echo "Merging rebuilds the runtime base (\`build-runtime.yml\`). The build itself"
+            echo "re-checks that the kernel and the NVIDIA module match and fails if not."
+          } > body.md
+          if gh pr view chore/bump-base --json state --jq .state 2>/dev/null | grep -q OPEN; then
+            gh pr edit chore/bump-base --body-file body.md
+          else
+            gh pr create --base main --head chore/bump-base \
+              --title "chore(image): bump pinned base images" --body-file body.md
+          fi

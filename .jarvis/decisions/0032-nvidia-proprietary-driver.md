@@ -1,6 +1,6 @@
 # ADR 0032 — Ship the NVIDIA driver in the image
 
-**Status:** accepted
+**Status:** accepted — how the driver is obtained (akmod build from RPM Fusion) is superseded by ADR 0033
 **Date:** 2026-08-04
 **Supersedes in part:** the "open stack only" position taken in ADR 0031's GPU note
 
