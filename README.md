@@ -97,9 +97,9 @@ cargo test --workspace --exclude jarvis-compositor
 
 cmake -S shell/jarvis-shell -B /tmp/shell-build
 cmake --build /tmp/shell-build -j
-# Qt 6.5+ required — Theme singleton breaks under the Qt 6.4 compat
-# mode. On Ubuntu 24.04 install Qt 6.8 via aqtinstall; see
-# tools/dev/run-shell-labwc.sh.
+# Qt 6.9+ required. Easier: build and SEE it in a container with
+# tools/dev/shell-preview.sh (live window or screenshot) — no local Qt
+# needed.
 ```
 
 ## Repository layout
@@ -133,7 +133,7 @@ cmake --build /tmp/shell-build -j
 │   ├── voice-ctl/              # CLI for com.jarvis.Voice (push-to-talk, TTS)
 │   ├── voiceprint-ctl/         # CLI for voiceprint enroll / verify / list / delete
 │   ├── jarvis-app/             # SDK app launcher / dispatcher
-│   └── dev/                    # run-shell-labwc.sh, ad-hoc helpers
+│   └── dev/                    # shell-preview.sh (run + screenshot the shell), ad-hoc helpers
 ├── iso/                        # Containerfile + assets + build.toml
 └── .jarvis/                    # project bible, ADRs, module contracts,
                                 # skills, design language, current goals

@@ -102,7 +102,7 @@ if [ "$qml_only" = "1" ]; then
 fi
 
 # ── Build ────────────────────────────────────────────────────────────
-# NOTE: build runs HERE. For Qt targets the host needs Qt 6.5+ + the
+# NOTE: build runs HERE. For Qt targets the host needs Qt 6.9+ + the
 # project deps; if your host can't (e.g. WSL ships Qt 6.4), run this
 # script INSIDE the VM instead — it has the full Fedora 42 toolchain.
 built_bin=""
