@@ -1,0 +1,45 @@
+#!/bin/sh
+# /usr/libexec/jarvis-shell-supervise — keep the shell running.
+#
+# The shell IS the desktop: menu bar, dock, every panel. It used to be started
+# once from the labwc autostart, so a single crash left a bare wallpaper with
+# no way to launch or switch anything until the user logged out. This restarts
+# it.
+#
+# Why a loop here and not a systemd user unit: the shell must run with the
+# session's exact environment — the renderer choices made by
+# jarvis-session-launch (software GL in a VM, the NVIDIA variables), the
+# input-method and cursor settings, and anything the user put in
+# /etc/jarvis/session.env. A child of the compositor inherits all of it by
+# construction; a systemd unit would need every variable imported by name and
+# would silently miss the next one someone adds.
+#
+# Stops when: the shell exits cleanly (0 — e.g. another instance already owns
+# the session), the compositor is gone (its socket disappeared), or the shell
+# is crash-looping (5 starts that each lasted under 10 s).
+
+quick=0
+while :; do
+    start=$(date +%s)
+    jarvis-shell
+    code=$?
+    [ "$code" -eq 0 ] && exit 0
+
+    # No compositor left to draw on: the session is ending.
+    [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/${WAYLAND_DISPLAY:-wayland-0}" ] || exit 0
+
+    ran=$(( $(date +%s) - start ))
+    if [ "$ran" -lt 10 ]; then
+        quick=$((quick + 1))
+    else
+        quick=0
+    fi
+    echo "jarvis-shell exited with $code after ${ran}s (quick restarts: $quick)"
+    if [ "$quick" -ge 5 ]; then
+        echo "jarvis-shell keeps crashing at startup — giving up."
+        command -v notify-send >/dev/null 2>&1 && notify-send -u critical "LilithOS" \
+            "A interface não conseguiu iniciar. Super+Enter abre um terminal."
+        exit 1
+    fi
+    sleep 1
+done

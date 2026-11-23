@@ -1,0 +1,40 @@
+# LilithOS window decorations for labwc.
+# Dark title bar, centred title, traffic-light buttons (the SVGs beside this
+# file), soft shadow. Reference: labwc-theme(5).
+
+border.width: 1
+window.active.border.color: #3a3a3c
+window.inactive.border.color: #2c2c2e
+
+window.titlebar.padding.width: 12
+window.titlebar.padding.height: 7
+window.active.title.bg.color: #2c2c2e
+window.inactive.title.bg.color: #242426
+
+window.active.label.text.color: #ebebf0
+window.inactive.label.text.color: #7c7c80
+window.label.text.justify: center
+
+window.button.width: 14
+window.button.height: 14
+window.button.spacing: 8
+# The buttons are full-colour pictures; no hover plate behind them.
+window.button.hover.bg.color: #00000000
+
+window.active.shadow.size: 48
+window.inactive.shadow.size: 32
+window.active.shadow.color: #00000066
+window.inactive.shadow.color: #00000040
+
+# Window switcher (Alt+Tab) and menus on the same dark glass tone.
+osd.bg.color: #1e1e20
+osd.border.color: #48484a
+osd.border.width: 1
+osd.label.text.color: #ebebf0
+osd.window-switcher.item.active.border.width: 2
+menu.items.bg.color: #2c2c2e
+menu.items.text.color: #ebebf0
+menu.items.active.bg.color: #0a84ff
+menu.items.active.text.color: #ffffff
+menu.border.color: #48484a
+menu.border.width: 1
